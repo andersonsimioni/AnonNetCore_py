@@ -1,0 +1,431 @@
+from __future__ import annotations
+
+import json
+from dataclasses import replace
+from datetime import datetime, timezone
+from hashlib import sha512
+
+from crypto import dilithium_verify_hex
+from .records import (
+    DdtHolderRecord,
+    DdtRecordPayload,
+    DhtPayload,
+    DpntRecordPayload,
+    DptRecordPayload,
+    DrtRouteEntryRecord,
+    DrtRecordPayload,
+    DttEntryRecord,
+    DttRecordPayload,
+)
+
+
+def validate_and_merge(
+    namespace: str,
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DhtPayload:
+    normalized_namespace = namespace.lower()
+
+    if normalized_namespace == "dpnt":
+        return validate_and_merge_dpnt_fragment(key, parent, fragment)
+    if normalized_namespace == "drt":
+        return validate_and_merge_drt_fragment(key, parent, fragment)
+    if normalized_namespace == "ddt":
+        return validate_and_merge_ddt_fragment(key, parent, fragment)
+    if normalized_namespace == "dtt":
+        return validate_and_merge_dtt_fragment(key, parent, fragment)
+    if normalized_namespace == "dpt":
+        return validate_and_merge_dpt_fragment(key, parent, fragment)
+
+    raise ValueError(f"Namespace DHT nao suportado para merge: {namespace}")
+
+
+def validate_and_merge_dpnt_fragment(
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DpntRecordPayload:
+    _ensure_payload_type(parent, DpntRecordPayload, "dpnt")
+    _ensure_payload_type(fragment, DpntRecordPayload, "dpnt")
+
+    _ensure_dpnt_key_matches_physical_node(key, fragment.pk_physical_node)
+
+    if not _is_valid_dpnt_fragment(key, fragment):
+        raise ValueError("O fragmento DPNT possui assinatura invalida.")
+
+    if not _is_fragment_newer(parent.last_validated_at, fragment.last_validated_at):
+        return parent
+
+    return fragment
+
+
+def validate_and_merge_drt_fragment(
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DrtRecordPayload:
+    _ensure_payload_type(parent, DrtRecordPayload, "drt")
+    _ensure_payload_type(fragment, DrtRecordPayload, "drt")
+
+    _ensure_drt_key_matches_virtual_node(key, parent.pk_virtual_node)
+
+    if parent.pk_virtual_node != fragment.pk_virtual_node:
+        raise ValueError(
+            "Nao e possivel unir fragmentos DRT de virtual nodes diferentes."
+        )
+
+    valid_fragment_entries = [
+        route_entry
+        for route_entry in fragment.route_entries
+        if _is_valid_drt_route_entry(route_entry, fragment.pk_virtual_node)
+    ]
+
+    merged_entries = _deduplicate_drt_route_entries(
+        [*parent.route_entries, *valid_fragment_entries]
+    )
+    merged_last_update = datetime.now(timezone.utc).isoformat()
+
+    return replace(
+        parent,
+        route_entries=merged_entries,
+        last_update=merged_last_update,
+    )
+
+
+def validate_and_merge_ddt_fragment(
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DdtRecordPayload:
+    _ensure_payload_type(parent, DdtRecordPayload, "ddt")
+    _ensure_payload_type(fragment, DdtRecordPayload, "ddt")
+
+    _ensure_ddt_metadata_matches(parent, fragment)
+
+    valid_fragment_holders = [
+        holder
+        for holder in fragment.holders
+        if _is_valid_ddt_holder(key, holder)
+    ]
+    merged_holders = _deduplicate_exact_ddt_holders(
+        [*parent.holders, *valid_fragment_holders]
+    )
+
+    return replace(parent, holders=merged_holders)
+
+
+def validate_and_merge_dtt_fragment(
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DttRecordPayload:
+    _ensure_payload_type(parent, DttRecordPayload, "dtt")
+    _ensure_payload_type(fragment, DttRecordPayload, "dtt")
+
+    valid_fragment_entries = [
+        entry
+        for entry in fragment.entries
+        if _is_valid_dtt_entry(key, entry)
+    ]
+    merged_entries = _deduplicate_exact_dtt_entries(
+        [*parent.entries, *valid_fragment_entries]
+    )
+
+    return replace(parent, entries=merged_entries)
+
+
+def validate_and_merge_dpt_fragment(
+    key: str,
+    parent: DhtPayload,
+    fragment: DhtPayload,
+) -> DptRecordPayload:
+    _ensure_payload_type(parent, DptRecordPayload, "dpt")
+    _ensure_payload_type(fragment, DptRecordPayload, "dpt")
+
+    _ensure_dpt_key_matches_owner_and_title(
+        key,
+        fragment.pk_virtual_node_owner,
+        fragment.title,
+    )
+
+    if not _is_valid_dpt_fragment(key, fragment):
+        raise ValueError("O fragmento DPT possui assinatura invalida.")
+
+    if not _is_fragment_newer(parent.last_modified, fragment.last_modified):
+        return parent
+
+    return fragment
+
+
+def _ensure_payload_type(
+    payload: DhtPayload,
+    expected_type: type,
+    namespace: str,
+) -> None:
+    if isinstance(payload, expected_type):
+        return
+
+    raise ValueError(
+        f"Payload invalido para namespace '{namespace}'. "
+        f"Esperado: {expected_type.__name__}. "
+        f"Recebido: {type(payload).__name__}."
+    )
+
+
+def _ensure_drt_key_matches_virtual_node(key: str, pk_virtual_node: str) -> None:
+    expected_key = sha512(f"drt|{pk_virtual_node}".encode("utf-8")).hexdigest()
+    if key == expected_key:
+        return
+
+    raise ValueError("A key DRT nao corresponde ao pk_virtual_node informado.")
+
+
+def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> None:
+    expected_key = sha512(f"dpnt|{pk_physical_node}".encode("utf-8")).hexdigest()
+    if key == expected_key:
+        return
+
+    raise ValueError("A key DPNT nao corresponde ao pk_physical_node informado.")
+
+
+def _ensure_dpt_key_matches_owner_and_title(
+    key: str,
+    pk_virtual_node_owner: str,
+    title: str,
+) -> None:
+    expected_key = sha512(
+        f"dpt|{pk_virtual_node_owner}|{title}".encode("utf-8")
+    ).hexdigest()
+    if key == expected_key:
+        return
+
+    raise ValueError(
+        "A key DPT nao corresponde ao pk_virtual_node_owner e title informados."
+    )
+
+
+def _ensure_ddt_metadata_matches(
+    parent: DdtRecordPayload,
+    fragment: DdtRecordPayload,
+) -> None:
+    if parent.title != fragment.title:
+        raise ValueError("Nao e possivel unir fragmentos DDT com title diferente.")
+    if parent.type != fragment.type:
+        raise ValueError("Nao e possivel unir fragmentos DDT com type diferente.")
+    if parent.tags != fragment.tags:
+        raise ValueError("Nao e possivel unir fragmentos DDT com tags diferentes.")
+
+
+def _is_valid_drt_route_entry(
+    route_entry: DrtRouteEntryRecord,
+    pk_virtual_node: str,
+) -> bool:
+    if _is_expired(route_entry.expires_at):
+        return False
+
+    if not route_entry.virtual_node_signature:
+        return False
+
+    signed_payload = {
+        "pk_physical_node": route_entry.pk_physical_node,
+        "expires_at": route_entry.expires_at,
+        "rtt": route_entry.rtt,
+    }
+    message_hex = _canonical_payload_hex(signed_payload)
+
+    try:
+        physical_signature_valid = dilithium_verify_hex(
+            message_hex,
+            route_entry.physical_node_signature,
+            route_entry.pk_physical_node,
+        )
+        virtual_signature_valid = dilithium_verify_hex(
+            message_hex,
+            route_entry.virtual_node_signature,
+            pk_virtual_node,
+        )
+        return physical_signature_valid and virtual_signature_valid
+    except Exception:
+        return False
+
+
+def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload) -> bool:
+    signed_payload = {
+        "key": key,
+        "pk_physical_node": fragment.pk_physical_node,
+        "endpoints": fragment.endpoints,
+        "transport_methods": fragment.transport_methods,
+        "reachability_class": fragment.reachability_class,
+        "relay_capable": fragment.relay_capable,
+        "hole_punch_capable": fragment.hole_punch_capable,
+        "protocol_version": fragment.protocol_version,
+        "feature_flags": fragment.feature_flags,
+        "last_validated_at": fragment.last_validated_at,
+        "status": fragment.status,
+    }
+    message_hex = _canonical_payload_hex(signed_payload)
+
+    try:
+        return dilithium_verify_hex(
+            message_hex,
+            fragment.signature,
+            fragment.pk_physical_node,
+        )
+    except Exception:
+        return False
+
+
+def _is_valid_dpt_fragment(key: str, fragment: DptRecordPayload) -> bool:
+    signed_payload = {
+        "key": key,
+        "pk_virtual_node_owner": fragment.pk_virtual_node_owner,
+        "title": fragment.title,
+        "type": fragment.type,
+        "last_modified": fragment.last_modified,
+        "target_ref": fragment.target_ref,
+    }
+    message_hex = _canonical_payload_hex(signed_payload)
+
+    try:
+        return dilithium_verify_hex(
+            message_hex,
+            fragment.signature,
+            fragment.pk_virtual_node_owner,
+        )
+    except Exception:
+        return False
+
+
+def _is_valid_dtt_entry(key: str, entry: DttEntryRecord) -> bool:
+    if _is_expired(entry.expires_at):
+        return False
+
+    signed_payload = {
+        "key": key,
+        "resource_id": entry.resource_id,
+        "pk_virtual_node": entry.pk_virtual_node,
+        "created_at": entry.created_at,
+        "expires_at": entry.expires_at,
+    }
+    message_hex = _canonical_payload_hex(signed_payload)
+
+    try:
+        return dilithium_verify_hex(
+            message_hex,
+            entry.signature,
+            entry.pk_virtual_node,
+        )
+    except Exception:
+        return False
+
+
+def _is_valid_ddt_holder(key: str, holder: DdtHolderRecord) -> bool:
+    if _is_expired(holder.expires_at):
+        return False
+
+    signed_payload = {
+        "key": key,
+        "pk_virtual_node": holder.pk_virtual_node,
+        "expires_at": holder.expires_at,
+    }
+    message_hex = _canonical_payload_hex(signed_payload)
+
+    try:
+        return dilithium_verify_hex(
+            message_hex,
+            holder.signature,
+            holder.pk_virtual_node,
+        )
+    except Exception:
+        return False
+
+
+def _deduplicate_drt_route_entries(
+    route_entries: list[DrtRouteEntryRecord],
+) -> list[DrtRouteEntryRecord]:
+    unique_entries: dict[DrtRouteEntryRecord, None] = {}
+
+    for route_entry in route_entries:
+        unique_entries[route_entry] = None
+
+    return sorted(
+        unique_entries.keys(),
+        key=lambda item: (
+            item.pk_physical_node,
+            item.expires_at,
+            item.rtt,
+            item.physical_node_signature,
+            item.virtual_node_signature,
+        ),
+    )
+
+
+def _deduplicate_exact_ddt_holders(
+    holders: list[DdtHolderRecord],
+) -> list[DdtHolderRecord]:
+    unique_holders: dict[DdtHolderRecord, None] = {}
+
+    for holder in holders:
+        unique_holders[holder] = None
+
+    return sorted(
+        unique_holders.keys(),
+        key=lambda item: (
+            item.pk_virtual_node,
+            item.expires_at,
+            item.signature,
+        ),
+    )
+
+
+def _deduplicate_exact_dtt_entries(
+    entries: list[DttEntryRecord],
+) -> list[DttEntryRecord]:
+    unique_entries: dict[DttEntryRecord, None] = {}
+
+    for entry in entries:
+        unique_entries[entry] = None
+
+    return sorted(
+        unique_entries.keys(),
+        key=lambda item: (
+            item.resource_id,
+            item.pk_virtual_node,
+            item.created_at,
+            item.expires_at,
+            item.signature,
+        ),
+    )
+
+
+def _is_expired(value: str) -> bool:
+    expires_at = _parse_datetime(value)
+    if expires_at is None:
+        return True
+    return expires_at <= datetime.now(timezone.utc)
+
+
+def _parse_datetime(value: str) -> datetime | None:
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _is_fragment_newer(parent_timestamp: str, fragment_timestamp: str) -> bool:
+    parent_datetime = _parse_datetime(parent_timestamp)
+    fragment_datetime = _parse_datetime(fragment_timestamp)
+
+    if fragment_datetime is None:
+        return False
+    if parent_datetime is None:
+        return True
+
+    return fragment_datetime > parent_datetime
+
+
+def _canonical_payload_hex(payload: dict[str, object]) -> str:
+    raw_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return raw_bytes.hex()
