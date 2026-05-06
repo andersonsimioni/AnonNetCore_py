@@ -80,22 +80,51 @@ class RttInfo(IntegerPrimaryKeyMixin, Base):
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class PathIdMapping(IntegerPrimaryKeyMixin, Base):
-    """Mapeia o path_id recebido para o path_id local gerado ao encaminhar uma rota."""
+class RouteResolution(IntegerPrimaryKeyMixin, Base):
+    """Tudo o que o node local precisa para resolver uma rota em qualquer papel."""
 
-    __tablename__ = "path_id_mapping"
+    __tablename__ = "route_resolution"
 
-    from_physical_node_id: Mapped[str] = mapped_column(
+    local_role: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    route_strategy: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True, default="pending")
+    route_nonce: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    initial_path_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    route_path_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    received_path_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    generated_path_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    final_path_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    from_physical_node_id: Mapped[str | None] = mapped_column(
         ForeignKey("remote_physical_node_identity.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    to_physical_node_id: Mapped[str] = mapped_column(
+    to_physical_node_id: Mapped[str | None] = mapped_column(
         ForeignKey("remote_physical_node_identity.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    received_path_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    generated_path_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    previous_physical_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("remote_physical_node_identity.id"),
+        nullable=True,
+        index=True,
+    )
+    first_hop_physical_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("remote_physical_node_identity.id"),
+        nullable=True,
+        index=True,
+    )
+    local_virtual_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("local_virtual_node_identity.id"),
+        nullable=True,
+        index=True,
+    )
+    final_physical_node_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    virtual_node_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    physical_node_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    public_route_acceptance_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kyber_private_key_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kyber_public_key_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shared_secret_hex: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)

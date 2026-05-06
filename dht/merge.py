@@ -226,6 +226,10 @@ def _is_valid_drt_route_entry(
 
     if not route_entry.virtual_node_signature:
         return False
+    if not route_entry.entry_point_virtual_node_signature:
+        return False
+    if not route_entry.entry_point_physical_node_signature:
+        return False
 
     signed_payload = {
         "pk_physical_node": route_entry.pk_physical_node,
@@ -245,7 +249,31 @@ def _is_valid_drt_route_entry(
             route_entry.virtual_node_signature,
             pk_virtual_node,
         )
-        return physical_signature_valid and virtual_signature_valid
+        if not physical_signature_valid or not virtual_signature_valid:
+            return False
+
+        final_physical_node_id = sha512(route_entry.pk_physical_node.encode("utf-8")).hexdigest()
+        virtual_node_id = sha512(pk_virtual_node.encode("utf-8")).hexdigest()
+        entry_point_virtual_payload = {
+            "final_path_id": route_entry.final_path_id,
+            "final_physical_node_id": final_physical_node_id,
+        }
+        entry_point_physical_payload = {
+            "virtual_node_id": virtual_node_id,
+            "final_path_id": route_entry.final_path_id,
+            "virtual_node_signature": route_entry.entry_point_virtual_node_signature,
+        }
+        entry_point_virtual_valid = dilithium_verify_hex(
+            _canonical_payload_hex(entry_point_virtual_payload),
+            route_entry.entry_point_virtual_node_signature,
+            pk_virtual_node,
+        )
+        entry_point_physical_valid = dilithium_verify_hex(
+            _canonical_payload_hex(entry_point_physical_payload),
+            route_entry.entry_point_physical_node_signature,
+            route_entry.pk_physical_node,
+        )
+        return entry_point_virtual_valid and entry_point_physical_valid
     except Exception:
         return False
 
@@ -353,10 +381,13 @@ def _deduplicate_drt_route_entries(
         unique_entries.keys(),
         key=lambda item: (
             item.pk_physical_node,
+            item.final_path_id,
             item.expires_at,
             item.rtt,
             item.physical_node_signature,
             item.virtual_node_signature,
+            item.entry_point_virtual_node_signature,
+            item.entry_point_physical_node_signature,
         ),
     )
 

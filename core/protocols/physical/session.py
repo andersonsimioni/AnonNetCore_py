@@ -215,7 +215,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             session_id=session_id,
             responder_ephemeral_public_key=ephemeral_key_pair.public_key_pem,
             keepalive_interval_seconds=keepalive_interval_seconds,
-            local_private_key_pem=local_node.private_key_encrypted,
+            local_private_key_pem=local_node.private_key_pem,
         )
         response_payload = self.build_physical_session_init_ok_payload(
             request_header=envelope.header,

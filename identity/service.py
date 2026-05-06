@@ -72,7 +72,7 @@ class IdentityService:
         return PhysicalNodeIdentityResult(
             id=node.id,
             public_key=node.public_key,
-            private_key_encrypted=node.private_key_encrypted,
+            private_key_pem=node.private_key_encrypted,
             key_algorithm=node.key_algorithm,
             status=node.status,
             created_at=node.created_at,

@@ -25,6 +25,9 @@ class DrtRouteEntryRecord:
     pk_physical_node: str
     physical_node_signature: str
     virtual_node_signature: str
+    final_path_id: str
+    entry_point_virtual_node_signature: str
+    entry_point_physical_node_signature: str
     expires_at: str
     rtt: int
 
@@ -250,6 +253,15 @@ def _read_drt_route_entries(payload: dict[str, object]) -> list[DrtRouteEntryRec
                 pk_physical_node=_read_required_string(item, "pk_physical_node"),
                 physical_node_signature=_read_required_string(item, "physical_node_signature"),
                 virtual_node_signature=_read_required_string(item, "virtual_node_signature"),
+                final_path_id=_read_required_string(item, "final_path_id"),
+                entry_point_virtual_node_signature=_read_required_string(
+                    item,
+                    "entry_point_virtual_node_signature",
+                ),
+                entry_point_physical_node_signature=_read_required_string(
+                    item,
+                    "entry_point_physical_node_signature",
+                ),
                 expires_at=_read_required_string(item, "expires_at"),
                 rtt=_read_required_int(item, "rtt"),
             )

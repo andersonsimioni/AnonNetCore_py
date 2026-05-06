@@ -1,0 +1,4 @@
+ROUTE_CREATE (VN -> hop-by-hop -> PN)
+ROUTE_CREATE_KEM_INFO (PN -> hop-by-hop -> VN)
+ROUTE_CREATE_REQUEST_VALIDATION_AND_PUBLICATION (VN -> hop-by-hop -> PN)
+ROUTE_CREATE_OK (PN -> hop-by-hop -> VN)

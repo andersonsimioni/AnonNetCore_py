@@ -10,6 +10,8 @@ from .protocol_clients import (
     PhysicalProtocolClients,
     PhysicalSessionClient,
     ProtocolClients,
+    RouteBuildClient,
+    RouteExecuteClient,
 )
 from .protocols import (
     ContentProtocolHandler,
@@ -18,7 +20,8 @@ from .protocols import (
     PingProtocolHandler,
     PhysicalNodeInfoExchangeProtocolHandler,
     PhysicalNodeInfoProtocolHandler,
-    RoutingProtocolHandler,
+    RouteBuildProtocolHandler,
+    RouteExecuteProtocolHandler,
     SessionProtocolHandler,
 )
 from .router import MessageRouter
@@ -29,7 +32,7 @@ from .routing_strategies import (
     RouteStrategy,
     RouteStrategyRegistry,
 )
-from .route_state_service import RouteStateService
+from route import RouteService
 from .runtime import (
     DhtMaintenanceRuntime,
     PhysicalNodeInfoExchangeRuntime,
@@ -67,6 +70,8 @@ __all__ = [
     "PhysicalSessionClient",
     "ProtocolEnvelope",
     "ProtocolClients",
+    "RouteBuildClient",
+    "RouteExecuteClient",
     "OnionLikeRouteStrategy",
     "PingProtocolHandler",
     "RandomWalkMaxHopRouteStrategy",
@@ -74,7 +79,8 @@ __all__ = [
     "RuntimeServices",
     "RouteStrategy",
     "RouteStrategyRegistry",
-    "RouteStateService",
-    "RoutingProtocolHandler",
+    "RouteBuildProtocolHandler",
+    "RouteExecuteProtocolHandler",
+    "RouteService",
     "SessionProtocolHandler",
 ]

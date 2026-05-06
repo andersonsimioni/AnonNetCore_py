@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, Any
 from bootstrap import BootstrapService
 from dht import DhtService
 from identity import IdentityService
+from route import RouteService
 from sessions import SessionManager
 from storage import DatabaseManager, get_database
 from transport import TcpTransportAdapter, TransportService
 
 from .config import CoreConfig
-from .route_state_service import RouteStateService
 
 if TYPE_CHECKING:
     from .engine import CoreEngine
@@ -30,7 +30,7 @@ class EngineServices:
     bootstrap_service: BootstrapService = field(default_factory=BootstrapService)
     dht_service: DhtService = field(default_factory=DhtService)
     identity_service: IdentityService = field(default_factory=IdentityService)
-    route_state_service: RouteStateService = field(default_factory=RouteStateService)
+    route_service: RouteService = field(default_factory=RouteService)
     session_manager: SessionManager = field(default_factory=SessionManager)
     route_strategies: RouteStrategyRegistry | None = None
     protocol_clients: ProtocolClients | None = None

@@ -5,18 +5,15 @@ from ...services import EngineServices
 from ..base import ProtocolMessageHandler
 
 
-class RoutingProtocolHandler(ProtocolMessageHandler):
-    protocol_family = "routing"
+class RouteBuildProtocolHandler(ProtocolMessageHandler):
+    protocol_family = "route_build"
     supported_message_types = {
         "ROUTE_CREATE",
-        "ROUTE_CREATE_RETURN",
+        "ROUTE_CREATE_KEM_INFO",
+        "ROUTE_CREATE_VALIDATE_AND_PUBLISH",
         "ROUTE_CREATE_OK",
-        "ROUTE_CREATE_FAIL",
-        "ROUTE_DATA",
-        "ROUTE_DATA_ACK",
-        "ROUTE_KEEPALIVE",
-        "ROUTE_KEEPALIVE_ACK",
-        "ROUTE_CLOSE",
+        "ROUTE_CREATE_PING",
+        "ROUTE_CREATE_PONG",
     }
 
     async def handle(
@@ -29,25 +26,14 @@ class RoutingProtocolHandler(ProtocolMessageHandler):
         if isinstance(strategy, PacketProcessingResult):
             return strategy
 
-        handlers = {
-            "ROUTE_CREATE": strategy.handle_route_create,
-            "ROUTE_CREATE_RETURN": strategy.handle_route_create_return,
-            "ROUTE_CREATE_OK": strategy.handle_route_create_ok,
-            "ROUTE_CREATE_FAIL": strategy.handle_route_create_fail,
-            "ROUTE_DATA": strategy.handle_route_data,
-            "ROUTE_DATA_ACK": strategy.handle_route_data_ack,
-            "ROUTE_KEEPALIVE": strategy.handle_route_keepalive,
-            "ROUTE_KEEPALIVE_ACK": strategy.handle_route_keepalive_ack,
-            "ROUTE_CLOSE": strategy.handle_route_close,
-        }
-        handler = handlers.get(envelope.message_type)
-        if handler is None:
+        route_handler = self._resolve_route_handler(strategy, envelope.message_type)
+        if route_handler is None:
             return self._build_invalid_result(
                 envelope,
-                reason="unsupported_routing_message_type",
+                reason=f"unsupported_route_build_message_type:{envelope.message_type}",
             )
 
-        return await handler(
+        return await route_handler(
             envelope=envelope,
             context=context,
             services=services,
@@ -95,3 +81,19 @@ class RoutingProtocolHandler(ProtocolMessageHandler):
                 "reason": reason,
             },
         )
+
+    @staticmethod
+    def _resolve_route_handler(strategy, message_type: str):
+        if message_type == "ROUTE_CREATE":
+            return strategy.handle_route_create
+        if message_type == "ROUTE_CREATE_KEM_INFO":
+            return strategy.handle_route_create_kem_info
+        if message_type == "ROUTE_CREATE_VALIDATE_AND_PUBLISH":
+            return strategy.handle_route_create_validate_and_publish
+        if message_type == "ROUTE_CREATE_OK":
+            return strategy.handle_route_create_ok
+        if message_type == "ROUTE_CREATE_PING":
+            return strategy.handle_route_create_ping
+        if message_type == "ROUTE_CREATE_PONG":
+            return strategy.handle_route_create_pong
+        return None

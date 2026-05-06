@@ -8,7 +8,7 @@ from datetime import datetime
 class PhysicalNodeIdentityResult:
     id: str
     public_key: str
-    private_key_encrypted: str
+    private_key_pem: str
     key_algorithm: str
     status: str
     created_at: datetime

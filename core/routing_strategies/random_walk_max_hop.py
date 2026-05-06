@@ -22,37 +22,25 @@ class RandomWalkMaxHopRouteStrategy(RouteStrategy):
         del context, services
         return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create")
 
-    async def handle_route_create_return(self, *, envelope, context, services) -> PacketProcessingResult:
+    async def handle_route_create_kem_info(self, *, envelope, context, services) -> PacketProcessingResult:
         del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_return")
+        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_kem_info")
+
+    async def handle_route_create_validate_and_publish(self, *, envelope, context, services) -> PacketProcessingResult:
+        del context, services
+        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_validate_and_publish")
 
     async def handle_route_create_ok(self, *, envelope, context, services) -> PacketProcessingResult:
         del context, services
         return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_ok")
 
-    async def handle_route_create_fail(self, *, envelope, context, services) -> PacketProcessingResult:
+    async def handle_route_create_ping(self, *, envelope, context, services) -> PacketProcessingResult:
         del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_fail")
+        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_ping")
 
-    async def handle_route_data(self, *, envelope, context, services) -> PacketProcessingResult:
+    async def handle_route_create_pong(self, *, envelope, context, services) -> PacketProcessingResult:
         del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_data")
-
-    async def handle_route_data_ack(self, *, envelope, context, services) -> PacketProcessingResult:
-        del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_data_ack")
-
-    async def handle_route_keepalive(self, *, envelope, context, services) -> PacketProcessingResult:
-        del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_keepalive")
-
-    async def handle_route_keepalive_ack(self, *, envelope, context, services) -> PacketProcessingResult:
-        del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_keepalive_ack")
-
-    async def handle_route_close(self, *, envelope, context, services) -> PacketProcessingResult:
-        del context, services
-        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_close")
+        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_pong")
 
     def _not_implemented(self, envelope, next_step: str) -> PacketProcessingResult:
         return PacketProcessingResult(
@@ -60,7 +48,7 @@ class RandomWalkMaxHopRouteStrategy(RouteStrategy):
             handled=True,
             message_type=envelope.message_type,
             metadata={
-                "protocol_family": "routing",
+                "protocol_family": "route_build",
                 "route_strategy": self.strategy_name,
                 "next_step": next_step,
             },

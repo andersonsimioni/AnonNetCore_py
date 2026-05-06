@@ -10,7 +10,8 @@ from .protocols import (
     PhysicalNodeInfoExchangeProtocolHandler,
     PhysicalNodeInfoProtocolHandler,
     ProtocolMessageHandler,
-    RoutingProtocolHandler,
+    RouteBuildProtocolHandler,
+    RouteExecuteProtocolHandler,
     SessionProtocolHandler,
 )
 from .services import EngineServices
@@ -34,7 +35,8 @@ class MessageRegistry:
         physical_session = SessionProtocolHandler()
         physical_node_info_exchange = PhysicalNodeInfoExchangeProtocolHandler()
         physical_dht = DhtProtocolHandler()
-        physical_routing = RoutingProtocolHandler()
+        physical_route_build = RouteBuildProtocolHandler()
+        physical_route_execute = RouteExecuteProtocolHandler()
         overlay_content = ContentProtocolHandler()
 
         self._definitions: dict[str, MessageDefinition] = {}
@@ -162,7 +164,12 @@ class MessageRegistry:
             requires_physical_session=True,
         )
         self._register_handler(
-            physical_routing,
+            physical_route_build,
+            layer="physical",
+            requires_physical_session=True,
+        )
+        self._register_handler(
+            physical_route_execute,
             layer="physical",
             requires_physical_session=True,
         )

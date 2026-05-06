@@ -10,6 +10,8 @@ from .physical import (
     PhysicalNodeInfoExchangeClient,
     PhysicalSessionClient,
 )
+from .route_build import RouteBuildClient
+from .route_execute import RouteExecuteClient
 
 if TYPE_CHECKING:
     from ..engine import CoreEngine
@@ -41,10 +43,14 @@ class OverlayProtocolClients:
 class ProtocolClients:
     physical: PhysicalProtocolClients
     overlay: OverlayProtocolClients
+    route_build: RouteBuildClient
+    route_execute: RouteExecuteClient
 
     def __init__(self, engine: CoreEngine) -> None:
         self.physical = PhysicalProtocolClients(engine)
         self.overlay = OverlayProtocolClients(engine)
+        self.route_build = RouteBuildClient(engine)
+        self.route_execute = RouteExecuteClient(engine)
 
 
 __all__ = [
@@ -56,4 +62,6 @@ __all__ = [
     "PhysicalProtocolClients",
     "PhysicalSessionClient",
     "ProtocolClients",
+    "RouteBuildClient",
+    "RouteExecuteClient",
 ]

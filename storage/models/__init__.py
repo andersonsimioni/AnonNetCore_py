@@ -20,9 +20,9 @@ from .network import (
 from .operational import (
     LocalEventLog,
     LocalSetting,
-    PathIdMapping,
     PhysicalNodeInfoExchangeState,
     RttInfo,
+    RouteResolution,
     SeenHash,
 )
 
@@ -43,11 +43,11 @@ __all__ = [
     "LocalVirtualNodeIdentity",
     "MetadataJsonMixin",
     "NodeEndpoint",
-    "PathIdMapping",
     "PhysicalNodeInfoExchangeState",
     "RemotePhysicalNodeIdentity",
     "RemoteVirtualNodeIdentity",
     "RttInfo",
+    "RouteResolution",
     "SchemaMetadata",
     "SeenHash",
     "StatusMixin",

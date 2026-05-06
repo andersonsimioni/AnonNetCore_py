@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class RouteStrategy(ABC):
-    """Contrato comum das estrategias de composicao e execucao de rota."""
+    """Contrato comum das estrategias de construcao de rota."""
 
     strategy_name: str
 
@@ -31,14 +31,24 @@ class RouteStrategy(ABC):
         """Processa ROUTE_CREATE para esta estrategia."""
 
     @abstractmethod
-    async def handle_route_create_return(
+    async def handle_route_create_kem_info(
         self,
         *,
         envelope: ProtocolEnvelope,
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_RETURN para esta estrategia."""
+        """Processa ROUTE_CREATE_KEM_INFO para esta estrategia."""
+
+    @abstractmethod
+    async def handle_route_create_validate_and_publish(
+        self,
+        *,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        """Processa ROUTE_CREATE_VALIDATE_AND_PUBLISH para esta estrategia."""
 
     @abstractmethod
     async def handle_route_create_ok(
@@ -51,61 +61,21 @@ class RouteStrategy(ABC):
         """Processa ROUTE_CREATE_OK para esta estrategia."""
 
     @abstractmethod
-    async def handle_route_create_fail(
+    async def handle_route_create_ping(
         self,
         *,
         envelope: ProtocolEnvelope,
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_FAIL para esta estrategia."""
+        """Processa ROUTE_CREATE_PING para esta estrategia."""
 
     @abstractmethod
-    async def handle_route_data(
+    async def handle_route_create_pong(
         self,
         *,
         envelope: ProtocolEnvelope,
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_DATA para esta estrategia."""
-
-    @abstractmethod
-    async def handle_route_data_ack(
-        self,
-        *,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        """Processa ROUTE_DATA_ACK para esta estrategia."""
-
-    @abstractmethod
-    async def handle_route_keepalive(
-        self,
-        *,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        """Processa ROUTE_KEEPALIVE para esta estrategia."""
-
-    @abstractmethod
-    async def handle_route_keepalive_ack(
-        self,
-        *,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        """Processa ROUTE_KEEPALIVE_ACK para esta estrategia."""
-
-    @abstractmethod
-    async def handle_route_close(
-        self,
-        *,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        """Processa ROUTE_CLOSE para esta estrategia."""
+        """Processa ROUTE_CREATE_PONG para esta estrategia."""

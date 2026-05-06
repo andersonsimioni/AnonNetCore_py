@@ -18,7 +18,9 @@ da comunicacao continua protegido.
 
 - a criacao da rota acontece na camada `physical`
 - cada hop conhece apenas o hop anterior e o proximo hop que ele mesmo escolher
-- o `virtual node` de destino fica cifrado para o `final physical node`
+- a identidade logica do `VN` nao aparece no `ROUTE_CREATE`
+- o `final physical node` so recebe o material sensivel depois, em
+  `ROUTE_CREATE_VALIDATE_AND_PUBLISH`
 - nao existe campo `next_physical_node` no payload trafegado
 - nao existe diferenciacao visivel entre hop inicial e hop intermediario
 - o controle de profundidade da rota e feito por `max_hops`
@@ -30,17 +32,15 @@ O `ROUTE_CREATE` deve conter, no minimo:
 
 - `pk_final_physical_node`
 - `remaining_ttl_ms`
-- `kem_ciphertext_for_final_physical_node`
 - `path_id`
-- `encrypted_payload_for_final_physical_node`
 - `nonce`
 
 ## Significado dos Campos
 
 ### `pk_final_physical_node`
 
-Identifica o `physical node` final da rota. Somente ele deve conseguir
-recuperar o `pk_virtual_node` de destino.
+Identifica o `physical node` final da rota. Somente ele deve receber o
+payload sensivel de validacao da rota.
 
 ### `remaining_ttl_ms`
 
@@ -48,13 +48,6 @@ Budget temporal restante da criacao da rota.
 
 Cada hop reduz esse valor com base no custo estimado do salto antes de
 encaminhar a mensagem.
-
-### `kem_ciphertext_for_final_physical_node`
-
-Ciphertext do `ML-KEM` gerado para o `pk_final_physical_node`.
-
-Esse campo permite que o `final physical node` decapsule o segredo compartilhado
-usado para abrir `encrypted_payload_for_final_physical_node`.
 
 ### `path_id`
 
@@ -68,35 +61,6 @@ Exemplo:
 
 Assim, cada hop conhece apenas a traducao local do trecho anterior para o
 seguinte.
-
-### `encrypted_payload_for_final_physical_node`
-
-Bloco cifrado para o `pk_final_physical_node`.
-
-Os hops intermediarios nao conseguem abrir esse payload. Ele contem as
-informacoes secretas que o `final physical node` precisa para aceitar ser entry
-point da rota.
-
-Esse campo deve ser decifrado usando a chave simetrica derivada do segredo
-obtido por `kem_ciphertext_for_final_physical_node`.
-
-Payload sugerido dentro desse bloco cifrado:
-
-```json
-{
-  "final_path_id": "....",
-  "virtual_node_signature": "...."
-}
-```
-
-O `virtual_node_signature` e a assinatura do `VN` sobre o `final_path_id`.
-Depois disso, o `final PN` assina o par:
-
-- `virtual_node_signature`
-- `final_path_id`
-
-Isso amarra a aceitacao do `final PN` a um `entry point` especifico criado por
-aquele `VN`.
 
 ### `nonce`
 
@@ -120,11 +84,6 @@ imutavel, sem depender de campos remapeados no caminho.
 O `virtual node` iniciador:
 
 - escolhe o `pk_final_physical_node`
-- gera um `final_path_id`
-- assina o `final_path_id`
-- cifra para o `final physical node`:
-  - `final_path_id`
-  - `virtual_node_signature`
 - gera `nonce` do proof of work
 - cria o primeiro `path_id`
 - envia `ROUTE_CREATE` para o primeiro `physical node`
@@ -158,19 +117,10 @@ normal. Nao existe um `ROUTE_CREATE_FORWARD`.
 
 O `final physical node`:
 
-- decifra `encrypted_payload_for_final_physical_node`
-- recupera:
-  - `final_path_id`
-  - `virtual_node_signature`
-- faz controle anti-replay do `final_path_id`
-- associa:
-  - `received_path_id`
-  - `final_path_id`
-- assina o payload canonico:
-  - `virtual_node_signature`
-  - `final_path_id`
 - decide se a rota pode ser aceita
-- responde com `ROUTE_CREATE_RETURN`
+- gera uma chave publica efemera de `ML-KEM`
+- assina essa chave publica junto com o `path_id`
+- devolve isso ao `VN` usando `ROUTE_CREATE_KEM_INFO`
 
 ## Validacao Final e Publicacao na DRT
 
@@ -185,51 +135,86 @@ O fluxo correto da DEMO e:
 O `virtual node` inicia o `ROUTE_CREATE` e o pedido percorre os hops fisicos
 ate alcancar o `final physical node`.
 
-### Etapa 2. Validacao pelo final physical node
+### Etapa 2. Oferta de KEM pelo final physical node
 
 O `final physical node` valida:
 
 - `pk_final_physical_node`
-- `encrypted_payload_for_final_physical_node`
 - proof of work do `nonce`
 
 Se tudo estiver correto, ele nao publica a rota diretamente na DHT.
+Depois disso, ele devolve ao `VN` um `ROUTE_CREATE_KEM_INFO` contendo:
 
-Em vez disso, ele devolve um `ROUTE_CREATE_RETURN` pela propria rota de retorno.
+- `kyber_public_key_pem`
+- `physical_node_signature`
+
+O `path_id` continua existindo apenas como identificador operacional do retorno
+hop-by-hop. Ele nao faz parte do conteudo semantico assinado do `KEM_INFO`.
 
 ### Etapa 3. Retorno ate o virtual node
 
-O `ROUTE_CREATE_RETURN` percorre os hops no sentido inverso ate retornar ao
+O `ROUTE_CREATE_KEM_INFO` percorre os hops no sentido inverso ate retornar ao
 `virtual node` que iniciou o pedido.
 
-### Etapa 4. Validacao pelo virtual node
+### Etapa 4. Pedido de validacao e publicacao
 
-Ao receber o `ROUTE_CREATE_RETURN`, o `virtual node` valida o resultado final da
-rota.
+Ao receber o `ROUTE_CREATE_KEM_INFO`, o `virtual node`:
+
+- valida a assinatura do `final physical node`
+- encapsula um segredo usando a chave publica de `ML-KEM`
+- cifra o payload de validacao
+- envia `ROUTE_CREATE_VALIDATE_AND_PUBLISH` ao `final physical node`
+
+Esse payload cifrado carrega:
+
+- `virtual_node_id`
+- `virtual_node_public_key`
+- `final_path_id`
+- `final_physical_node_id`
+- `virtual_node_signature`
 
 Essa etapa existe porque:
 
 - o `final physical node` valida a parte fisica da rota
 - o `virtual node` valida a parte logica e a publicacao em seu proprio nome
 
-### Etapa 5. Commit ou abort da rota
+### Etapa 5. Confirmacao final
 
-Depois da validacao do `virtual node`, o iniciador decide:
+O `final physical node`:
 
-- enviar `ROUTE_CREATE_OK` se a rota foi aceita
-- enviar `ROUTE_CREATE_FAIL` se a rota foi rejeitada
+- decapsula o segredo
+- decifra o payload
+- valida a assinatura do `VN`
+- assina a aceitacao do entry point
+- responde usando `ROUTE_CREATE_OK`
 
-Essas mensagens tambem percorrem os hops da rota.
+O `ROUTE_CREATE_OK` volta ate o `VN`, que:
 
-Cada hop usa essa etapa para:
-
-- marcar a rota como valida e ativa
-- ou invalidar e limpar o estado local da rota
+- valida a assinatura privada do `final PN`
+- valida a assinatura publica da parte aberta da rota
+- decide publicar a rota na `DRT`
 
 ### Etapa 6. Publicacao na DRT
 
-Somente depois da validacao do `virtual node`, a nova rota pode ser publicada na
+Somente depois da validacao final do `VN`, a nova rota pode ser publicada na
 `DRT`.
+
+### Etapa 7. Validacao por latencia da rota
+
+Depois da validacao criptografica, o `VN` pode validar a estimativa temporal da
+rota com:
+
+- `ROUTE_CREATE_PING`
+- `ROUTE_CREATE_PONG`
+
+Fluxo:
+
+1. o `VN` envia `ROUTE_CREATE_PING`
+2. o ping percorre a rota ate o `final physical node`
+3. o `final physical node` responde com `ROUTE_CREATE_PONG`
+4. o `VN` mede o tempo total observado
+5. no `random_walk_ttl_based`, o `VN` compara esse tempo com o budget que
+   estimou localmente
 
 Assim, a publicacao da rota segue este principio:
 
@@ -255,17 +240,18 @@ As validacoes ficam assim:
 
 ## Message Types da Rota
 
-Na DEMO, a familia de `routing` fica assim:
+Na DEMO, a familia de `route_build` fica assim:
 
 - `ROUTE_CREATE`
-- `ROUTE_CREATE_RETURN`
+- `ROUTE_CREATE_KEM_INFO`
+- `ROUTE_CREATE_VALIDATE_AND_PUBLISH`
 - `ROUTE_CREATE_OK`
-- `ROUTE_CREATE_FAIL`
+- `ROUTE_CREATE_PING`
+- `ROUTE_CREATE_PONG`
+
+E a familia de `route_execute` fica assim:
+
 - `ROUTE_DATA`
-- `ROUTE_DATA_ACK`
-- `ROUTE_KEEPALIVE`
-- `ROUTE_KEEPALIVE_ACK`
-- `ROUTE_CLOSE`
 
 ## Route Strategies
 
@@ -333,7 +319,7 @@ caminho percorrido.
    - reduz o contador de hops restantes
    - remapeia `path_id`
 3. o `final physical node` valida a parte fisica do caminho
-4. a rota retorna ao `virtual node`
+4. o `final physical node` responde usando `ROUTE_DATA`
 5. o `virtual node` valida o caminho completo
 
 ### Objetivo
@@ -373,16 +359,18 @@ conhecimento entre os hops.
 
 A criacao da rota e um processo fisico hop-by-hop.
 
-O pedido original carrega apenas os dados publicos imutaveis e um bloco cifrado
-para o `final physical node`.
+O pedido original carrega apenas os dados publicos imutaveis da criacao e o
+proof of work.
 Os hops intermediaros nao descobrem o `final_path_id` real da rota.
-O `final physical node` decifra esse valor, valida anti-replay e assina a prova
-de aceitacao do entry point.
+Esse identificador, junto com a assinatura do `VN`, segue depois em um
+`ROUTE_CREATE_VALIDATE_AND_PUBLISH` cifrado para o `final physical node`.
 
-Depois disso, o `final physical node` envia `ROUTE_CREATE_RETURN` de volta ao
-`virtual node` iniciador. O `virtual node` valida o resultado final, envia
-`ROUTE_CREATE_OK` ou `ROUTE_CREATE_FAIL` para comitar ou abortar a rota nos
-hops, e so entao publica a nova rota na `DRT`.
+O `final physical node` decifra esse payload, valida anti-replay e assina a
+prova de aceitacao do entry point.
+
+Depois disso, o `final physical node` usa `ROUTE_CREATE_OK` para responder ao
+`virtual node` iniciador. O `virtual node` valida o resultado final e, estando
+tudo certo, pode publicar a nova rota na `DRT`.
 
 Dependendo da estrategia escolhida, essa validacao final pode priorizar:
 
