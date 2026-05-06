@@ -12,6 +12,7 @@ from storage.models import (
     NodeEndpoint,
     PhysicalNodeInfoExchangeState,
     RemotePhysicalNodeIdentity,
+    RemoteVirtualNodeIdentity,
     RttInfo,
 )
 
@@ -125,6 +126,13 @@ class IdentityService:
     ) -> RemotePhysicalNodeIdentity | None:
         with self.database.session_scope() as session:
             return session.get(RemotePhysicalNodeIdentity, node_id)
+
+    def get_remote_virtual_node_by_id(
+        self,
+        node_id: str,
+    ) -> RemoteVirtualNodeIdentity | None:
+        with self.database.session_scope() as session:
+            return session.get(RemoteVirtualNodeIdentity, node_id)
 
     def list_remote_physical_nodes_for_validation(
         self,

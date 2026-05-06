@@ -230,28 +230,12 @@ def _is_valid_drt_route_entry(
         return False
     if not route_entry.entry_point_physical_node_signature:
         return False
-
-    signed_payload = {
-        "pk_physical_node": route_entry.pk_physical_node,
-        "expires_at": route_entry.expires_at,
-        "rtt": route_entry.rtt,
-    }
-    message_hex = _canonical_payload_hex(signed_payload)
+    if not route_entry.physical_node_signature:
+        return False
+    if not route_entry.rtt_physical_node_signature:
+        return False
 
     try:
-        physical_signature_valid = dilithium_verify_hex(
-            message_hex,
-            route_entry.physical_node_signature,
-            route_entry.pk_physical_node,
-        )
-        virtual_signature_valid = dilithium_verify_hex(
-            message_hex,
-            route_entry.virtual_node_signature,
-            pk_virtual_node,
-        )
-        if not physical_signature_valid or not virtual_signature_valid:
-            return False
-
         final_physical_node_id = sha512(route_entry.pk_physical_node.encode("utf-8")).hexdigest()
         virtual_node_id = sha512(pk_virtual_node.encode("utf-8")).hexdigest()
         entry_point_virtual_payload = {
@@ -261,19 +245,51 @@ def _is_valid_drt_route_entry(
         entry_point_physical_payload = {
             "virtual_node_id": virtual_node_id,
             "final_path_id": route_entry.final_path_id,
-            "virtual_node_signature": route_entry.entry_point_virtual_node_signature,
+            "virtual_node_signature": route_entry.virtual_node_signature,
         }
-        entry_point_virtual_valid = dilithium_verify_hex(
+        rtt_payload = {
+            "pk_physical_node": route_entry.pk_physical_node,
+            "expires_at": route_entry.expires_at,
+            "rtt": route_entry.rtt,
+        }
+
+        virtual_signature_valid = dilithium_verify_hex(
+            _canonical_payload_hex(entry_point_virtual_payload),
+            route_entry.virtual_node_signature,
+            pk_virtual_node,
+        )
+        entry_point_virtual_signature_valid = dilithium_verify_hex(
             _canonical_payload_hex(entry_point_virtual_payload),
             route_entry.entry_point_virtual_node_signature,
             pk_virtual_node,
         )
-        entry_point_physical_valid = dilithium_verify_hex(
+        duplicated_virtual_signature_matches = (
+            route_entry.entry_point_virtual_node_signature
+            == route_entry.virtual_node_signature
+        )
+        physical_signature_valid = dilithium_verify_hex(
+            _canonical_payload_hex(entry_point_physical_payload),
+            route_entry.physical_node_signature,
+            route_entry.pk_physical_node,
+        )
+        entry_point_physical_signature_valid = dilithium_verify_hex(
             _canonical_payload_hex(entry_point_physical_payload),
             route_entry.entry_point_physical_node_signature,
             route_entry.pk_physical_node,
         )
-        return entry_point_virtual_valid and entry_point_physical_valid
+        rtt_signature_valid = dilithium_verify_hex(
+            _canonical_payload_hex(rtt_payload),
+            route_entry.rtt_physical_node_signature,
+            route_entry.pk_physical_node,
+        )
+        return (
+            virtual_signature_valid
+            and entry_point_virtual_signature_valid
+            and duplicated_virtual_signature_matches
+            and physical_signature_valid
+            and entry_point_physical_signature_valid
+            and rtt_signature_valid
+        )
     except Exception:
         return False
 
@@ -388,6 +404,7 @@ def _deduplicate_drt_route_entries(
             item.virtual_node_signature,
             item.entry_point_virtual_node_signature,
             item.entry_point_physical_node_signature,
+            item.rtt_physical_node_signature,
         ),
     )
 

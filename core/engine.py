@@ -84,6 +84,13 @@ class CoreEngine:
                 },
             )
 
+        return await self.process_protocol_envelope(envelope, context)
+
+    async def process_protocol_envelope(
+        self,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+    ) -> PacketProcessingResult:
         session_validation = self._validate_message_policy(envelope)
         if session_validation is not None:
             return session_validation

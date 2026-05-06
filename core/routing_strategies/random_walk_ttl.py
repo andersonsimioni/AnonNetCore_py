@@ -676,7 +676,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             return self._build_invalid_result(envelope, reason="local_physical_node_not_initialized")
 
         drt_expires_at = _build_drt_entry_expires_at()
-        drt_physical_node_signature = _sign_drt_route_entry(
+        drt_rtt_physical_node_signature = _sign_drt_route_rtt(
             pk_physical_node=local_node.public_key,
             expires_at=drt_expires_at,
             rtt=int(round(observed_round_trip_ms)),
@@ -685,7 +685,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         drt_publish_request = services.route_service.build_drt_publish_request_from_endpoint_resolution(
             route_path_id=route_create_pong.path_id,
             physical_node_public_key=local_node.public_key,
-            physical_node_signature=drt_physical_node_signature,
+            rtt_physical_node_signature=drt_rtt_physical_node_signature,
             observed_round_trip_ms=int(round(observed_round_trip_ms)),
             expires_at=drt_expires_at,
         )
@@ -1312,7 +1312,7 @@ def _is_valid_public_route_acceptance_signature(
     )
 
 
-def _sign_drt_route_entry(
+def _sign_drt_route_rtt(
     *,
     pk_physical_node: str,
     expires_at: str,

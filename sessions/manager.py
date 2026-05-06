@@ -152,6 +152,78 @@ class SessionManager:
             )
         )
 
+    def create_outbound_virtual_session(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+        remote_public_key: str | None,
+        bound_route_id: str | None = None,
+        keepalive_interval_seconds: int = 30,
+    ) -> NetworkSession:
+        session_id = str(uuid4())
+        return self.create_session(
+            SessionCreateInput(
+                session_id=session_id,
+                session_scope="virtual",
+                local_identity_type="virtual_node",
+                local_identity_id=local_virtual_node_id,
+                remote_identity_type="virtual_node",
+                remote_identity_id=remote_virtual_node_id,
+                direction="outbound",
+                initiator_side="initiator",
+                handshake_state="init_sent",
+                session_state="pending",
+                key_exchange_algorithm="ml-kem-768",
+                signature_algorithm="ml-dsa-65",
+                symmetric_algorithm="aes-256-cbc",
+                hash_algorithm="sha512",
+                remote_public_key=remote_public_key,
+                bound_route_id=bound_route_id,
+                keepalive_interval_seconds=keepalive_interval_seconds,
+                keepalive_deadline=self._build_keepalive_deadline(keepalive_interval_seconds),
+            )
+        )
+
+    def create_inbound_virtual_session(
+        self,
+        *,
+        session_id: str,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+        remote_public_key: str | None,
+        bound_route_id: str | None = None,
+        keepalive_interval_seconds: int = 30,
+    ) -> NetworkSession:
+        existing_session = self.get_session_by_session_id(session_id)
+        if existing_session is not None:
+            if bound_route_id is not None and existing_session.bound_route_id != bound_route_id:
+                existing_session.bound_route_id = bound_route_id
+            return existing_session
+
+        return self.create_session(
+            SessionCreateInput(
+                session_id=session_id,
+                session_scope="virtual",
+                local_identity_type="virtual_node",
+                local_identity_id=local_virtual_node_id,
+                remote_identity_type="virtual_node",
+                remote_identity_id=remote_virtual_node_id,
+                direction="inbound",
+                initiator_side="responder",
+                handshake_state="init_received",
+                session_state="pending",
+                key_exchange_algorithm="ml-kem-768",
+                signature_algorithm="ml-dsa-65",
+                symmetric_algorithm="aes-256-cbc",
+                hash_algorithm="sha512",
+                remote_public_key=remote_public_key,
+                bound_route_id=bound_route_id,
+                keepalive_interval_seconds=keepalive_interval_seconds,
+                keepalive_deadline=self._build_keepalive_deadline(keepalive_interval_seconds),
+            )
+        )
+
     def list_sessions(self, *, session_scope: str | None = None) -> list[NetworkSession]:
         sessions = list(self._sessions_by_id.values())
         if session_scope is not None:

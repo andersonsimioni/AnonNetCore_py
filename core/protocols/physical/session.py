@@ -26,12 +26,6 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         "PHYSICAL_SESSION_KEEPALIVE",
         "PHYSICAL_SESSION_KEEPALIVE_ACK",
         "PHYSICAL_SESSION_CLOSE",
-        
-        "OVERLAY_SESSION_INIT",
-        "OVERLAY_SESSION_INIT_OK",
-        "OVERLAY_SESSION_KEY_CONFIRM",
-        "OVERLAY_SESSION_READY",
-        "OVERLAY_SESSION_CLOSE",
     }
 
     @staticmethod
@@ -152,21 +146,6 @@ class SessionProtocolHandler(ProtocolMessageHandler):
 
         if envelope.message_type == "PHYSICAL_SESSION_CLOSE":
             return await self._handle_physical_session_close(envelope, context, services)
-
-        if envelope.message_type == "OVERLAY_SESSION_INIT":
-            return await self._handle_overlay_session_init(envelope, context, services)
-
-        if envelope.message_type == "OVERLAY_SESSION_INIT_OK":
-            return await self._handle_overlay_session_init_ok(envelope, context, services)
-
-        if envelope.message_type == "OVERLAY_SESSION_KEY_CONFIRM":
-            return await self._handle_overlay_session_key_confirm(envelope, context, services)
-
-        if envelope.message_type == "OVERLAY_SESSION_READY":
-            return await self._handle_overlay_session_ready(envelope, context, services)
-
-        if envelope.message_type == "OVERLAY_SESSION_CLOSE":
-            return await self._handle_overlay_session_close(envelope, context, services)
 
         return self._build_not_implemented_result(envelope, context, services)
 
@@ -516,46 +495,6 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             },
         )
 
-    async def _handle_overlay_session_init(
-        self,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        return self._build_not_implemented_result(envelope, context, services)
-
-    async def _handle_overlay_session_init_ok(
-        self,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        return self._build_not_implemented_result(envelope, context, services)
-
-    async def _handle_overlay_session_key_confirm(
-        self,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        return self._build_not_implemented_result(envelope, context, services)
-
-    async def _handle_overlay_session_ready(
-        self,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        return self._build_not_implemented_result(envelope, context, services)
-
-    async def _handle_overlay_session_close(
-        self,
-        envelope: ProtocolEnvelope,
-        context: PacketContext,
-        services: EngineServices,
-    ) -> PacketProcessingResult:
-        return self._build_not_implemented_result(envelope, context, services)
-
     def _sign_physical_session_init_ok(
         self,
         *,
@@ -623,7 +562,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
                 "protocol_family": self.protocol_family,
                 "transport_name": context.transport_name,
                 "session_count": len(services.session_manager.list_sessions()),
-                "next_step": "implement_overlay_session_protocol_flow",
+                "next_step": "implement_virtual_session_protocol_flow",
             },
         )
 

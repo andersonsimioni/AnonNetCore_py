@@ -1,5 +1,5 @@
 from .base import ProtocolMessageHandler
-from .overlay import ContentProtocolHandler
+from .virtual import ContentProtocolHandler, VirtualSessionProtocolHandler
 from .physical import (
     DhtProtocolHandler,
     PingProtocolHandler,
@@ -14,6 +14,7 @@ from .types import PacketProtocol
 __all__ = [
     "ContentProtocolHandler",
     "DhtProtocolHandler",
+    "VirtualSessionProtocolHandler",
     "PacketProtocol",
     "PingProtocolHandler",
     "PhysicalNodeInfoExchangeProtocolHandler",

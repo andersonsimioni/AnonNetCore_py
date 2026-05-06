@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 
-class PhysicalSessionRuntime:
-    """Executa manutencao de sessoes fisicas em background."""
+
+class SessionRuntime:
+    """Executa manutencao periodica para sessoes fisicas e virtuais."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
@@ -19,7 +20,7 @@ class PhysicalSessionRuntime:
             return
 
         self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(self._run_loop(), name="physical-session-runtime")
+        self._task = asyncio.create_task(self._run_loop(), name="session-runtime")
 
     async def stop(self) -> None:
         if self._task is None:
@@ -40,8 +41,7 @@ class PhysicalSessionRuntime:
                 continue
 
     async def _run_once(self) -> None:
-        session_manager = self.engine.services.session_manager
-        for session in session_manager.list_active_physical_sessions():
+        for session in self.engine.services.session_manager.list_active_sessions():
             if self._should_close_session(session):
                 await self._close_expired_session(session)
                 continue
@@ -53,9 +53,8 @@ class PhysicalSessionRuntime:
     def _should_close_session(session) -> bool:
         return session.keepalive_deadline is not None and session.keepalive_deadline <= self_now()
 
-    @staticmethod
-    def _should_send_keepalive(session) -> bool:
-        if not session.transport or not session.remote_host or session.remote_port is None:
+    def _should_send_keepalive(self, session) -> bool:
+        if not self._can_send_session_message(session):
             return False
 
         interval = timedelta(seconds=session.keepalive_interval_seconds)
@@ -69,17 +68,21 @@ class PhysicalSessionRuntime:
         return session.last_keepalive_sent_at < session.last_activity_at
 
     async def _send_keepalive(self, session) -> None:
-        await self.engine.services.protocol_clients.physical.session.send_keepalive(
-            session_id=session.session_id,
-        )
+        if session.session_scope == "physical":
+            await self.engine.services.protocol_clients.physical.session.send_keepalive(
+                session_id=session.session_id,
+            )
+            return
+
+        if session.session_scope == "virtual":
+            await self.engine.services.protocol_clients.virtual.session.send_keepalive(
+                session_id=session.session_id,
+            )
 
     async def _close_expired_session(self, session) -> None:
-        if session.transport and session.remote_host and session.remote_port is not None:
+        if self._can_send_session_message(session):
             try:
-                await self.engine.services.protocol_clients.physical.session.close_session(
-                    session_id=session.session_id,
-                    close_reason="keepalive_timeout",
-                )
+                await self._send_close_message(session)
             except Exception:
                 pass
 
@@ -87,6 +90,30 @@ class PhysicalSessionRuntime:
             session.session_id,
             close_reason="keepalive_timeout",
         )
+
+    async def _send_close_message(self, session) -> None:
+        if session.session_scope == "physical":
+            await self.engine.services.protocol_clients.physical.session.close_session(
+                session_id=session.session_id,
+                close_reason="keepalive_timeout",
+            )
+            return
+
+        if session.session_scope == "virtual":
+            await self.engine.services.protocol_clients.virtual.session.close_session(
+                session_id=session.session_id,
+                close_reason="keepalive_timeout",
+            )
+
+    @staticmethod
+    def _can_send_session_message(session) -> bool:
+        if session.session_scope == "physical":
+            return bool(session.transport and session.remote_host and session.remote_port is not None)
+
+        if session.session_scope == "virtual":
+            return bool(session.bound_route_id)
+
+        return False
 
 
 def self_now():

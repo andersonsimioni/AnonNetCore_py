@@ -308,7 +308,7 @@ class RouteService:
         *,
         route_path_id: str,
         physical_node_public_key: str,
-        physical_node_signature: str,
+        rtt_physical_node_signature: str,
         observed_round_trip_ms: int,
         expires_at: str,
     ) -> dict[str, str] | None:
@@ -322,6 +322,10 @@ class RouteService:
             return None
         if not isinstance(resolution.virtual_node_signature, str) or not resolution.virtual_node_signature:
             return None
+        if not isinstance(resolution.physical_node_signature, str) or not resolution.physical_node_signature:
+            return None
+        if not isinstance(resolution.final_path_id, str) or not resolution.final_path_id:
+            return None
 
         now = datetime.now(timezone.utc)
         record_payload = DrtRecordPayload(
@@ -329,13 +333,14 @@ class RouteService:
             route_entries=[
                 DrtRouteEntryRecord(
                     pk_physical_node=physical_node_public_key,
-                    physical_node_signature=physical_node_signature,
                     virtual_node_signature=resolution.virtual_node_signature,
                     final_path_id=resolution.final_path_id,
                     entry_point_virtual_node_signature=resolution.virtual_node_signature,
                     entry_point_physical_node_signature=resolution.physical_node_signature,
+                    physical_node_signature=resolution.physical_node_signature,
                     expires_at=expires_at,
                     rtt=observed_round_trip_ms,
+                    rtt_physical_node_signature=rtt_physical_node_signature,
                 )
             ],
             last_update=now.isoformat(),

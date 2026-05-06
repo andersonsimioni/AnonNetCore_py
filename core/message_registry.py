@@ -6,6 +6,7 @@ from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from .protocols import (
     ContentProtocolHandler,
     DhtProtocolHandler,
+    VirtualSessionProtocolHandler,
     PingProtocolHandler,
     PhysicalNodeInfoExchangeProtocolHandler,
     PhysicalNodeInfoProtocolHandler,
@@ -37,7 +38,8 @@ class MessageRegistry:
         physical_dht = DhtProtocolHandler()
         physical_route_build = RouteBuildProtocolHandler()
         physical_route_execute = RouteExecuteProtocolHandler()
-        overlay_content = ContentProtocolHandler()
+        virtual_content = ContentProtocolHandler()
+        virtual_session = VirtualSessionProtocolHandler()
 
         self._definitions: dict[str, MessageDefinition] = {}
         self._register_many(
@@ -127,33 +129,45 @@ class MessageRegistry:
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
-                    message_type="OVERLAY_SESSION_INIT",
-                    handler=physical_session,
-                    layer="overlay",
+                    message_type="VIRTUAL_SESSION_INIT",
+                    handler=virtual_session,
+                    layer="virtual",
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
-                    message_type="OVERLAY_SESSION_INIT_OK",
-                    handler=physical_session,
-                    layer="overlay",
+                    message_type="VIRTUAL_SESSION_INIT_OK",
+                    handler=virtual_session,
+                    layer="virtual",
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
-                    message_type="OVERLAY_SESSION_KEY_CONFIRM",
-                    handler=physical_session,
-                    layer="overlay",
+                    message_type="VIRTUAL_SESSION_KEY_CONFIRM",
+                    handler=virtual_session,
+                    layer="virtual",
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
-                    message_type="OVERLAY_SESSION_READY",
-                    handler=physical_session,
-                    layer="overlay",
+                    message_type="VIRTUAL_SESSION_READY",
+                    handler=virtual_session,
+                    layer="virtual",
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
-                    message_type="OVERLAY_SESSION_CLOSE",
-                    handler=physical_session,
-                    layer="overlay",
+                    message_type="VIRTUAL_SESSION_KEEPALIVE",
+                    handler=virtual_session,
+                    layer="virtual",
+                    requires_physical_session=True,
+                ),
+                MessageDefinition(
+                    message_type="VIRTUAL_SESSION_KEEPALIVE_ACK",
+                    handler=virtual_session,
+                    layer="virtual",
+                    requires_physical_session=True,
+                ),
+                MessageDefinition(
+                    message_type="VIRTUAL_SESSION_CLOSE",
+                    handler=virtual_session,
+                    layer="virtual",
                     requires_physical_session=True,
                 ),
             ]
@@ -174,8 +188,8 @@ class MessageRegistry:
             requires_physical_session=True,
         )
         self._register_handler(
-            overlay_content,
-            layer="overlay",
+            virtual_content,
+            layer="virtual",
             requires_physical_session=True,
         )
 

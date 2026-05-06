@@ -9,9 +9,10 @@ from .physical import (
     PhysicalNodeInfoClient,
     PhysicalNodeInfoExchangeClient,
     PhysicalSessionClient,
+    RouteBuildClient,
+    RouteExecuteClient,
 )
-from .route_build import RouteBuildClient
-from .route_execute import RouteExecuteClient
+from .virtual import VirtualSessionClient
 
 if TYPE_CHECKING:
     from ..engine import CoreEngine
@@ -24,6 +25,8 @@ class PhysicalProtocolClients:
     node_info: PhysicalNodeInfoClient
     node_info_exchange: PhysicalNodeInfoExchangeClient
     session: PhysicalSessionClient
+    route_build: RouteBuildClient
+    route_execute: RouteExecuteClient
 
     def __init__(self, engine: CoreEngine) -> None:
         self.dht = PhysicalDhtClient(engine)
@@ -31,30 +34,30 @@ class PhysicalProtocolClients:
         self.node_info = PhysicalNodeInfoClient(engine)
         self.node_info_exchange = PhysicalNodeInfoExchangeClient(engine)
         self.session = PhysicalSessionClient(engine)
+        self.route_build = RouteBuildClient(engine)
+        self.route_execute = RouteExecuteClient(engine)
 
 
 @dataclass(slots=True)
-class OverlayProtocolClients:
+class VirtualProtocolClients:
+    session: VirtualSessionClient
+
     def __init__(self, engine: CoreEngine) -> None:
-        del engine
+        self.session = VirtualSessionClient(engine)
 
 
 @dataclass(slots=True)
 class ProtocolClients:
     physical: PhysicalProtocolClients
-    overlay: OverlayProtocolClients
-    route_build: RouteBuildClient
-    route_execute: RouteExecuteClient
+    virtual: VirtualProtocolClients
 
     def __init__(self, engine: CoreEngine) -> None:
         self.physical = PhysicalProtocolClients(engine)
-        self.overlay = OverlayProtocolClients(engine)
-        self.route_build = RouteBuildClient(engine)
-        self.route_execute = RouteExecuteClient(engine)
+        self.virtual = VirtualProtocolClients(engine)
 
 
 __all__ = [
-    "OverlayProtocolClients",
+    "VirtualProtocolClients",
     "PhysicalDhtClient",
     "PhysicalPingClient",
     "PhysicalNodeInfoClient",
@@ -64,4 +67,5 @@ __all__ = [
     "ProtocolClients",
     "RouteBuildClient",
     "RouteExecuteClient",
+    "VirtualSessionClient",
 ]

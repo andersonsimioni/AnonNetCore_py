@@ -23,13 +23,14 @@ class DpntRecordPayload:
 @dataclass(slots=True, frozen=True)
 class DrtRouteEntryRecord:
     pk_physical_node: str
-    physical_node_signature: str
     virtual_node_signature: str
     final_path_id: str
     entry_point_virtual_node_signature: str
     entry_point_physical_node_signature: str
+    physical_node_signature: str
     expires_at: str
     rtt: int
+    rtt_physical_node_signature: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -251,7 +252,6 @@ def _read_drt_route_entries(payload: dict[str, object]) -> list[DrtRouteEntryRec
         route_entries.append(
             DrtRouteEntryRecord(
                 pk_physical_node=_read_required_string(item, "pk_physical_node"),
-                physical_node_signature=_read_required_string(item, "physical_node_signature"),
                 virtual_node_signature=_read_required_string(item, "virtual_node_signature"),
                 final_path_id=_read_required_string(item, "final_path_id"),
                 entry_point_virtual_node_signature=_read_required_string(
@@ -262,8 +262,13 @@ def _read_drt_route_entries(payload: dict[str, object]) -> list[DrtRouteEntryRec
                     item,
                     "entry_point_physical_node_signature",
                 ),
+                physical_node_signature=_read_required_string(item, "physical_node_signature"),
                 expires_at=_read_required_string(item, "expires_at"),
                 rtt=_read_required_int(item, "rtt"),
+                rtt_physical_node_signature=_read_required_string(
+                    item,
+                    "rtt_physical_node_signature",
+                ),
             )
         )
     return route_entries

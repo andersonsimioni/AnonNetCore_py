@@ -2,7 +2,7 @@ from .engine import CoreEngine
 from .message_registry import MessageDefinition, MessageRegistry
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from .protocol_clients import (
-    OverlayProtocolClients,
+    VirtualProtocolClients,
     PhysicalDhtClient,
     PhysicalPingClient,
     PhysicalNodeInfoClient,
@@ -12,10 +12,12 @@ from .protocol_clients import (
     ProtocolClients,
     RouteBuildClient,
     RouteExecuteClient,
+    VirtualSessionClient,
 )
 from .protocols import (
     ContentProtocolHandler,
     DhtProtocolHandler,
+    VirtualSessionProtocolHandler,
     PacketProtocol,
     PingProtocolHandler,
     PhysicalNodeInfoExchangeProtocolHandler,
@@ -38,7 +40,7 @@ from .runtime import (
     PhysicalNodeInfoExchangeRuntime,
     PhysicalPingRuntime,
     PhysicalNodeValidationRuntime,
-    PhysicalSessionRuntime,
+    SessionRuntime,
     RuntimeServices,
 )
 from .services import EngineServices
@@ -52,7 +54,9 @@ __all__ = [
     "MessageDefinition",
     "MessageRegistry",
     "MessageRouter",
-    "OverlayProtocolClients",
+    "VirtualProtocolClients",
+    "VirtualSessionClient",
+    "VirtualSessionProtocolHandler",
     "PacketContext",
     "PacketProcessingResult",
     "PacketProtocol",
@@ -66,7 +70,7 @@ __all__ = [
     "PhysicalPingRuntime",
     "PhysicalNodeValidationRuntime",
     "PhysicalProtocolClients",
-    "PhysicalSessionRuntime",
+    "SessionRuntime",
     "PhysicalSessionClient",
     "ProtocolEnvelope",
     "ProtocolClients",
