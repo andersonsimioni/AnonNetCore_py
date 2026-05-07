@@ -70,6 +70,14 @@ class DhtMaintenanceRuntime:
             if fragment is None:
                 return None
 
+            services.log_service.debug(
+                "dht_maintenance_runtime",
+                "validating local dht fragment",
+                key=fragment.key,
+                namespace=fragment.namespace,
+                logical_key=fragment.logical_key,
+                fragment_id=fragment.id,
+            )
             parent = (
                 session.query(DhtRecord)
                 .filter(DhtRecord.key == fragment.key)
@@ -78,19 +86,33 @@ class DhtMaintenanceRuntime:
                 .first()
             )
 
-            fragment_payload = parse_record(fragment.namespace, fragment.record_json)
-            parent_payload = (
-                parse_record(parent.namespace, parent.record_json)
-                if parent is not None
-                else self._build_seed_parent_payload(fragment.namespace, fragment_payload)
-            )
+            try:
+                fragment_payload = parse_record(fragment.namespace, fragment.record_json)
+                parent_payload = (
+                    parse_record(parent.namespace, parent.record_json)
+                    if parent is not None
+                    else self._build_seed_parent_payload(fragment.namespace, fragment_payload)
+                )
 
-            merged_payload = validate_and_merge(
-                fragment.namespace,
-                fragment.key,
-                parent_payload,
-                fragment_payload,
-            )
+                merged_payload = validate_and_merge(
+                    fragment.namespace,
+                    fragment.key,
+                    parent_payload,
+                    fragment_payload,
+                )
+            except Exception as error:
+                services.log_service.warning(
+                    "dht_maintenance_runtime",
+                    "failed to validate local dht fragment",
+                    key=fragment.key,
+                    namespace=fragment.namespace,
+                    logical_key=fragment.logical_key,
+                    fragment_id=fragment.id,
+                    error=str(error),
+                )
+                session.delete(fragment)
+                return None
+
             now = datetime.now(timezone.utc)
             merged_record_json = serialize_record(merged_payload)
 
@@ -115,6 +137,14 @@ class DhtMaintenanceRuntime:
                 )
 
             session.delete(fragment)
+            services.log_service.info(
+                "dht_maintenance_runtime",
+                "validated and merged local dht fragment",
+                key=fragment.key,
+                namespace=fragment.namespace,
+                logical_key=fragment.logical_key,
+                created_parent=parent.id if parent.id is not None else None,
+            )
 
     async def _ensure_records_on_responsible_nodes(self) -> None:
         """Garante que registros DHT locais estejam presentes nos K nodes responsaveis."""
@@ -130,15 +160,42 @@ class DhtMaintenanceRuntime:
         if dht_record is None:
             return None
 
-        await services.protocol_clients.physical.dht.publish(
+        services.log_service.debug(
+            "dht_maintenance_runtime",
+            "publishing validated dht record to responsible nodes",
+            key=dht_record.key,
             namespace=dht_record.namespace,
             logical_key=dht_record.logical_key,
-            record_json=dht_record.record_json,
-            expires_at=(
-                dht_record.expires_at.isoformat()
-                if dht_record.expires_at is not None
-                else None
-            ),
+        )
+        try:
+            publish_result = await services.protocol_clients.physical.dht.publish(
+                namespace=dht_record.namespace,
+                logical_key=dht_record.logical_key,
+                record_json=dht_record.record_json,
+                expires_at=(
+                    dht_record.expires_at.isoformat()
+                    if dht_record.expires_at is not None
+                    else None
+                ),
+            )
+        except Exception as error:
+            services.log_service.warning(
+                "dht_maintenance_runtime",
+                "failed to publish validated dht record",
+                key=dht_record.key,
+                namespace=dht_record.namespace,
+                logical_key=dht_record.logical_key,
+                error=str(error),
+            )
+            return
+
+        services.log_service.info(
+            "dht_maintenance_runtime",
+            "finished dht record maintenance publish",
+            key=dht_record.key,
+            namespace=dht_record.namespace,
+            logical_key=dht_record.logical_key,
+            status=publish_result.get("status"),
         )
 
     def _build_seed_parent_payload(self, namespace: str, fragment_payload):

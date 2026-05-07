@@ -80,8 +80,21 @@ class PingProtocolHandler(ProtocolMessageHandler):
         payload = _as_payload_dict(envelope)
         nonce = _read_required_string(payload, "nonce")
         if nonce is None:
+            services.log_service.warning(
+                "physical_ping",
+                "received invalid ping payload",
+                remote_host=context.remote_host,
+                remote_port=context.remote_port,
+            )
             return self._build_invalid_result(envelope, "invalid_ping_payload")
 
+        services.log_service.debug(
+            "physical_ping",
+            "received ping and sending pong",
+            nonce=nonce,
+            remote_host=context.remote_host,
+            remote_port=context.remote_port,
+        )
         response_payload = self.build_pong_payload(
             request_header=envelope.header,
             nonce=nonce,
@@ -112,6 +125,12 @@ class PingProtocolHandler(ProtocolMessageHandler):
             or not isinstance(response_to_message_id, str)
             or services.protocol_clients is None
         ):
+            services.log_service.warning(
+                "physical_ping",
+                "received invalid pong payload",
+                remote_host=context.remote_host,
+                remote_port=context.remote_port,
+            )
             return self._build_invalid_result(envelope, "invalid_pong_payload")
 
         services.protocol_clients.physical.ping.complete_pong(
@@ -122,6 +141,14 @@ class PingProtocolHandler(ProtocolMessageHandler):
                 "remote_port": context.remote_port,
                 "transport_name": context.transport_name,
             },
+        )
+        services.log_service.debug(
+            "physical_ping",
+            "resolved pending pong",
+            nonce=nonce,
+            response_to_message_id=response_to_message_id,
+            remote_host=context.remote_host,
+            remote_port=context.remote_port,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,

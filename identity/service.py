@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 
 from sqlalchemy import func, or_, select
 
 from crypto import generate_dilithium_key_pair, sha512_hex
+from dht import DpntRecordPayload, serialize_record
 from storage import get_database
 from storage.models import (
     LocalPhysicalNodeIdentity,
@@ -29,6 +31,44 @@ from .models import (
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _merge_notes_json(
+    existing_notes_json: str | None,
+    new_notes_json: str | None,
+) -> str | None:
+    existing_notes = _load_json_object(existing_notes_json)
+    new_notes = _load_json_object(new_notes_json)
+    merged_notes = dict(existing_notes)
+
+    for key, value in new_notes.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value:
+            continue
+        if isinstance(value, list) and not value:
+            continue
+        merged_notes[key] = value
+
+    if not merged_notes:
+        return None
+
+    return json.dumps(merged_notes, separators=(",", ":"))
+
+
+def _load_json_object(payload: str | None) -> dict[str, object]:
+    if not payload:
+        return {}
+
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(parsed, dict):
+        return {}
+
+    return parsed
 
 
 class IdentityService:
@@ -279,6 +319,7 @@ class IdentityService:
         protocol_version: str | None,
         status: str,
         endpoints: list[dict[str, object]],
+        mark_validated: bool = False,
         display_name: str | None = None,
         reachability_class: str | None = None,
         relay_capable: bool = False,
@@ -300,7 +341,7 @@ class IdentityService:
                     protocol_version=protocol_version,
                     status=status,
                     last_seen_at=now,
-                    last_validated_at=now,
+                    last_validated_at=now if mark_validated else None,
                     notes_json=notes_json,
                 )
                 session.add(remote_node)
@@ -311,10 +352,13 @@ class IdentityService:
                 remote_node.relay_capable = relay_capable
                 remote_node.hole_punch_capable = hole_punch_capable
                 remote_node.protocol_version = protocol_version
-                remote_node.status = status
                 remote_node.last_seen_at = now
-                remote_node.last_validated_at = now
-                remote_node.notes_json = notes_json
+                remote_node.notes_json = _merge_notes_json(remote_node.notes_json, notes_json)
+                if mark_validated:
+                    remote_node.status = status
+                    remote_node.last_validated_at = now
+                elif remote_node.status != "active":
+                    remote_node.status = status
 
             for endpoint_data in endpoints:
                 transport = endpoint_data["transport"]
@@ -358,6 +402,7 @@ class IdentityService:
         public_key: str,
         protocol_version: str | None,
         endpoints: list[dict[str, object]],
+        status: str = "discovered",
         display_name: str | None = None,
         reachability_class: str | None = None,
         relay_capable: bool = False,
@@ -377,7 +422,7 @@ class IdentityService:
                     relay_capable=relay_capable,
                     hole_punch_capable=hole_punch_capable,
                     protocol_version=protocol_version,
-                    status="discovered",
+                    status=status,
                     last_seen_at=now,
                     last_validated_at=None,
                     notes_json=notes_json,
@@ -391,9 +436,9 @@ class IdentityService:
                 remote_node.hole_punch_capable = hole_punch_capable
                 remote_node.protocol_version = protocol_version
                 remote_node.last_seen_at = now
-                remote_node.notes_json = notes_json
+                remote_node.notes_json = _merge_notes_json(remote_node.notes_json, notes_json)
                 if remote_node.status != "active":
-                    remote_node.status = "discovered"
+                    remote_node.status = status
 
             for endpoint_data in endpoints:
                 transport = endpoint_data["transport"]
@@ -595,6 +640,63 @@ class IdentityService:
             session.refresh(rtt_info)
             return rtt_info
 
+    def build_dpnt_publish_request_for_remote_physical_node(
+        self,
+        *,
+        node_id: str,
+    ) -> dict[str, str] | None:
+        remote_node = self.get_remote_physical_node_by_id(node_id)
+        if remote_node is None:
+            return None
+
+        endpoints = self.list_remote_physical_node_endpoints(node_id)
+        if not endpoints:
+            return None
+
+        notes = _load_json_object(remote_node.notes_json)
+        dpnt_signature = notes.get("dpnt_signature")
+        dpnt_feature_flags = notes.get("dpnt_feature_flags", [])
+        if (
+            not isinstance(dpnt_signature, str)
+            or not dpnt_signature
+            or remote_node.last_validated_at is None
+        ):
+            return None
+
+        feature_flags = (
+            [item for item in dpnt_feature_flags if isinstance(item, str)]
+            if isinstance(dpnt_feature_flags, list)
+            else []
+        )
+        local_last_validated_at = remote_node.last_validated_at.isoformat()
+        payload = DpntRecordPayload(
+            pk_physical_node=remote_node.public_key,
+            endpoints=[
+                {
+                    "transport": endpoint.transport,
+                    "host": endpoint.host,
+                    "port": endpoint.port,
+                    "priority": endpoint.priority,
+                }
+                for endpoint in endpoints
+            ],
+            transport_methods=sorted({endpoint.transport for endpoint in endpoints}),
+            reachability_class=remote_node.reachability_class or "unknown",
+            relay_capable=remote_node.relay_capable,
+            hole_punch_capable=remote_node.hole_punch_capable,
+            protocol_version=remote_node.protocol_version or "1",
+            feature_flags=feature_flags,
+            last_validated_at=local_last_validated_at,
+            status=remote_node.status,
+            signature=dpnt_signature,
+        )
+        return {
+            "namespace": "dpnt",
+            "logical_key": remote_node.id,
+            "record_json": serialize_record(payload),
+            "expires_at": None,
+        }
+
     @staticmethod
     def _build_node_id(public_key: str) -> str:
         return sha512_hex(public_key.encode("utf-8"))
@@ -627,3 +729,15 @@ class IdentityService:
         session.add(state)
         session.flush()
         return state
+
+
+def _load_json_object(raw_json: str | None) -> dict[str, object]:
+    if not raw_json:
+        return {}
+
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return {}
+
+    return payload if isinstance(payload, dict) else {}

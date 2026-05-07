@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import socket
+from pathlib import Path
 from uuid import uuid4
 
 from bootstrap import BootstrapResolutionResult
@@ -8,7 +11,14 @@ from crypto import aes_decrypt_hex, aes_encrypt_hex
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from .router import MessageRouter
 from .services import EngineServices
-from transport import OutboundMessage, TransportEndpoint, TransportPacket
+from transport import (
+    OutboundMessage,
+    TcpTransportAdapter,
+    TcpTransportConfig,
+    TransportEndpoint,
+    TransportPacket,
+    TransportService,
+)
 
 
 class CoreEngine:
@@ -31,10 +41,14 @@ class CoreEngine:
         self._message_sequence = 0
 
     async def start(self) -> None:
+        self._configure_runtime_environment()
         self.services.database.create_schema()
         self.services.identity_service.ensure_local_physical_node()
         self.bootstrap_result = await self._run_bootstrap()
         await self.services.transport.start()
+        self.services.log_service.info("engine", "engine started")
+        self._log_loaded_bootstrap_targets()
+        await self._request_bootstrap_physical_node_info()
         if self.services.runtime_services is not None:
             await self.services.runtime_services.start()
 
@@ -42,6 +56,7 @@ class CoreEngine:
         if self.services.runtime_services is not None:
             await self.services.runtime_services.stop()
         await self.services.transport.stop()
+        self.services.log_service.info("engine", "engine stopped")
 
     async def send_packet(self, message: OutboundMessage) -> None:
         prepared_message = self._prepare_outbound_message(message)
@@ -99,6 +114,119 @@ class CoreEngine:
 
     async def _run_bootstrap(self) -> BootstrapResolutionResult:
         return await self.services.bootstrap_service.load_bootstrap_targets()
+
+    def _configure_runtime_environment(self) -> None:
+        self._configure_transport_listener()
+        self._configure_log_service()
+
+    def _configure_transport_listener(self) -> None:
+        config = self.services.config
+        transport_service = TransportService()
+        transport_service.register_adapter(
+            TcpTransportAdapter(
+                TcpTransportConfig(
+                    listen_host=config.listen_host,
+                    listen_port=config.listen_port,
+                )
+            )
+        )
+        transport_service.set_inbound_packet_handler(self.handle_transport_packet)
+        self.services.transport = transport_service
+        self.services.config.advertised_tcp_host = config.node_name
+        self.services.config.advertised_tcp_port = config.listen_port
+
+    def _configure_log_service(self) -> None:
+        node_name = self.services.config.node_name
+        log_file_path = Path("data/local/logs") / f"{node_name}.log"
+        self.services.log_service.configure(
+            node_name=node_name,
+            log_file_path=log_file_path,
+        )
+
+    def _log_loaded_bootstrap_targets(self) -> None:
+        if self.bootstrap_result is None:
+            self.services.log_service.warning("bootstrap", "no bootstrap result loaded")
+            return
+
+        endpoints = [
+            f"{endpoint.transport}://{endpoint.host}:{endpoint.port}"
+            for endpoint in self.bootstrap_result.all_endpoints
+        ]
+        self.services.log_service.info(
+            "bootstrap",
+            "bootstrap targets loaded",
+            endpoint_count=len(endpoints),
+            endpoints=endpoints,
+        )
+
+    async def _request_bootstrap_physical_node_info(self) -> None:
+        bootstrap_endpoints = self._get_bootstrap_endpoints()
+        if not bootstrap_endpoints:
+            return
+
+        await asyncio.sleep(self.services.config.bootstrap_warmup_seconds)
+
+        for attempt in range(1, self.services.config.bootstrap_request_retries + 1):
+            for endpoint in bootstrap_endpoints:
+                await self._request_single_bootstrap_endpoint(endpoint, attempt)
+
+            if attempt < self.services.config.bootstrap_request_retries:
+                await asyncio.sleep(self.services.config.bootstrap_request_delay_seconds)
+
+    async def _request_single_bootstrap_endpoint(
+        self,
+        endpoint,
+        attempt: int,
+    ) -> None:
+        try:
+            await self.services.protocol_clients.physical.node_info.send_request_to_bootstrap_endpoint(
+                endpoint
+            )
+            self._log_bootstrap_event(
+                f"bootstrap request sent target={endpoint.host}:{endpoint.port} attempt={attempt}"
+            )
+        except Exception as error:
+            self._log_bootstrap_event(
+                f"bootstrap request failed target={endpoint.host}:{endpoint.port} "
+                f"attempt={attempt} error={error}"
+            )
+
+    def _get_bootstrap_endpoints(self) -> list:
+        if self.bootstrap_result is None:
+            return []
+
+        return [
+            endpoint
+            for endpoint in self.bootstrap_result.all_endpoints
+            if not self._is_local_bootstrap_endpoint(endpoint)
+        ]
+
+    def _log_bootstrap_event(self, message: str) -> None:
+        self.services.log_service.info("bootstrap", message)
+
+    def _is_local_bootstrap_endpoint(self, endpoint) -> bool:
+        tcp_adapter = self.services.transport.adapters.get("tcp")
+        if tcp_adapter is None:
+            return False
+
+        local_port = getattr(tcp_adapter.config, "listen_port", None)
+        if endpoint.port != local_port:
+            return False
+
+        local_host_aliases = self._get_local_bootstrap_host_aliases()
+        return endpoint.host.lower() in local_host_aliases
+
+    @staticmethod
+    def _get_local_bootstrap_host_aliases() -> set[str]:
+        hostname = socket.gethostname().lower()
+        fqdn = socket.getfqdn().lower()
+        return {
+            hostname,
+            fqdn,
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+        }
 
     def build_message_header(
         self,

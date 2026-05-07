@@ -5,16 +5,12 @@ from dataclasses import dataclass, field
 from .models import BootstrapEndpoint, DnsSeed
 
 
-BOOTSTRAP_DNS_SEEDS: list[DnsSeed] = [
-    DnsSeed(host="seed-1.anonnet.local", port=9000),
-    DnsSeed(host="seed-2.anonnet.local", port=9000),
-]
+BOOTSTRAP_DNS_SEEDS: list[DnsSeed] = []
 
 
 BOOTSTRAP_PUBLIC_ENDPOINTS: list[BootstrapEndpoint] = [
-    BootstrapEndpoint(host="127.0.0.1", port=9000, source="public_endpoint"),
-    BootstrapEndpoint(host="127.0.0.1", port=9001, source="public_endpoint"),
-    BootstrapEndpoint(host="127.0.0.1", port=9002, source="public_endpoint"),
+    BootstrapEndpoint(host="node-001", port=19001, source="static_cluster_bootstrap"),
+    BootstrapEndpoint(host="node-002", port=19001, source="static_cluster_bootstrap"),
 ]
 
 

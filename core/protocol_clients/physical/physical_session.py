@@ -44,6 +44,14 @@ class PhysicalSessionClient:
                 host=endpoint_data.host,
                 port=endpoint_data.port,
             )
+            self.engine.services.log_service.info(
+                "physical_session_client",
+                "trying to establish physical session",
+                remote_physical_node_id=remote_physical_node_id,
+                transport=endpoint.transport_name,
+                host=endpoint.host,
+                port=endpoint.port,
+            )
             session_id = await self._start_session_with_endpoint(
                 local_physical_node_id=local_node.id,
                 remote_physical_node_id=remote_physical_node_id,
@@ -54,6 +62,12 @@ class PhysicalSessionClient:
                 continue
 
             if await self._wait_for_activation(session_id):
+                self.engine.services.log_service.info(
+                    "physical_session_client",
+                    "physical session established",
+                    session_id=session_id,
+                    remote_physical_node_id=remote_physical_node_id,
+                )
                 return session_id
 
             self._register_endpoint_failure(
@@ -87,6 +101,11 @@ class PhysicalSessionClient:
             )
         )
         self.engine.services.session_manager.mark_keepalive_sent(session.session_id)
+        self.engine.services.log_service.debug(
+            "physical_session_client",
+            "sent physical session keepalive",
+            session_id=session.session_id,
+        )
 
     async def close_session(
         self,
@@ -113,6 +132,12 @@ class PhysicalSessionClient:
                 payload=payload,
                 remote_endpoint=endpoint,
             )
+        )
+        self.engine.services.log_service.info(
+            "physical_session_client",
+            "sent physical session close",
+            session_id=session.session_id,
+            close_reason=close_reason,
         )
 
     async def _start_session_with_endpoint(
@@ -152,6 +177,14 @@ class PhysicalSessionClient:
                 )
             )
         except Exception:
+            self.engine.services.log_service.warning(
+                "physical_session_client",
+                "failed to send physical session init",
+                remote_physical_node_id=remote_physical_node_id,
+                transport=endpoint.transport_name,
+                host=endpoint.host,
+                port=endpoint.port,
+            )
             self._register_endpoint_failure(
                 remote_physical_node_id=remote_physical_node_id,
                 endpoint=endpoint,
@@ -159,6 +192,15 @@ class PhysicalSessionClient:
             self._close_failed_session(session.session_id)
             return None
 
+        self.engine.services.log_service.info(
+            "physical_session_client",
+            "sent physical session init",
+            session_id=session.session_id,
+            remote_physical_node_id=remote_physical_node_id,
+            transport=endpoint.transport_name,
+            host=endpoint.host,
+            port=endpoint.port,
+        )
         return session.session_id
 
     async def _wait_for_activation(self, session_id: str) -> bool:
@@ -167,14 +209,30 @@ class PhysicalSessionClient:
         while asyncio.get_running_loop().time() < deadline:
             session = self.engine.services.session_manager.get_session_by_session_id(session_id)
             if session is None:
+                self.engine.services.log_service.warning(
+                    "physical_session_client",
+                    "session disappeared while waiting for activation",
+                    session_id=session_id,
+                )
                 return False
             if session.session_state == "active":
                 return True
             if session.session_state == "closed":
+                self.engine.services.log_service.warning(
+                    "physical_session_client",
+                    "session closed before activation",
+                    session_id=session_id,
+                )
                 return False
 
             await asyncio.sleep(self._handshake_poll_interval_seconds)
 
+        self.engine.services.log_service.warning(
+            "physical_session_client",
+            "session activation timed out",
+            session_id=session_id,
+            timeout_seconds=self._handshake_timeout_seconds,
+        )
         return False
 
     def _close_failed_session(self, session_id: str) -> None:
@@ -196,6 +254,14 @@ class PhysicalSessionClient:
     ) -> None:
         self.engine.services.identity_service.mark_remote_physical_node_validation_failure(
             node_id=remote_physical_node_id,
+            transport=endpoint.transport_name,
+            host=endpoint.host,
+            port=endpoint.port,
+        )
+        self.engine.services.log_service.warning(
+            "physical_session_client",
+            "registered endpoint failure",
+            remote_physical_node_id=remote_physical_node_id,
             transport=endpoint.transport_name,
             host=endpoint.host,
             port=endpoint.port,

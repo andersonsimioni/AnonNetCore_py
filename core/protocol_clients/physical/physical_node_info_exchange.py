@@ -44,6 +44,13 @@ class PhysicalNodeInfoExchangeClient:
         self.engine.services.identity_service.mark_physical_node_info_exchange_request_sent(
             remote_physical_node_id=session.remote_identity_id,
         )
+        self.engine.services.log_service.info(
+            "physical_node_info_exchange_client",
+            "requested known physical nodes",
+            session_id=session.session_id,
+            remote_physical_node_id=session.remote_identity_id,
+            max_records=request_limit,
+        )
 
     @staticmethod
     def _build_remote_endpoint(session):

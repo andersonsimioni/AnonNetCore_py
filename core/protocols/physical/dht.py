@@ -126,6 +126,12 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at = _read_optional_datetime(payload, "expires_at")
 
         if namespace is None or logical_key is None or record_json is None:
+            services.log_service.warning(
+                "dht",
+                "received invalid dht publish payload",
+                remote_host=context.remote_host,
+                remote_port=context.remote_port,
+            )
             return self._build_invalid_result(envelope, "invalid_dht_publish_payload")
 
         key_hex = services.dht_service.build_key(namespace, logical_key)
@@ -133,6 +139,12 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         responsible_nodes = closest_nodes_result["nodes"]
 
         if not closest_nodes_result["local_node_is_responsible"]:
+            services.log_service.info(
+                "dht",
+                "publish request not local, returning closest nodes",
+                key=key_hex,
+                responsible_node_count=len(responsible_nodes),
+            )
             response_payload = self.build_result_payload(
                 request_header=envelope.header,
                 status="closest_nodes",
@@ -161,6 +173,13 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             record_json=record_json,
             expires_at=expires_at,
             source="dht_publish",
+        )
+        services.log_service.info(
+            "dht",
+            "stored dht record locally from publish",
+            key=key_hex,
+            namespace=namespace,
+            logical_key=logical_key,
         )
 
         response_payload = self.build_result_payload(
@@ -194,6 +213,12 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         logical_key = _read_required_string(payload, "logical_key")
 
         if namespace is None or logical_key is None:
+            services.log_service.warning(
+                "dht",
+                "received invalid dht query payload",
+                remote_host=context.remote_host,
+                remote_port=context.remote_port,
+            )
             return self._build_invalid_result(envelope, "invalid_dht_query_payload")
 
         key_hex = services.dht_service.build_key(namespace, logical_key)
@@ -201,6 +226,12 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         responsible_nodes = closest_nodes_result["nodes"]
 
         if not closest_nodes_result["local_node_is_responsible"]:
+            services.log_service.info(
+                "dht",
+                "query request not local, returning closest nodes",
+                key=key_hex,
+                responsible_node_count=len(responsible_nodes),
+            )
             response_payload = self.build_result_payload(
                 request_header=envelope.header,
                 status="closest_nodes",
@@ -226,6 +257,11 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             key_hex=key_hex,
         )
         if dht_record is None:
+            services.log_service.info(
+                "dht",
+                "dht record not found locally",
+                key=key_hex,
+            )
             response_payload = self.build_result_payload(
                 request_header=envelope.header,
                 status="not_found",
@@ -254,6 +290,11 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             stored_locally=True,
             record_json=dht_record.record_json,
             expires_at=dht_record.expires_at.isoformat() if dht_record.expires_at is not None else None,
+        )
+        services.log_service.info(
+            "dht",
+            "returned validated dht record",
+            key=key_hex,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -290,6 +331,13 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "remote_port": context.remote_port,
                     "transport_name": context.transport_name,
                 },
+            )
+            services.log_service.debug(
+                "dht",
+                "resolved pending dht result",
+                response_to_message_id=response_to_message_id,
+                status=payload.get("status"),
+                key=payload.get("key"),
             )
 
         return PacketProcessingResult(

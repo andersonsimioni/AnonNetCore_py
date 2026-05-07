@@ -165,20 +165,39 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         local_node = services.identity_service.get_local_physical_node_result()
 
         if local_node is None:
+            services.log_service.warning(
+                "physical_session",
+                "cannot accept session init because local physical node is not initialized",
+            )
             return self._build_invalid_result(envelope, "local_physical_node_not_initialized")
 
         if not session_id or not isinstance(initiator_physical_node_id, str):
+            services.log_service.warning(
+                "physical_session",
+                "received invalid session init payload",
+                session_id=session_id,
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_init")
 
         remote_node = services.identity_service.get_remote_physical_node_by_id(initiator_physical_node_id)
+        resolved_transport, resolved_host, resolved_port = self._resolve_preferred_remote_endpoint(
+            services=services,
+            remote_physical_node_id=initiator_physical_node_id,
+            current_transport=None,
+            current_host=None,
+            current_port=None,
+            fallback_transport=context.transport_name,
+            fallback_host=context.remote_host,
+            fallback_port=context.remote_port,
+        )
         session = services.session_manager.create_inbound_physical_session(
             session_id=session_id,
             local_physical_node_id=local_node.id,
             remote_physical_node_id=initiator_physical_node_id,
             remote_public_key=remote_node.public_key if remote_node else None,
-            transport=context.transport_name,
-            remote_host=context.remote_host,
-            remote_port=context.remote_port,
+            transport=resolved_transport,
+            remote_host=resolved_host,
+            remote_port=resolved_port,
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
 
@@ -201,6 +220,14 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             responder_ephemeral_public_key=ephemeral_key_pair.public_key_pem,
             signature_hex=signature_hex,
             keepalive_interval_seconds=keepalive_interval_seconds,
+        )
+        services.log_service.info(
+            "physical_session",
+            "accepted inbound physical session init",
+            session_id=session.session_id,
+            initiator_physical_node_id=initiator_physical_node_id,
+            remote_host=context.remote_host,
+            remote_port=context.remote_port,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -235,21 +262,30 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             or not isinstance(responder_ephemeral_public_key, str)
             or not isinstance(signature_hex, str)
         ):
+            services.log_service.warning(
+                "physical_session",
+                "received invalid session init ok payload",
+                session_id=session_id,
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_init_ok")
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None:
             return self._build_invalid_result(envelope, "physical_session_not_found")
 
-        services.session_manager.bind_remote_endpoint(
-            session_id,
-            transport=context.transport_name,
-            host=context.remote_host,
-            port=context.remote_port,
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
         )
 
         remote_public_key = session.remote_public_key
         if not remote_public_key:
+            services.log_service.warning(
+                "physical_session",
+                "remote public key missing during session init ok handling",
+                session_id=session_id,
+            )
             return self._build_invalid_result(envelope, "remote_physical_node_public_key_not_found")
 
         signature_valid = self._verify_physical_session_init_ok(
@@ -261,6 +297,11 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         if not signature_valid:
             services.session_manager.close_session(session_id, close_reason="invalid_init_ok_signature")
+            services.log_service.warning(
+                "physical_session",
+                "session init ok signature is invalid",
+                session_id=session_id,
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_init_ok_signature")
 
         services.session_manager.store_remote_ephemeral_public_key(
@@ -283,6 +324,11 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         response_payload = self.build_physical_session_key_confirm_payload(
             request_header=envelope.header,
             encapsulated_key_hex=encapsulation.ciphertext_hex,
+        )
+        services.log_service.info(
+            "physical_session",
+            "validated session init ok and sent key confirm",
+            session_id=session_id,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -308,17 +354,21 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         encapsulated_key_hex = payload.get("encapsulated_key_hex")
 
         if not session_id or not isinstance(encapsulated_key_hex, str):
+            services.log_service.warning(
+                "physical_session",
+                "received invalid key confirm payload",
+                session_id=session_id,
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_key_confirm")
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.local_ephemeral_private_key:
             return self._build_invalid_result(envelope, "physical_session_ephemeral_key_not_found")
 
-        services.session_manager.bind_remote_endpoint(
-            session_id,
-            transport=context.transport_name,
-            host=context.remote_host,
-            port=context.remote_port,
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
         )
 
         shared_secret_hex = kyber_decapsulate_hex(
@@ -335,6 +385,11 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         response_payload = self.build_physical_session_ready_payload(
             request_header=envelope.header,
             keepalive_interval_seconds=session.keepalive_interval_seconds,
+        )
+        services.log_service.info(
+            "physical_session",
+            "processed key confirm and activated inbound session",
+            session_id=session_id,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -363,17 +418,20 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
 
         if not session_id:
+            services.log_service.warning(
+                "physical_session",
+                "received session ready without session id",
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_ready")
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.shared_secret_hex:
             return self._build_invalid_result(envelope, "physical_session_shared_secret_not_found")
 
-        services.session_manager.bind_remote_endpoint(
-            session_id,
-            transport=context.transport_name,
-            host=context.remote_host,
-            port=context.remote_port,
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
         )
 
         services.session_manager.touch_session(
@@ -381,6 +439,11 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
         services.session_manager.activate_session(session_id)
+        services.log_service.info(
+            "physical_session",
+            "session became active after ready message",
+            session_id=session_id,
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,
@@ -401,21 +464,29 @@ class SessionProtocolHandler(ProtocolMessageHandler):
     ) -> PacketProcessingResult:
         session_id = _read_session_id(envelope)
         if not session_id:
+            services.log_service.warning(
+                "physical_session",
+                "received keepalive without session id",
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_keepalive")
 
         session = services.session_manager.touch_session(session_id)
         if session is None:
             return self._build_invalid_result(envelope, "physical_session_not_found")
 
-        services.session_manager.bind_remote_endpoint(
-            session_id,
-            transport=context.transport_name,
-            host=context.remote_host,
-            port=context.remote_port,
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
         )
 
         response_payload = self.build_physical_session_keepalive_ack_payload(
             request_header=envelope.header,
+        )
+        services.log_service.debug(
+            "physical_session",
+            "received keepalive and sent ack",
+            session_id=session_id,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -438,19 +509,26 @@ class SessionProtocolHandler(ProtocolMessageHandler):
     ) -> PacketProcessingResult:
         session_id = _read_session_id(envelope)
         if not session_id:
+            services.log_service.warning(
+                "physical_session",
+                "received keepalive ack without session id",
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_keepalive_ack")
 
         session = services.session_manager.touch_session(session_id)
         if session is None:
             return self._build_invalid_result(envelope, "physical_session_not_found")
 
-        services.session_manager.bind_remote_endpoint(
-            session_id,
-            transport=context.transport_name,
-            host=context.remote_host,
-            port=context.remote_port,
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
         )
-
+        services.log_service.debug(
+            "physical_session",
+            "received keepalive ack",
+            session_id=session_id,
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,
@@ -474,6 +552,10 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         close_reason = payload.get("close_reason")
 
         if not session_id:
+            services.log_service.warning(
+                "physical_session",
+                "received close without session id",
+            )
             return self._build_invalid_result(envelope, "invalid_physical_session_close")
 
         session = services.session_manager.close_session(
@@ -483,6 +565,12 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         if session is None:
             return self._build_invalid_result(envelope, "physical_session_not_found")
 
+        services.log_service.info(
+            "physical_session",
+            "session closed by remote peer",
+            session_id=session_id,
+            close_reason=close_reason if isinstance(close_reason, str) else "remote_closed",
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,
@@ -532,6 +620,60 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             )
         except Exception:
             return False
+
+    def _refresh_session_remote_endpoint(
+        self,
+        *,
+        session_id: str,
+        services: EngineServices,
+        context: PacketContext,
+    ) -> None:
+        session = services.session_manager.get_session_by_session_id(session_id)
+        if session is None:
+            return
+
+        resolved_transport, resolved_host, resolved_port = self._resolve_preferred_remote_endpoint(
+            services=services,
+            remote_physical_node_id=session.remote_identity_id,
+            current_transport=session.transport,
+            current_host=session.remote_host,
+            current_port=session.remote_port,
+            fallback_transport=context.transport_name,
+            fallback_host=context.remote_host,
+            fallback_port=context.remote_port,
+        )
+        services.session_manager.bind_remote_endpoint(
+            session_id,
+            transport=resolved_transport,
+            host=resolved_host,
+            port=resolved_port,
+        )
+
+    def _resolve_preferred_remote_endpoint(
+        self,
+        *,
+        services: EngineServices,
+        remote_physical_node_id: str,
+        current_transport: str | None,
+        current_host: str | None,
+        current_port: int | None,
+        fallback_transport: str,
+        fallback_host: str | None,
+        fallback_port: int | None,
+    ) -> tuple[str, str | None, int | None]:
+        known_endpoints = services.identity_service.list_remote_physical_node_endpoints(remote_physical_node_id)
+        for endpoint in known_endpoints:
+            if endpoint.transport == fallback_transport:
+                return endpoint.transport, endpoint.host, endpoint.port
+
+        if known_endpoints:
+            endpoint = known_endpoints[0]
+            return endpoint.transport, endpoint.host, endpoint.port
+
+        if current_transport is not None:
+            return current_transport, current_host, current_port
+
+        return fallback_transport, fallback_host, fallback_port
 
     def _build_invalid_result(
         self,

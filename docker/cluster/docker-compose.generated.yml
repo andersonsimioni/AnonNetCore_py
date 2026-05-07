@@ -1,0 +1,64 @@
+name: "anonnet-test-cluster"
+services:
+  node-001:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: "anonnet-node-001"
+    hostname: "node-001"
+    command:
+      - python
+      - main.py
+      - --node-index
+      - "1"
+      - --listen-port
+      - "19001"
+    volumes:
+      - "./state/node-001:/app/data/local"
+    restart: unless-stopped
+    networks:
+      - anonnet-test-net
+    ports:
+      - "19001:19001"
+  node-002:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: "anonnet-node-002"
+    hostname: "node-002"
+    command:
+      - python
+      - main.py
+      - --node-index
+      - "2"
+      - --listen-port
+      - "19001"
+    volumes:
+      - "./state/node-002:/app/data/local"
+    restart: unless-stopped
+    networks:
+      - anonnet-test-net
+    ports:
+      - "19002:19001"
+  node-003:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: "anonnet-node-003"
+    hostname: "node-003"
+    command:
+      - python
+      - main.py
+      - --node-index
+      - "3"
+      - --listen-port
+      - "19001"
+    volumes:
+      - "./state/node-003:/app/data/local"
+    restart: unless-stopped
+    networks:
+      - anonnet-test-net
+networks:
+  anonnet-test-net:
+    name: "anonnet-test-net"
+    driver: "bridge"

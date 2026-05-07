@@ -87,6 +87,10 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
         requester_node_id = _read_requester_node_id(envelope, services)
 
         if local_node is None:
+            services.log_service.warning(
+                "physical_node_info_exchange",
+                "cannot answer exchange request because local physical node is not initialized",
+            )
             return PacketProcessingResult(
                 protocol_name=envelope.protocol_name,
                 handled=False,
@@ -126,6 +130,8 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                         "protocol_version": remote_node.protocol_version,
                         "status": remote_node.status,
                         "last_validated_at": _format_datetime(remote_node.last_validated_at),
+                        "dpnt_signature": _read_note_string(remote_node.notes_json, "dpnt_signature"),
+                        "feature_flags": _read_note_string_list(remote_node.notes_json, "dpnt_feature_flags"),
                         "endpoints": [
                             {
                                 "transport": endpoint.transport,
@@ -143,6 +149,13 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
         response_payload = self.build_response_payload(
             request_header=envelope.header,
             records=records,
+        )
+        services.log_service.info(
+            "physical_node_info_exchange",
+            "responding with known physical nodes",
+            requester_node_id=requester_node_id,
+            record_count=len(records),
+            max_records=max_records,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -167,6 +180,10 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         records = payload.get("records")
         if not isinstance(records, list):
+            services.log_service.warning(
+                "physical_node_info_exchange",
+                "received invalid exchange response payload",
+            )
             return PacketProcessingResult(
                 protocol_name=envelope.protocol_name,
                 handled=False,
@@ -220,12 +237,22 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                         "advertised_status": _optional_string(record.get("status")),
                         "advertised_last_validated_at": _optional_string(record.get("last_validated_at")),
                         "advertised_endpoints": endpoints,
+                        "dpnt_signature": _optional_string(record.get("dpnt_signature")),
+                        "dpnt_feature_flags": _select_string_items(record.get("feature_flags")),
                     },
                     separators=(",", ":"),
                 ),
             )
             persisted_count += 1
 
+        services.log_service.info(
+            "physical_node_info_exchange",
+            "processed exchange response",
+            responder_node_id=responder_node_id,
+            received_count=len(records),
+            persisted_count=persisted_count,
+            skipped_count=skipped_count,
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,
@@ -250,6 +277,11 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
             services.identity_service.mark_physical_node_info_exchange_announce_received(
                 remote_physical_node_id=announcer_node_id,
             )
+        services.log_service.info(
+            "physical_node_info_exchange",
+            "received physical node announce",
+            announcer_node_id=announcer_node_id,
+        )
 
         return self._build_not_implemented_result(envelope, context, services)
 
@@ -303,6 +335,34 @@ def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _select_string_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
+
+
+def _read_note_string(notes_json: str | None, key: str) -> str | None:
+    notes = _parse_notes_json(notes_json)
+    return _optional_string(notes.get(key))
+
+
+def _read_note_string_list(notes_json: str | None, key: str) -> list[str]:
+    notes = _parse_notes_json(notes_json)
+    return _select_string_items(notes.get(key))
+
+
+def _parse_notes_json(notes_json: str | None) -> dict[str, object]:
+    if not notes_json:
+        return {}
+
+    try:
+        payload = json.loads(notes_json)
+    except json.JSONDecodeError:
+        return {}
+
+    return payload if isinstance(payload, dict) else {}
 
 
 def _select_valid_endpoints(endpoints: list[object]) -> list[dict[str, object]]:

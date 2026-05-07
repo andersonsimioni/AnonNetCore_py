@@ -74,10 +74,17 @@ class PhysicalNodeValidationRuntime:
             session_id = await self.engine.services.protocol_clients.physical.session.start_session(
                 remote_physical_node_id=candidate.node_id,
             )
-        except Exception:
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "physical node validation failed",
+                remote_physical_node_id=candidate.node_id,
+                error=str(error),
+            )
             return
 
         self._mark_validation_success(session_id)
+        await self._publish_validated_remote_node(candidate.node_id)
 
     def _mark_validation_success(
         self,
@@ -92,6 +99,53 @@ class PhysicalNodeValidationRuntime:
             transport=session.transport,
             host=session.remote_host,
             port=session.remote_port,
+        )
+        self.engine.services.log_service.info(
+            "physical_node_validation_runtime",
+            "physical node validated successfully",
+            remote_physical_node_id=session.remote_identity_id,
+            transport=session.transport,
+            host=session.remote_host,
+            port=session.remote_port,
+        )
+
+    async def _publish_validated_remote_node(
+        self,
+        remote_physical_node_id: str,
+    ) -> None:
+        publish_request = self.engine.services.identity_service.build_dpnt_publish_request_for_remote_physical_node(
+            node_id=remote_physical_node_id,
+        )
+        if publish_request is None:
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "validated physical node has no publishable dpnt descriptor",
+                remote_physical_node_id=remote_physical_node_id,
+            )
+            return
+
+        try:
+            publish_result = await self.engine.services.protocol_clients.physical.dht.publish(
+                namespace=publish_request["namespace"],
+                logical_key=publish_request["logical_key"],
+                record_json=publish_request["record_json"],
+                expires_at=publish_request["expires_at"],
+            )
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "dpnt publish failed for validated physical node",
+                remote_physical_node_id=remote_physical_node_id,
+                error=str(error),
+            )
+            return
+
+        self.engine.services.log_service.info(
+            "physical_node_validation_runtime",
+            "dpnt publish finished for validated physical node",
+            remote_physical_node_id=remote_physical_node_id,
+            status=publish_result.get("status"),
+            key=publish_result.get("key"),
         )
 
     def _build_backoff_delta(self):

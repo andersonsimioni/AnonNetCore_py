@@ -41,13 +41,39 @@ class PhysicalPingClient:
                 host=endpoint_data.host,
                 port=endpoint_data.port,
             )
+            self.engine.services.log_service.info(
+                "physical_ping_client",
+                "trying ping on remote endpoint",
+                remote_physical_node_id=remote_physical_node_id,
+                transport=endpoint.transport_name,
+                host=endpoint.host,
+                port=endpoint.port,
+            )
             try:
                 result = await self._ping_endpoint(endpoint=endpoint)
+                self.engine.services.log_service.info(
+                    "physical_ping_client",
+                    "ping succeeded",
+                    remote_physical_node_id=remote_physical_node_id,
+                    observed_rtt_ms=result.get("observed_rtt_ms"),
+                    transport=result.get("transport_name"),
+                    host=result.get("remote_host"),
+                    port=result.get("remote_port"),
+                )
                 return {
                     "remote_physical_node_id": remote_physical_node_id,
                     **result,
                 }
             except Exception as error:
+                self.engine.services.log_service.warning(
+                    "physical_ping_client",
+                    "ping failed on remote endpoint",
+                    remote_physical_node_id=remote_physical_node_id,
+                    transport=endpoint.transport_name,
+                    host=endpoint.host,
+                    port=endpoint.port,
+                    error=str(error),
+                )
                 last_error = error
                 continue
 
@@ -81,6 +107,15 @@ class PhysicalPingClient:
                     remote_endpoint=endpoint,
                 )
             )
+            self.engine.services.log_service.debug(
+                "physical_ping_client",
+                "sent ping",
+                message_id=header["message_id"],
+                nonce=nonce,
+                transport=endpoint.transport_name,
+                host=endpoint.host,
+                port=endpoint.port,
+            )
             pong_data = await asyncio.wait_for(future, timeout=self._pong_timeout_seconds)
         finally:
             self._pending_pongs.pop(header["message_id"], None)
@@ -109,3 +144,8 @@ class PhysicalPingClient:
             return
 
         future.set_result(pong_data)
+        self.engine.services.log_service.debug(
+            "physical_ping_client",
+            "completed pending pong future",
+            response_to_message_id=response_to_message_id,
+        )

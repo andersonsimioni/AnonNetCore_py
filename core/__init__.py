@@ -1,3 +1,4 @@
+from .config import CoreConfig
 from .engine import CoreEngine
 from .message_registry import MessageDefinition, MessageRegistry
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -47,6 +48,7 @@ from .services import EngineServices
 
 __all__ = [
     "ContentProtocolHandler",
+    "CoreConfig",
     "CoreEngine",
     "DhtMaintenanceRuntime",
     "DhtProtocolHandler",

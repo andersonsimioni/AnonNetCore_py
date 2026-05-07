@@ -182,11 +182,12 @@ def _ensure_drt_key_matches_virtual_node(key: str, pk_virtual_node: str) -> None
 
 
 def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> None:
-    expected_key = sha512(f"dpnt|{pk_physical_node}".encode("utf-8")).hexdigest()
+    physical_node_id = sha512(pk_physical_node.encode("utf-8")).hexdigest()
+    expected_key = sha512(f"dpnt|{physical_node_id}".encode("utf-8")).hexdigest()
     if key == expected_key:
         return
 
-    raise ValueError("A key DPNT nao corresponde ao pk_physical_node informado.")
+    raise ValueError("A key DPNT nao corresponde ao node_id derivado do pk_physical_node.")
 
 
 def _ensure_dpt_key_matches_owner_and_title(
@@ -305,7 +306,6 @@ def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload) -> bool:
         "hole_punch_capable": fragment.hole_punch_capable,
         "protocol_version": fragment.protocol_version,
         "feature_flags": fragment.feature_flags,
-        "last_validated_at": fragment.last_validated_at,
         "status": fragment.status,
     }
     message_hex = _canonical_payload_hex(signed_payload)
