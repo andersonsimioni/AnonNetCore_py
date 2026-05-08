@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/app
 
 WORKDIR /app
 
@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py", "--node-index", "1"]
+CMD ["python", "app/main.py"]

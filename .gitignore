@@ -1,6 +1,21 @@
-data/local/anonnetcore.db
-data/local/logs/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-docker/cluster/docker-compose.generated.yml
-docker/cluster/state/**/anonnetcore.db
-docker/cluster/state/**/logs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+.tmp_local_node_test/
+.crypto_tmp/
+
+data/local/
+
+cluster/docker-compose.generated.yml
+cluster/state/
+
+.DS_Store
