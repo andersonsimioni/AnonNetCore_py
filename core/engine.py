@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from bootstrap import BootstrapResolutionResult
+from bootstrap.models import BootstrapEndpoint
 from crypto import aes_decrypt_hex, aes_encrypt_hex
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from .router import MessageRouter
@@ -116,8 +117,19 @@ class CoreEngine:
         return await self.services.bootstrap_service.load_bootstrap_targets()
 
     def _configure_runtime_environment(self) -> None:
+        self._configure_bootstrap_endpoints()
         self._configure_transport_listener()
         self._configure_log_service()
+
+    def _configure_bootstrap_endpoints(self) -> None:
+        config_endpoints = self.services.config.bootstrap_endpoints
+        if not config_endpoints:
+            return
+
+        self.services.bootstrap_service.config.public_endpoints = [
+            BootstrapEndpoint(host=host, port=port, source="runtime_config")
+            for host, port in config_endpoints
+        ]
 
     def _configure_transport_listener(self) -> None:
         config = self.services.config
@@ -132,8 +144,10 @@ class CoreEngine:
         )
         transport_service.set_inbound_packet_handler(self.handle_transport_packet)
         self.services.transport = transport_service
-        self.services.config.advertised_tcp_host = config.node_name
-        self.services.config.advertised_tcp_port = config.listen_port
+        if self.services.config.advertised_tcp_host is None:
+            self.services.config.advertised_tcp_host = config.node_name
+        if self.services.config.advertised_tcp_port is None:
+            self.services.config.advertised_tcp_port = config.listen_port
 
     def _configure_log_service(self) -> None:
         node_name = self.services.config.node_name

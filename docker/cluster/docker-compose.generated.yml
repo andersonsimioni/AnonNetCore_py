@@ -13,6 +13,12 @@ services:
       - "1"
       - --listen-port
       - "19001"
+      - --advertised-host
+      - "192.168.1.19"
+      - --advertised-port
+      - "19001"
+      - --bootstrap-endpoint
+      - "192.168.1.19:19002"
     volumes:
       - "./state/node-001:/app/data/local"
     restart: unless-stopped
@@ -33,6 +39,12 @@ services:
       - "2"
       - --listen-port
       - "19001"
+      - --advertised-host
+      - "192.168.1.19"
+      - --advertised-port
+      - "19002"
+      - --bootstrap-endpoint
+      - "192.168.1.19:19001"
     volumes:
       - "./state/node-002:/app/data/local"
     restart: unless-stopped
@@ -53,11 +65,21 @@ services:
       - "3"
       - --listen-port
       - "19001"
+      - --advertised-host
+      - "192.168.1.19"
+      - --advertised-port
+      - "19003"
+      - --bootstrap-endpoint
+      - "192.168.1.19:19001"
+      - --bootstrap-endpoint
+      - "192.168.1.19:19002"
     volumes:
       - "./state/node-003:/app/data/local"
     restart: unless-stopped
     networks:
       - anonnet-test-net
+    ports:
+      - "19003:19001"
 networks:
   anonnet-test-net:
     name: "anonnet-test-net"

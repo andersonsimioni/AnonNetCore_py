@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import signal
 
+from bootstrap.models import BootstrapEndpoint
 from core import CoreConfig, CoreEngine
 
 
@@ -41,9 +42,17 @@ async def _wait_for_shutdown_signal() -> None:
 def build_engine_from_args() -> CoreEngine:
     args = parse_args()
     engine = CoreEngine()
-    engine.services.config.node_index = args.node_index
-    engine.services.config.node_name = _build_node_name(args.node_index)
-    engine.services.config.listen_port = args.listen_port
+    config = engine.services.config
+    config.node_index = args.node_index
+    config.node_name = _build_node_name(args.node_index)
+    config.listen_port = args.listen_port
+    config.advertised_tcp_host = args.advertised_host
+    config.advertised_tcp_port = args.advertised_port
+    config.bootstrap_endpoints = [_parse_host_port(item) for item in args.bootstrap_endpoint]
+    engine.services.bootstrap_service.config.public_endpoints = [
+        BootstrapEndpoint(host=host, port=port, source="runtime_config")
+        for host, port in config.bootstrap_endpoints
+    ]
     return engine
 
 
@@ -57,11 +66,45 @@ def parse_args() -> argparse.Namespace:
         default=default_config.listen_port,
         help="Porta TCP local do node.",
     )
+    parser.add_argument(
+        "--advertised-host",
+        type=str,
+        default=None,
+        help="Host anunciado para outros peers alcançarem este node.",
+    )
+    parser.add_argument(
+        "--advertised-port",
+        type=int,
+        default=None,
+        help="Porta anunciada para outros peers alcançarem este node.",
+    )
+    parser.add_argument(
+        "--bootstrap-endpoint",
+        action="append",
+        default=[],
+        help="Endpoint bootstrap no formato host:port. Pode ser informado varias vezes.",
+    )
     return parser.parse_args()
 
 
 def _build_node_name(node_index: int) -> str:
     return f"node-{node_index:03d}"
+
+
+def _parse_host_port(value: str) -> tuple[str, int]:
+    host, separator, raw_port = value.rpartition(":")
+    if not separator or not host or not raw_port:
+        raise SystemExit(f"Bootstrap endpoint invalido: {value}. Use host:port.")
+
+    try:
+        port = int(raw_port)
+    except ValueError as error:
+        raise SystemExit(f"Porta bootstrap invalida em: {value}") from error
+
+    if port <= 0:
+        raise SystemExit(f"Porta bootstrap invalida em: {value}")
+
+    return host, port
 
 
 def main() -> None:

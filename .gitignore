@@ -1,0 +1,6 @@
+data/local/anonnetcore.db
+data/local/logs/
+
+docker/cluster/docker-compose.generated.yml
+docker/cluster/state/**/anonnetcore.db
+docker/cluster/state/**/logs/
