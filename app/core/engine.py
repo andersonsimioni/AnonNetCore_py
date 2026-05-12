@@ -34,8 +34,8 @@ class CoreEngine:
         "PHYSICAL_SESSION_READY",
     }
 
-    def __init__(self) -> None:
-        self.services = EngineServices()
+    def __init__(self, services: EngineServices | None = None) -> None:
+        self.services = services or EngineServices()
         self.services.ensure_defaults()
         self.services.bind_engine(self)
         self.services.transport.set_inbound_packet_handler(self.handle_transport_packet)
@@ -141,7 +141,9 @@ class CoreEngine:
 
     def _configure_log_service(self) -> None:
         node_name = self.get_runtime_node_name()
-        log_file_path = Path("data/local/logs") / f"{node_name}.log"
+        log_file_path = Path(self.services.config.log_dir) / (
+            f"{node_name}-{self.services.config.listen_port}.log"
+        )
         self.services.log_service.configure(
             node_name=node_name,
             log_file_path=log_file_path,

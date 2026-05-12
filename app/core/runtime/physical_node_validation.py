@@ -83,31 +83,44 @@ class PhysicalNodeValidationRuntime:
             )
             return
 
-        self._mark_validation_success(session_id)
+        if not self._mark_validation_success(session_id, candidate.node_id):
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "physical node validation session did not persist candidate",
+                remote_physical_node_id=candidate.node_id,
+                session_id=session_id,
+            )
+            return
+
         await self._publish_validated_remote_node(candidate.node_id)
 
     def _mark_validation_success(
         self,
         session_id: str,
-    ) -> None:
+        candidate_node_id: str,
+    ) -> bool:
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.transport or not session.remote_host or session.remote_port is None:
-            return
+            return False
 
-        self.engine.services.identity_service.mark_remote_physical_node_validated(
-            node_id=session.remote_identity_id,
+        validated_node = self.engine.services.identity_service.mark_remote_physical_node_validated(
+            node_id=candidate_node_id,
             transport=session.transport,
             host=session.remote_host,
             port=session.remote_port,
         )
+        if validated_node is None:
+            return False
+
         self.engine.services.log_service.info(
             "physical_node_validation_runtime",
             "physical node validated successfully",
-            remote_physical_node_id=session.remote_identity_id,
+            remote_physical_node_id=candidate_node_id,
             transport=session.transport,
             host=session.remote_host,
             port=session.remote_port,
         )
+        return True
 
     async def _publish_validated_remote_node(
         self,

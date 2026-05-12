@@ -95,6 +95,14 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             bound_route_id=route_path_id if isinstance(route_path_id, str) and route_path_id else None,
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
+        services.log_service.info(
+            "virtual_session",
+            "accepted virtual session init",
+            session_id=session_id,
+            initiator_virtual_node_id=initiator_virtual_node_id,
+            target_virtual_node_id=target_virtual_node_id,
+            route_path_id=route_path_id,
+        )
 
         ephemeral_key_pair = generate_kyber_key_pair()
         services.session_manager.store_local_ephemeral_keypair(
@@ -182,6 +190,11 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             handshake_state="key_confirm_sent",
             session_state="pending",
         )
+        services.log_service.info(
+            "virtual_session",
+            "validated init ok and sent key confirm",
+            session_id=session_id,
+        )
         return self._build_virtual_response_result(
             envelope,
             response_message_type="VIRTUAL_SESSION_KEY_CONFIRM",
@@ -222,6 +235,11 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             session_state="pending",
         )
         services.session_manager.activate_session(session_id)
+        services.log_service.info(
+            "virtual_session",
+            "processed key confirm and activated inbound virtual session",
+            session_id=session_id,
+        )
         return self._build_virtual_response_result(
             envelope,
             response_message_type="VIRTUAL_SESSION_READY",
@@ -260,6 +278,11 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
         services.session_manager.activate_session(session_id)
+        services.log_service.info(
+            "virtual_session",
+            "virtual session became active after ready message",
+            session_id=session_id,
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,
@@ -284,6 +307,14 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         session = services.session_manager.touch_session(session_id)
         if session is None:
             return self._build_invalid_result(envelope, "virtual_session_not_found")
+        services.log_service.info(
+            "virtual_session",
+            "received virtual session keepalive and sent ack",
+            session_id=session_id,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+        )
         return self._build_virtual_response_result(
             envelope,
             response_message_type="VIRTUAL_SESSION_KEEPALIVE_ACK",
@@ -307,6 +338,14 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         session = services.session_manager.touch_session(session_id)
         if session is None:
             return self._build_invalid_result(envelope, "virtual_session_not_found")
+        services.log_service.info(
+            "virtual_session",
+            "received virtual session keepalive ack",
+            session_id=session_id,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+        )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
             handled=True,

@@ -27,6 +27,10 @@ class DhtMaintenanceRuntime:
         self._loop_interval_seconds = (
             self.engine.services.config.dht_maintenance_runtime_interval_seconds
         )
+        self._publish_backoff_seconds = (
+            self.engine.services.config.dht_maintenance_publish_backoff_seconds
+        )
+        self._last_publish_by_record_key: dict[str, float] = {}
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -150,13 +154,15 @@ class DhtMaintenanceRuntime:
         """Garante que registros DHT locais estejam presentes nos K nodes responsaveis."""
         services = self.engine.services
         with services.database.session_scope() as session:
-            dht_record = (
+            dht_records = list(
                 session.query(DhtRecord)
                 .filter(DhtRecord.last_validated_at.is_not(None))
                 .order_by(func.random())
-                .first()
+                .limit(20)
+                .all()
             )
 
+        dht_record = self._select_publishable_record(dht_records)
         if dht_record is None:
             return None
 
@@ -189,6 +195,7 @@ class DhtMaintenanceRuntime:
             )
             return
 
+        self._remember_publish(dht_record)
         services.log_service.info(
             "dht_maintenance_runtime",
             "finished dht record maintenance publish",
@@ -268,3 +275,32 @@ class DhtMaintenanceRuntime:
         if fragment_expires_at > current_expires_at:
             return fragment_expires_at
         return current_expires_at
+
+    def _select_publishable_record(
+        self,
+        dht_records: list[DhtRecord],
+    ) -> DhtRecord | None:
+        now = asyncio.get_running_loop().time()
+        for dht_record in dht_records:
+            last_publish_at = self._last_publish_by_record_key.get(
+                self._build_publish_cache_key(dht_record)
+            )
+            if last_publish_at is None:
+                return dht_record
+            if now - last_publish_at >= self._publish_backoff_seconds:
+                return dht_record
+        return None
+
+    def _remember_publish(
+        self,
+        dht_record: DhtRecord,
+    ) -> None:
+        self._last_publish_by_record_key[self._build_publish_cache_key(dht_record)] = (
+            asyncio.get_running_loop().time()
+        )
+
+    @staticmethod
+    def _build_publish_cache_key(
+        dht_record: DhtRecord,
+    ) -> str:
+        return f"{dht_record.namespace}:{dht_record.logical_key}:{dht_record.key}"

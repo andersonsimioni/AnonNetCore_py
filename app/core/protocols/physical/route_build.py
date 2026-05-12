@@ -22,6 +22,14 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
         context,
         services: EngineServices,
     ) -> PacketProcessingResult:
+        route_context = self._read_route_context(envelope)
+        services.log_service.info(
+            "route_build",
+            "received route build message",
+            message_type=envelope.message_type,
+            route_strategy=route_context["route_strategy"],
+            path_id=route_context["path_id"],
+        )
         strategy = self._require_route_strategy(envelope, services)
         if isinstance(strategy, PacketProcessingResult):
             return strategy
@@ -33,11 +41,18 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
                 reason=f"unsupported_route_build_message_type:{envelope.message_type}",
             )
 
-        return await route_handler(
+        result = await route_handler(
             envelope=envelope,
             context=context,
             services=services,
         )
+        self._log_route_result(
+            services=services,
+            envelope=envelope,
+            result=result,
+            route_context=route_context,
+        )
+        return result
 
     def _require_route_strategy(
         self,
@@ -97,3 +112,37 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
         if message_type == "ROUTE_CREATE_PONG":
             return strategy.handle_route_create_pong
         return None
+
+    @staticmethod
+    def _read_route_context(envelope) -> dict[str, object]:
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        return {
+            "route_strategy": payload.get("route_strategy"),
+            "path_id": payload.get("path_id"),
+        }
+
+    @staticmethod
+    def _log_route_result(
+        *,
+        services: EngineServices,
+        envelope,
+        result: PacketProcessingResult,
+        route_context: dict[str, object],
+    ) -> None:
+        metadata = result.metadata
+        log_level = services.log_service.info if result.handled else services.log_service.warning
+        log_level(
+            "route_build",
+            "processed route build message",
+            message_type=envelope.message_type,
+            route_strategy=route_context["route_strategy"],
+            path_id=route_context["path_id"],
+            handled=result.handled,
+            route_build_action=metadata.get("route_build_action"),
+            reason=metadata.get("reason"),
+            target_remote_physical_node_id=metadata.get("target_remote_physical_node_id"),
+            forward_message_type=metadata.get("forward_message_type"),
+            final_path_id=metadata.get("final_path_id"),
+            observed_round_trip_ms=metadata.get("observed_round_trip_ms"),
+            expected_round_trip_ttl_ms=metadata.get("expected_round_trip_ttl_ms"),
+        )

@@ -16,31 +16,55 @@ class RouteBuildClient:
         first_hop_physical_node_id: str,
         final_physical_node_public_key: str,
         remaining_ttl_ms: int,
-        nonce: int,
+        nonce: int | None = None,
         expected_round_trip_ttl_ms: int | None = None,
     ) -> dict[str, object]:
         initial_path_id = str(uuid4())
+        self.engine.services.log_service.info(
+            "route_build_client",
+            "starting random walk ttl route build",
+            initial_path_id=initial_path_id,
+            first_hop_physical_node_id=first_hop_physical_node_id,
+            remaining_ttl_ms=remaining_ttl_ms,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+        )
+        strategy = self.engine.services.route_strategies.require(
+            "random_walk_ttl_based"
+        )
+        route_nonce = nonce
+        if route_nonce is None:
+            route_nonce = strategy.find_valid_nonce(
+                pk_final_physical_node=final_physical_node_public_key,
+                difficulty_bits=self.engine.services.config.route_pow_difficulty_bits,
+            )
+
         self.engine.services.route_service.create_initiator_resolution(
             first_hop_physical_node_id=first_hop_physical_node_id,
             initial_path_id=initial_path_id,
             final_physical_node_public_key=final_physical_node_public_key,
             expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
             route_strategy="random_walk_ttl_based",
-            route_nonce=nonce,
+            route_nonce=route_nonce,
         )
 
-        payload = self.engine.services.route_strategies.require(
-            "random_walk_ttl_based"
-        ).build_initial_route_create(
+        payload = strategy.build_initial_route_create(
             pk_final_physical_node=final_physical_node_public_key,
             remaining_ttl_ms=remaining_ttl_ms,
             path_id=initial_path_id,
-            nonce=nonce,
+            nonce=route_nonce,
         )
         await self.engine.forward_message_to_remote_physical_node(
             remote_physical_node_id=first_hop_physical_node_id,
             message_type="ROUTE_CREATE",
             payload=payload,
+        )
+        self.engine.services.log_service.info(
+            "route_build_client",
+            "sent route create",
+            initial_path_id=initial_path_id,
+            first_hop_physical_node_id=first_hop_physical_node_id,
+            remaining_ttl_ms=remaining_ttl_ms,
+            route_strategy="random_walk_ttl_based",
         )
         return {
             "route_strategy": "random_walk_ttl_based",
@@ -48,7 +72,7 @@ class RouteBuildClient:
             "first_hop_physical_node_id": first_hop_physical_node_id,
             "final_physical_node_public_key": final_physical_node_public_key,
             "remaining_ttl_ms": remaining_ttl_ms,
-            "nonce": nonce,
+            "nonce": route_nonce,
             "expected_round_trip_ttl_ms": expected_round_trip_ttl_ms,
         }
 
@@ -82,6 +106,13 @@ class RouteBuildClient:
             remote_physical_node_id=initiator_resolution.first_hop_physical_node_id,
             message_type="ROUTE_CREATE_PING",
             payload=payload,
+        )
+        self.engine.services.log_service.info(
+            "route_build_client",
+            "sent route create ping",
+            initial_path_id=initial_path_id,
+            ping_id=ping_id,
+            first_hop_physical_node_id=initiator_resolution.first_hop_physical_node_id,
         )
         return {
             "initial_path_id": initial_path_id,

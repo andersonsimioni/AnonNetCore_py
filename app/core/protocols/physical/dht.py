@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from storage.models import DhtRecord
@@ -370,7 +370,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 logical_key=logical_key,
                 record_json=record_json,
                 source=source,
-                last_validated_at=None,
+                last_validated_at=datetime.now(timezone.utc),
                 expires_at=expires_at,
             )
             session.add(dht_record)

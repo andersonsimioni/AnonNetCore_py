@@ -16,6 +16,9 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         "ROUTE_DATA",
     }
 
+    def __init__(self) -> None:
+        self._external_ingress_by_route_session: dict[tuple[str, str], str] = {}
+
     async def handle(
         self,
         envelope,
@@ -27,8 +30,18 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         except ValueError as error:
             return self._build_invalid_result(envelope, reason=str(error))
         resolution = self._resolve_route_data_path(
+            envelope=envelope,
             services=services,
             route_data=route_data,
+        )
+        services.log_service.debug(
+            "route_execute",
+            "resolved route data path",
+            path_id=route_data.path_id,
+            virtual_session_id=route_data.virtual_session_id,
+            action=resolution.action,
+            next_path_id=resolution.next_path_id,
+            target_remote_physical_node_id=resolution.target_remote_physical_node_id,
         )
 
         if resolution.action == "deliver_local":
@@ -97,6 +110,16 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             nested_envelope,
             nested_context,
         )
+        services.log_service.debug(
+            "route_execute",
+            "delivered virtual envelope locally",
+            path_id=route_data.path_id,
+            virtual_session_id=route_data.virtual_session_id,
+            virtual_message_type=nested_envelope.message_type,
+            nested_action=nested_result.metadata.get("action"),
+            nested_reason=nested_result.metadata.get("reason"),
+            has_virtual_response="virtual_response_envelope" in nested_result.metadata,
+        )
         reply_context = self._resolve_local_reply_context(
             services=services,
             route_data=route_data,
@@ -109,6 +132,18 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             reply_context=reply_context,
         )
         if reply_result is not None:
+            services.log_service.debug(
+                "route_execute",
+                "built virtual response route reply",
+                path_id=route_data.path_id,
+                virtual_session_id=route_data.virtual_session_id,
+                target_remote_physical_node_id=reply_context.target_remote_physical_node_id
+                if reply_context is not None
+                else None,
+                virtual_response_message_type=reply_result.metadata.get(
+                    "virtual_response_message_type"
+                ),
+            )
             return reply_result
 
         merged_metadata = {
@@ -148,6 +183,13 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                 target_remote_physical_node_id=endpoint_resolution.previous_physical_node_id,
                 reply_path_id=route_data.path_id,
             )
+
+        drt_reply_context = self._resolve_drt_session_reply_context(
+            services=services,
+            route_data=route_data,
+        )
+        if drt_reply_context is not None:
+            return drt_reply_context
 
         return None
 
@@ -271,11 +313,10 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                 "virtual_session_id": route_data.virtual_session_id,
             }
         if envelope_physical_session_id := outer_envelope.header.get("physical_session_id"):
-            if not header.get("physical_session_id"):
-                header = {
-                    **header,
-                    "physical_session_id": envelope_physical_session_id,
-                }
+            header = {
+                **header,
+                "physical_session_id": envelope_physical_session_id,
+            }
 
         message_type = header.get("message_type")
         if message_type is not None and not isinstance(message_type, str):
@@ -326,6 +367,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
     def _resolve_route_data_path(
         self,
         *,
+        envelope,
         services: EngineServices,
         route_data: "RouteExecuteData",
     ) -> "ResolvedRouteExecutePath":
@@ -348,6 +390,40 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                 next_path_id=reverse_mapping.received_path_id,
                 target_remote_physical_node_id=reverse_mapping.from_physical_node_id,
             )
+
+        endpoint_resolution = services.route_service.get_endpoint_resolution_by_path_id(
+            route_path_id=route_data.path_id,
+        )
+        if endpoint_resolution is None:
+            endpoint_resolution = services.route_service.get_endpoint_resolution_by_final_path_id(
+                final_path_id=route_data.path_id,
+            )
+        if endpoint_resolution is not None and endpoint_resolution.previous_physical_node_id:
+            remote_physical_node_id = self._read_remote_physical_node_id(envelope, services)
+            ingress_key = self._build_endpoint_ingress_key(
+                endpoint_resolution=endpoint_resolution,
+                route_data=route_data,
+            )
+
+            if remote_physical_node_id == endpoint_resolution.previous_physical_node_id:
+                external_remote_physical_node_id = (
+                    self._external_ingress_by_route_session.get(ingress_key)
+                    if ingress_key is not None
+                    else None
+                )
+                if external_remote_physical_node_id:
+                    return ResolvedRouteExecutePath(
+                        action="forward_entry_point_to_external",
+                        next_path_id=endpoint_resolution.final_path_id or route_data.path_id,
+                        target_remote_physical_node_id=external_remote_physical_node_id,
+                    )
+            elif remote_physical_node_id and ingress_key is not None:
+                self._external_ingress_by_route_session[ingress_key] = remote_physical_node_id
+                return ResolvedRouteExecutePath(
+                    action="forward_entry_point_to_vn",
+                    next_path_id=endpoint_resolution.route_path_id,
+                    target_remote_physical_node_id=endpoint_resolution.previous_physical_node_id,
+                )
 
         return ResolvedRouteExecutePath(action="deliver_local")
 
@@ -375,6 +451,54 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 
         message_type = header.get("message_type")
         return message_type if isinstance(message_type, str) and message_type else None
+
+    @staticmethod
+    def _build_endpoint_ingress_key(
+        *,
+        endpoint_resolution,
+        route_data: "RouteExecuteData",
+    ) -> tuple[str, str] | None:
+        if not route_data.virtual_session_id:
+            return None
+        if not endpoint_resolution.route_path_id:
+            return None
+        return endpoint_resolution.route_path_id, route_data.virtual_session_id
+
+    @staticmethod
+    def _resolve_drt_session_reply_context(
+        *,
+        services: EngineServices,
+        route_data: "RouteExecuteData",
+    ) -> "LocalRouteReplyContext | None":
+        if not route_data.virtual_session_id:
+            return None
+
+        session = services.session_manager.get_session_by_session_id(route_data.virtual_session_id)
+        if session is None or session.session_scope != "virtual":
+            return None
+        if session.bound_route_id != route_data.path_id:
+            return None
+
+        metadata = _load_metadata_dict(session.metadata_json)
+        entry_point_physical_node_id = metadata.get("entry_point_physical_node_id")
+        if not isinstance(entry_point_physical_node_id, str) or not entry_point_physical_node_id:
+            return None
+
+        return LocalRouteReplyContext(
+            target_remote_physical_node_id=entry_point_physical_node_id,
+            reply_path_id=route_data.path_id,
+        )
+
+    @staticmethod
+    def _read_remote_physical_node_id(envelope, services: EngineServices) -> str | None:
+        physical_session_id = envelope.header.get("physical_session_id")
+        if not isinstance(physical_session_id, str) or not physical_session_id:
+            return None
+
+        session = services.session_manager.get_session_by_session_id(physical_session_id)
+        if session is None or session.session_scope != "physical":
+            return None
+        return session.remote_identity_id
 
 
 @dataclass(slots=True, frozen=True)
@@ -431,3 +555,15 @@ def _read_required_bool(payload: dict[str, object], field_name: str) -> bool:
     if isinstance(value, bool):
         return value
     raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser um booleano.")
+
+
+def _load_metadata_dict(metadata_json: str | None) -> dict[str, object]:
+    if not metadata_json:
+        return {}
+
+    try:
+        metadata = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return {}
+
+    return metadata if isinstance(metadata, dict) else {}

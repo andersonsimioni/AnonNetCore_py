@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from crypto import dilithium_verify_hex, sha512_hex
+from dht import DpntRecordPayload, DrtRecordPayload, DrtRouteEntryRecord, parse_record
 
 
 class VirtualSessionClient:
@@ -8,11 +14,41 @@ class VirtualSessionClient:
 
     def __init__(self, engine) -> None:
         self.engine = engine
+        self._drt_lookup_timeout_seconds = (
+            self.engine.services.config.virtual_session_drt_lookup_timeout_seconds
+        )
+        self._drt_lookup_retry_seconds = (
+            self.engine.services.config.virtual_session_drt_lookup_retry_seconds
+        )
         self._handshake_timeout_seconds = (
             self.engine.services.config.physical_session_handshake_timeout_seconds
         )
         self._handshake_poll_interval_seconds = (
             self.engine.services.config.physical_session_handshake_poll_interval_seconds
+        )
+
+    async def start_session_to_virtual_node(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+        keepalive_interval_seconds: int | None = None,
+    ) -> str:
+        self.engine.services.log_service.info(
+            "virtual_session_client",
+            "starting virtual session via drt",
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
+        )
+        remote_virtual_node = self._require_remote_virtual_node(remote_virtual_node_id)
+        entry_point = await self._resolve_entry_point(remote_virtual_node.public_key)
+        await self._ensure_entry_point_physical_node(entry_point)
+        return await self._start_session_over_entry_point(
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
+            remote_public_key=remote_virtual_node.public_key,
+            entry_point=entry_point,
+            keepalive_interval_seconds=keepalive_interval_seconds,
         )
 
     async def start_session(
@@ -35,11 +71,7 @@ class VirtualSessionClient:
         if local_virtual_node is None:
             raise ValueError("O virtual node local informado nao existe.")
 
-        remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
-            remote_virtual_node_id
-        )
-        if remote_virtual_node is None:
-            raise ValueError("O virtual node remoto informado nao existe no estado local.")
+        remote_virtual_node = self._require_remote_virtual_node(remote_virtual_node_id)
 
         keepalive_seconds = keepalive_interval_seconds or (
             self.engine.services.config.physical_session_keepalive_seconds
@@ -72,6 +104,68 @@ class VirtualSessionClient:
         self._close_failed_session(session.session_id)
         raise RuntimeError("Nao foi possivel estabelecer a virtual session pela rota informada.")
 
+    async def _start_session_over_entry_point(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+        remote_public_key: str,
+        entry_point: "VirtualRouteEntryPoint",
+        keepalive_interval_seconds: int | None,
+    ) -> str:
+        existing_session = self.engine.services.session_manager.get_active_session_by_remote_virtual_node_id(
+            remote_virtual_node_id
+        )
+        if existing_session is not None and existing_session.bound_route_id == entry_point.final_path_id:
+            return existing_session.session_id
+
+        local_virtual_node = self.engine.services.identity_service.get_local_virtual_node_by_id(
+            local_virtual_node_id
+        )
+        if local_virtual_node is None:
+            raise ValueError("O virtual node local informado nao existe.")
+
+        keepalive_seconds = keepalive_interval_seconds or (
+            self.engine.services.config.physical_session_keepalive_seconds
+        )
+        session = self.engine.services.session_manager.create_outbound_virtual_session(
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
+            remote_public_key=remote_public_key,
+            bound_route_id=entry_point.final_path_id,
+            keepalive_interval_seconds=keepalive_seconds,
+        )
+        session.metadata_json = json.dumps(
+            {
+                "route_source": "drt",
+                "entry_point_physical_node_id": entry_point.physical_node_id,
+                "entry_point_public_key": entry_point.physical_node_public_key,
+                "entry_point_rtt": entry_point.rtt,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        try:
+            await self._send_virtual_envelope(
+                session=session,
+                message_type="VIRTUAL_SESSION_INIT",
+                payload={
+                    "initiator_virtual_node_id": local_virtual_node_id,
+                    "target_virtual_node_id": remote_virtual_node_id,
+                    "keepalive_interval_seconds": keepalive_seconds,
+                },
+                virtual_envelope_ciphered=False,
+            )
+            if await self._wait_for_activation(session.session_id):
+                return session.session_id
+        except Exception:
+            self._close_failed_session(session.session_id)
+            raise
+
+        self._close_failed_session(session.session_id)
+        raise RuntimeError("Nao foi possivel estabelecer a virtual session via DRT.")
+
     async def send_keepalive(
         self,
         *,
@@ -85,6 +179,14 @@ class VirtualSessionClient:
             virtual_envelope_ciphered=True,
         )
         self.engine.services.session_manager.mark_keepalive_sent(session.session_id)
+        self.engine.services.log_service.info(
+            "virtual_session_client",
+            "sent virtual session keepalive",
+            session_id=session.session_id,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+        )
 
     async def close_session(
         self,
@@ -120,6 +222,17 @@ class VirtualSessionClient:
             ),
             "payload": payload,
         }
+        entry_point_physical_node_id = self._read_session_entry_point_physical_node_id(session)
+        if entry_point_physical_node_id:
+            await self.engine.services.protocol_clients.physical.route_execute.send_to_entry_point(
+                entry_point_physical_node_id=entry_point_physical_node_id,
+                route_path_id=session.bound_route_id,
+                virtual_session_id=session.session_id,
+                virtual_envelope=virtual_envelope,
+                virtual_envelope_ciphered=virtual_envelope_ciphered,
+            )
+            return
+
         await self.engine.services.protocol_clients.physical.route_execute.send_from_local_route(
             local_route_path_id=session.bound_route_id,
             virtual_session_id=session.session_id,
@@ -165,3 +278,287 @@ class VirtualSessionClient:
         if session is None or session.session_scope != "virtual":
             raise ValueError("A virtual session informada nao existe em memoria.")
         return session
+
+    def _require_remote_virtual_node(self, remote_virtual_node_id: str):
+        remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
+            remote_virtual_node_id
+        )
+        if remote_virtual_node is None:
+            raise ValueError("O virtual node remoto informado nao existe no estado local.")
+        return remote_virtual_node
+
+    async def _resolve_entry_point(
+        self,
+        remote_virtual_node_public_key: str,
+    ) -> "VirtualRouteEntryPoint":
+        logical_key = sha512_hex(remote_virtual_node_public_key.encode("utf-8"))
+        deadline = asyncio.get_running_loop().time() + self._drt_lookup_timeout_seconds
+        last_error = "not_found"
+
+        while asyncio.get_running_loop().time() < deadline:
+            result = await self.engine.services.protocol_clients.physical.dht.query(
+                namespace="drt",
+                logical_key=logical_key,
+            )
+            if result.get("status") != "found":
+                last_error = str(result.get("status") or "not_found")
+                await asyncio.sleep(self._drt_lookup_retry_seconds)
+                continue
+
+            try:
+                entry_point = self._select_entry_point_from_drt_result(
+                    result,
+                    remote_virtual_node_public_key,
+                )
+            except ValueError as error:
+                last_error = str(error)
+                await asyncio.sleep(self._drt_lookup_retry_seconds)
+                continue
+
+            self.engine.services.log_service.info(
+                "virtual_session_client",
+                "selected drt entry point",
+                entry_point_physical_node_id=entry_point.physical_node_id,
+                final_path_id=entry_point.final_path_id,
+                rtt=entry_point.rtt,
+            )
+            return entry_point
+
+        raise RuntimeError(
+            "Nenhuma rota DRT valida foi encontrada para o virtual node remoto "
+            f"dentro de {self._drt_lookup_timeout_seconds:.1f}s. Ultimo estado: {last_error}."
+        )
+
+    def _select_entry_point_from_drt_result(
+        self,
+        result: dict[str, object],
+        remote_virtual_node_public_key: str,
+    ) -> "VirtualRouteEntryPoint":
+        record_json = result.get("record_json")
+        if not isinstance(record_json, str) or not record_json:
+            raise ValueError("drt_record_json_invalid")
+
+        record = parse_record("drt", record_json)
+        if not isinstance(record, DrtRecordPayload):
+            raise ValueError("drt_payload_invalid")
+        if record.pk_virtual_node != remote_virtual_node_public_key:
+            raise ValueError("drt_record_belongs_to_another_virtual_node")
+
+        valid_entries = [
+            self._build_valid_entry_point(record.pk_virtual_node, entry)
+            for entry in record.route_entries
+        ]
+        valid_entries = [entry for entry in valid_entries if entry is not None]
+        if not valid_entries:
+            raise ValueError("drt_has_no_valid_entry_point")
+
+        valid_entries.sort(key=lambda entry: entry.rtt)
+        return valid_entries[0]
+
+    async def _ensure_entry_point_physical_node(
+        self,
+        entry_point: "VirtualRouteEntryPoint",
+    ) -> None:
+        existing_node = self.engine.services.identity_service.get_remote_physical_node_by_id(
+            entry_point.physical_node_id
+        )
+        if existing_node is not None:
+            endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+                entry_point.physical_node_id
+            )
+            if endpoints:
+                self.engine.services.log_service.debug(
+                    "virtual_session_client",
+                    "entry point already known locally",
+                    entry_point_physical_node_id=entry_point.physical_node_id,
+                    endpoint_count=len(endpoints),
+                )
+                return
+
+        result = await self.engine.services.protocol_clients.physical.dht.query(
+            namespace="dpnt",
+            logical_key=entry_point.physical_node_id,
+        )
+        if result.get("status") != "found":
+            raise RuntimeError("Nao foi possivel resolver o DPNT do entry point fisico.")
+
+        record_json = result.get("record_json")
+        if not isinstance(record_json, str) or not record_json:
+            raise RuntimeError("A resposta DPNT nao contem record_json valido.")
+
+        record = parse_record("dpnt", record_json)
+        if not isinstance(record, DpntRecordPayload):
+            raise RuntimeError("A resposta DPNT nao contem um payload DPNT valido.")
+        if record.pk_physical_node != entry_point.physical_node_public_key:
+            raise RuntimeError("O DPNT encontrado nao pertence ao entry point da DRT.")
+        if not self._is_valid_dpnt_record(entry_point.physical_node_id, record):
+            raise RuntimeError("O DPNT do entry point possui assinatura invalida.")
+
+        self.engine.services.identity_service.upsert_discovered_remote_physical_node(
+            node_id=entry_point.physical_node_id,
+            public_key=record.pk_physical_node,
+            protocol_version=record.protocol_version,
+            endpoints=record.endpoints,
+            status=record.status,
+            reachability_class=record.reachability_class,
+            relay_capable=record.relay_capable,
+            hole_punch_capable=record.hole_punch_capable,
+            notes_json=json.dumps(
+                {
+                    "source": "drt_entry_point_dpnt",
+                    "dpnt_signature": record.signature,
+                    "dpnt_feature_flags": record.feature_flags,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+        self.engine.services.log_service.info(
+            "virtual_session_client",
+            "entry point resolved from dpnt",
+            entry_point_physical_node_id=entry_point.physical_node_id,
+            endpoint_count=len(record.endpoints),
+        )
+
+    def _build_valid_entry_point(
+        self,
+        virtual_node_public_key: str,
+        route_entry: DrtRouteEntryRecord,
+    ) -> "VirtualRouteEntryPoint | None":
+        if not self._is_valid_drt_route_entry(route_entry, virtual_node_public_key):
+            return None
+
+        return VirtualRouteEntryPoint(
+            physical_node_id=sha512_hex(route_entry.pk_physical_node.encode("utf-8")),
+            physical_node_public_key=route_entry.pk_physical_node,
+            final_path_id=route_entry.final_path_id,
+            rtt=route_entry.rtt,
+        )
+
+    def _is_valid_drt_route_entry(
+        self,
+        route_entry: DrtRouteEntryRecord,
+        virtual_node_public_key: str,
+    ) -> bool:
+        if self._is_expired(route_entry.expires_at):
+            return False
+
+        physical_node_id = sha512_hex(route_entry.pk_physical_node.encode("utf-8"))
+        virtual_node_id = sha512_hex(virtual_node_public_key.encode("utf-8"))
+        virtual_payload = {
+            "final_path_id": route_entry.final_path_id,
+            "final_physical_node_id": physical_node_id,
+        }
+        physical_payload = {
+            "virtual_node_id": virtual_node_id,
+            "final_path_id": route_entry.final_path_id,
+            "virtual_node_signature": route_entry.virtual_node_signature,
+        }
+        rtt_payload = {
+            "pk_physical_node": route_entry.pk_physical_node,
+            "expires_at": route_entry.expires_at,
+            "rtt": route_entry.rtt,
+        }
+
+        return (
+            route_entry.virtual_node_signature == route_entry.entry_point_virtual_node_signature
+            and self._verify_signature(
+                virtual_payload,
+                route_entry.virtual_node_signature,
+                virtual_node_public_key,
+            )
+            and self._verify_signature(
+                physical_payload,
+                route_entry.physical_node_signature,
+                route_entry.pk_physical_node,
+            )
+            and self._verify_signature(
+                physical_payload,
+                route_entry.entry_point_physical_node_signature,
+                route_entry.pk_physical_node,
+            )
+            and self._verify_signature(
+                rtt_payload,
+                route_entry.rtt_physical_node_signature,
+                route_entry.pk_physical_node,
+            )
+        )
+
+    def _is_valid_dpnt_record(
+        self,
+        physical_node_id: str,
+        record: DpntRecordPayload,
+    ) -> bool:
+        key_hex = self.engine.services.dht_service.build_key("dpnt", physical_node_id)
+        payload = {
+            "key": key_hex,
+            "pk_physical_node": record.pk_physical_node,
+            "endpoints": record.endpoints,
+            "transport_methods": record.transport_methods,
+            "reachability_class": record.reachability_class,
+            "relay_capable": record.relay_capable,
+            "hole_punch_capable": record.hole_punch_capable,
+            "protocol_version": record.protocol_version,
+            "feature_flags": record.feature_flags,
+            "status": record.status,
+        }
+        return self._verify_signature(payload, record.signature, record.pk_physical_node)
+
+    def _read_session_entry_point_physical_node_id(self, session) -> str | None:
+        if not session.metadata_json:
+            return None
+
+        try:
+            metadata = json.loads(session.metadata_json)
+        except json.JSONDecodeError:
+            return None
+
+        if not isinstance(metadata, dict):
+            return None
+
+        entry_point_physical_node_id = metadata.get("entry_point_physical_node_id")
+        if isinstance(entry_point_physical_node_id, str) and entry_point_physical_node_id:
+            return entry_point_physical_node_id
+        return None
+
+    @staticmethod
+    def _verify_signature(
+        payload: dict[str, object],
+        signature_hex: str,
+        public_key_pem: str,
+    ) -> bool:
+        try:
+            return dilithium_verify_hex(
+                _canonical_payload_hex(payload),
+                signature_hex,
+                public_key_pem,
+            )
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_expired(expires_at: str) -> bool:
+        try:
+            parsed = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed <= datetime.now(timezone.utc)
+
+
+@dataclass(slots=True, frozen=True)
+class VirtualRouteEntryPoint:
+    physical_node_id: str
+    physical_node_public_key: str
+    final_path_id: str
+    rtt: int
+
+
+def _canonical_payload_hex(payload: dict[str, object]) -> str:
+    return json.dumps(
+        payload,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8").hex()

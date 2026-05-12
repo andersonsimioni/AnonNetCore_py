@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 from hashlib import sha512
+from typing import TYPE_CHECKING
 
-from core.config import CoreConfig
-from storage import get_database
+from storage import DatabaseManager, get_database
 from storage.models import LocalPhysicalNodeIdentity, NodeEndpoint, RemotePhysicalNodeIdentity
+
+if TYPE_CHECKING:
+    from core.config import CoreConfig
 
 
 class DhtService:
     """Operacoes utilitarias da DHT focadas em chave, distancia e responsabilidade."""
 
-    def __init__(self, config: CoreConfig | None = None) -> None:
-        self.database = get_database()
-        self.config = config or CoreConfig()
+    def __init__(
+        self,
+        config: "CoreConfig | None" = None,
+        database: DatabaseManager | None = None,
+    ) -> None:
+        if config is None:
+            from core.config import CoreConfig
+
+            config = CoreConfig()
+
+        self.database = database or get_database()
+        self.config = config
 
     @staticmethod
     def build_key(

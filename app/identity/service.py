@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 
 from crypto import generate_dilithium_key_pair, sha512_hex
 from dht import DpntRecordPayload, serialize_record
-from storage import get_database
+from storage import DatabaseManager, get_database
 from storage.models import (
     LocalPhysicalNodeIdentity,
     LocalVirtualNodeIdentity,
@@ -74,8 +74,8 @@ def _load_json_object(payload: str | None) -> dict[str, object]:
 class IdentityService:
     """Gerencia identidades locais do node fisico e dos nodes virtuais."""
 
-    def __init__(self) -> None:
-        self.database = get_database()
+    def __init__(self, database: DatabaseManager | None = None) -> None:
+        self.database = database or get_database()
 
     def ensure_local_physical_node(self) -> LocalPhysicalNodeIdentity:
         existing_node = self.get_local_physical_node()
@@ -173,6 +173,47 @@ class IdentityService:
     ) -> RemoteVirtualNodeIdentity | None:
         with self.database.session_scope() as session:
             return session.get(RemoteVirtualNodeIdentity, node_id)
+
+    def upsert_remote_virtual_node(
+        self,
+        *,
+        node_id: str,
+        public_key: str,
+        kind: str = "default",
+        status: str = "active",
+        expires_at: datetime | None = None,
+        metadata_json: str | None = None,
+    ) -> RemoteVirtualNodeIdentity:
+        now = utc_now()
+
+        with self.database.session_scope() as session:
+            remote_node = session.get(RemoteVirtualNodeIdentity, node_id)
+            if remote_node is None:
+                remote_node = RemoteVirtualNodeIdentity(
+                    id=node_id,
+                    public_key=public_key,
+                    kind=kind,
+                    status=status,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    expires_at=expires_at,
+                    metadata_json=metadata_json,
+                )
+                session.add(remote_node)
+            else:
+                remote_node.public_key = public_key
+                remote_node.kind = kind
+                remote_node.status = status
+                remote_node.last_seen_at = now
+                remote_node.expires_at = expires_at
+                remote_node.metadata_json = _merge_notes_json(
+                    remote_node.metadata_json,
+                    metadata_json,
+                )
+
+            session.flush()
+            session.refresh(remote_node)
+            return remote_node
 
     def list_remote_physical_nodes_for_validation(
         self,

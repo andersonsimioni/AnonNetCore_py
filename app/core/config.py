@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from bootstrap.models import BootstrapEndpoint, DnsSeed
 
@@ -9,16 +10,18 @@ from bootstrap.models import BootstrapEndpoint, DnsSeed
 class CoreConfig:
     listen_host: str = "0.0.0.0"
     listen_port: int = 19001
+    log_dir: str | Path = "data/local/logs"
     bootstrap_dns_seeds: list[DnsSeed] = field(default_factory=list)
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
         default_factory=lambda: [
+        
             BootstrapEndpoint(
-                host="192.168.1.19",
+                host="192.168.1.25",
                 port=19001,
                 source="core_config_bootstrap",
             ),
             BootstrapEndpoint(
-                host="192.168.1.19",
+                host="192.168.1.25",
                 port=19002,
                 source="core_config_bootstrap",
             ),
@@ -37,11 +40,14 @@ class CoreConfig:
     physical_session_handshake_timeout_seconds: float = 6.0
     physical_session_handshake_poll_interval_seconds: float = 0.25
     physical_node_validation_runtime_interval_seconds: float = 1.0
-    physical_node_validation_backoff_seconds: int = 45
+    physical_node_validation_backoff_seconds: int = 60*60
     physical_node_info_exchange_interval_seconds: int = 1
     physical_node_info_exchange_runtime_interval_seconds: float = 1.0
     physical_node_info_exchange_max_records: int = 50
     dht_replication_factor: int = 8
-    dht_maintenance_runtime_interval_seconds: float = 10
+    dht_maintenance_runtime_interval_seconds: float = 1
+    dht_maintenance_publish_backoff_seconds: float = 300.0
     dht_client_response_timeout_seconds: float = 8.0
     dht_client_max_hops: int = 8
+    virtual_session_drt_lookup_timeout_seconds: float = 30.0
+    virtual_session_drt_lookup_retry_seconds: float = 1.0

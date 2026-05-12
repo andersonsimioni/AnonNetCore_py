@@ -77,6 +77,35 @@ class RouteExecuteClient:
             "virtual_envelope_ciphered": virtual_envelope_ciphered,
         }
 
+    async def send_to_entry_point(
+        self,
+        *,
+        entry_point_physical_node_id: str,
+        route_path_id: str,
+        virtual_envelope: dict[str, object],
+        virtual_envelope_ciphered: bool,
+        virtual_session_id: str | None = None,
+    ) -> dict[str, object]:
+        route_data_payload = self._build_route_data_payload(
+            virtual_session_id=virtual_session_id,
+            virtual_envelope=virtual_envelope,
+            virtual_envelope_ciphered=virtual_envelope_ciphered,
+        )
+        await self.engine.forward_message_to_remote_physical_node(
+            remote_physical_node_id=entry_point_physical_node_id,
+            message_type="ROUTE_DATA",
+            payload={
+                "path_id": route_path_id,
+                **route_data_payload,
+            },
+        )
+        return {
+            "entry_point_physical_node_id": entry_point_physical_node_id,
+            "path_id": route_path_id,
+            "virtual_session_id": virtual_session_id,
+            "virtual_envelope_ciphered": virtual_envelope_ciphered,
+        }
+
     def _build_route_data_payload(
         self,
         *,

@@ -174,11 +174,12 @@ def _ensure_payload_type(
 
 
 def _ensure_drt_key_matches_virtual_node(key: str, pk_virtual_node: str) -> None:
-    expected_key = sha512(f"drt|{pk_virtual_node}".encode("utf-8")).hexdigest()
+    virtual_node_id = sha512(pk_virtual_node.encode("utf-8")).hexdigest()
+    expected_key = sha512(f"drt|{virtual_node_id}".encode("utf-8")).hexdigest()
     if key == expected_key:
         return
 
-    raise ValueError("A key DRT nao corresponde ao pk_virtual_node informado.")
+    raise ValueError("A key DRT nao corresponde ao virtual_node_id informado.")
 
 
 def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> None:

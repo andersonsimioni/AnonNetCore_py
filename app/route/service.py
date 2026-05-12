@@ -4,15 +4,16 @@ import json
 from datetime import datetime, timezone
 
 from dht import DrtRecordPayload, DrtRouteEntryRecord, serialize_record
-from storage import get_database
+from crypto import sha512_hex
+from storage import DatabaseManager, get_database
 from storage.models import RouteResolution
 
 
 class RouteService:
     """Persiste e resolve o estado local das rotas fisicas."""
 
-    def __init__(self) -> None:
-        self.database = get_database()
+    def __init__(self, database: DatabaseManager | None = None) -> None:
+        self.database = database or get_database()
 
     def create_hop_resolution(
         self,
@@ -111,6 +112,23 @@ class RouteService:
                 .filter(
                     RouteResolution.local_role == "final_endpoint",
                     RouteResolution.route_path_id == route_path_id,
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+
+    def get_endpoint_resolution_by_final_path_id(
+        self,
+        *,
+        final_path_id: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            return (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "final_endpoint",
+                    RouteResolution.final_path_id == final_path_id,
                     RouteResolution.is_valid.is_(True),
                 )
                 .order_by(RouteResolution.id.desc())
@@ -232,6 +250,38 @@ class RouteService:
             session.refresh(resolution)
             return resolution
 
+    def mark_initiator_resolution_active(
+        self,
+        *,
+        initial_path_id: str,
+        final_path_id: str,
+        virtual_node_signature: str,
+        physical_node_signature: str,
+        public_route_acceptance_signature: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            resolution = (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.initial_path_id == initial_path_id,
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+            if resolution is None:
+                return None
+
+            resolution.final_path_id = final_path_id
+            resolution.virtual_node_signature = virtual_node_signature
+            resolution.physical_node_signature = physical_node_signature
+            resolution.public_route_acceptance_signature = public_route_acceptance_signature
+            resolution.status = "active"
+            session.flush()
+            session.refresh(resolution)
+            return resolution
+
     def update_endpoint_resolution_validation_context(
         self,
         *,
@@ -320,6 +370,9 @@ class RouteService:
         pk_virtual_node = metadata.get("remote_virtual_node_public_key")
         if not isinstance(pk_virtual_node, str) or not pk_virtual_node:
             return None
+        virtual_node_id = metadata.get("remote_virtual_node_id")
+        if not isinstance(virtual_node_id, str) or not virtual_node_id:
+            virtual_node_id = sha512_hex(pk_virtual_node.encode("utf-8"))
         if not isinstance(resolution.virtual_node_signature, str) or not resolution.virtual_node_signature:
             return None
         if not isinstance(resolution.physical_node_signature, str) or not resolution.physical_node_signature:
@@ -347,7 +400,7 @@ class RouteService:
         )
         return {
             "namespace": "drt",
-            "logical_key": pk_virtual_node,
+            "logical_key": virtual_node_id,
             "record_json": serialize_record(record_payload),
             "expires_at": expires_at,
         }
