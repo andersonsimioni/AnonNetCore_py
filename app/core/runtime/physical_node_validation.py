@@ -50,10 +50,26 @@ class PhysicalNodeValidationRuntime:
         if candidate is None:
             return
 
-        if self.engine.services.session_manager.has_open_physical_session(candidate.node_id):
+        if await self._try_validate_from_active_session(candidate):
             return
 
         await self._try_validate_candidate(candidate)
+
+    async def _try_validate_from_active_session(
+        self,
+        candidate: RemotePhysicalNodeValidationCandidate,
+    ) -> bool:
+        session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(
+            candidate.node_id
+        )
+        if session is None:
+            return False
+
+        if not self._mark_validation_success(session.session_id, candidate.node_id):
+            return False
+
+        await self._publish_validated_remote_node(candidate.node_id)
+        return True
 
     def _select_candidate(self) -> RemotePhysicalNodeValidationCandidate | None:
         retry_before = utc_now() - self._build_backoff_delta()

@@ -244,11 +244,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
                 else None
             ),
             endpoints=requester_endpoints,
-            status=(
-                requester_status
-                if isinstance(requester_status, str) and requester_status
-                else "discovered"
-            ),
+            status="discovered",
             reachability_class=(
                 requester_reachability_class
                 if isinstance(requester_reachability_class, str) and requester_reachability_class
@@ -259,6 +255,11 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             notes_json=json.dumps(
                 {
                     "source": "physical_node_info_request",
+                    "advertised_status": (
+                        requester_status
+                        if isinstance(requester_status, str) and requester_status
+                        else None
+                    ),
                     "dpnt_signature": (
                         requester_dpnt_signature
                         if isinstance(requester_dpnt_signature, str)

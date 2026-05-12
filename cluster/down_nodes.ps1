@@ -12,10 +12,8 @@ if (-not (Test-Path $composeFile)) {
     throw "Compose gerado nao encontrado em: $composeFile"
 }
 
-cmd /c "docker info >nul 2>nul"
-$dockerInfoExitCode = $LASTEXITCODE
-
-if ($dockerInfoExitCode -ne 0) {
+& docker info *> $null
+if ($LASTEXITCODE -ne 0) {
     throw "O Docker Desktop/Linux Engine nao esta acessivel. Inicie o Docker Desktop e confirme que o contexto 'desktop-linux' esta disponivel."
 }
 

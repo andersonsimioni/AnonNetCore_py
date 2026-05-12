@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.git/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+data/local/
+cluster/state/
+cluster/docker-compose.generated.yml

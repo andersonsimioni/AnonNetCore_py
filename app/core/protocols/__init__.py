@@ -1,5 +1,5 @@
 from .base import ProtocolMessageHandler
-from .virtual import ContentProtocolHandler, VirtualSessionProtocolHandler
+from .virtual import ContentProtocolHandler, VirtualMessageProtocolHandler, VirtualSessionProtocolHandler
 from .physical import (
     DhtProtocolHandler,
     PingProtocolHandler,
@@ -14,6 +14,7 @@ from .types import PacketProtocol
 __all__ = [
     "ContentProtocolHandler",
     "DhtProtocolHandler",
+    "VirtualMessageProtocolHandler",
     "VirtualSessionProtocolHandler",
     "PacketProtocol",
     "PingProtocolHandler",

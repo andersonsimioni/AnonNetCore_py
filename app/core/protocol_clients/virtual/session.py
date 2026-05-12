@@ -4,6 +4,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from crypto import dilithium_verify_hex, sha512_hex
 from dht import DpntRecordPayload, DrtRecordPayload, DrtRouteEntryRecord, parse_record
@@ -187,6 +188,43 @@ class VirtualSessionClient:
             remote_virtual_node_id=session.remote_identity_id,
             bound_route_id=session.bound_route_id,
         )
+
+    async def send_message(
+        self,
+        *,
+        session_id: str,
+        app_message_type: str,
+        payload: dict[str, object] | None = None,
+        request_id: str | None = None,
+    ) -> str:
+        if not app_message_type:
+            raise ValueError("app_message_type nao pode ser vazio.")
+        if payload is not None and not isinstance(payload, dict):
+            raise ValueError("payload precisa ser um objeto.")
+
+        session = self._require_active_session(session_id)
+        message_request_id = request_id or str(uuid4())
+        await self._send_virtual_envelope(
+            session=session,
+            message_type="VIRTUAL_SESSION_DATA",
+            payload={
+                "app_message_type": app_message_type,
+                "request_id": message_request_id,
+                "payload": payload or {},
+            },
+            virtual_envelope_ciphered=True,
+        )
+        self.engine.services.log_service.info(
+            "virtual_session_client",
+            "sent virtual session data",
+            session_id=session.session_id,
+            app_message_type=app_message_type,
+            request_id=message_request_id,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+        )
+        return message_request_id
 
     async def close_session(
         self,

@@ -451,6 +451,7 @@ class IdentityService:
         notes_json: str | None = None,
     ) -> RemotePhysicalNodeIdentity:
         now = utc_now()
+        local_status = "discovered" if status == "active" else status
 
         with self.database.session_scope() as session:
             remote_node = session.get(RemotePhysicalNodeIdentity, node_id)
@@ -463,7 +464,7 @@ class IdentityService:
                     relay_capable=relay_capable,
                     hole_punch_capable=hole_punch_capable,
                     protocol_version=protocol_version,
-                    status=status,
+                    status=local_status,
                     last_seen_at=now,
                     last_validated_at=None,
                     notes_json=notes_json,
@@ -479,7 +480,7 @@ class IdentityService:
                 remote_node.last_seen_at = now
                 remote_node.notes_json = _merge_notes_json(remote_node.notes_json, notes_json)
                 if remote_node.status != "active":
-                    remote_node.status = status
+                    remote_node.status = local_status
 
             for endpoint_data in endpoints:
                 transport = endpoint_data["transport"]

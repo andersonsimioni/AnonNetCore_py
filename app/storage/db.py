@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from .models import Base
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "local"
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "anonnetcore.db"
 

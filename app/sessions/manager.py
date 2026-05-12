@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from inspect import isawaitable
 from uuid import uuid4
 
+from .messages import (
+    VirtualSessionMessage,
+    VirtualSessionMessageHandler,
+    VirtualSessionMessageReply,
+)
 from .models import NetworkSession, SessionCreateInput, SessionStateUpdateInput, utc_now
 
 
@@ -12,7 +18,47 @@ class SessionManager:
     def __init__(self) -> None:
         self._sessions_by_id: dict[int, NetworkSession] = {}
         self._sessions_by_session_id: dict[str, NetworkSession] = {}
+        self._virtual_message_handlers: dict[str, VirtualSessionMessageHandler] = {}
         self._next_id = 1
+
+    def register_virtual_message_handler(
+        self,
+        app_message_type: str,
+        handler: VirtualSessionMessageHandler,
+    ) -> None:
+        if not app_message_type:
+            raise ValueError("app_message_type nao pode ser vazio.")
+        if not callable(handler):
+            raise TypeError("handler precisa ser chamavel.")
+        self._virtual_message_handlers[app_message_type] = handler
+
+    def unregister_virtual_message_handler(self, app_message_type: str) -> None:
+        self._virtual_message_handlers.pop(app_message_type, None)
+
+    def has_virtual_message_handler(self, app_message_type: str) -> bool:
+        return app_message_type in self._virtual_message_handlers
+
+    async def handle_virtual_message(
+        self,
+        message: VirtualSessionMessage,
+    ) -> VirtualSessionMessageReply | None:
+        handler = self._virtual_message_handlers.get(message.app_message_type)
+        if handler is None:
+            return None
+
+        result = handler(message)
+        if isawaitable(result):
+            result = await result
+
+        if result is not None and not isinstance(result, VirtualSessionMessageReply):
+            raise TypeError(
+                "Virtual session message handler precisa retornar "
+                "VirtualSessionMessageReply ou None."
+            )
+        if result is not None and not isinstance(result.payload, dict):
+            raise TypeError("VirtualSessionMessageReply.payload precisa ser um objeto.")
+
+        return result
 
     def create_session(self, data: SessionCreateInput) -> NetworkSession:
         existing_session = self._sessions_by_session_id.get(data.session_id)

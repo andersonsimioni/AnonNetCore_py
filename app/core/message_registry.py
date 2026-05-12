@@ -7,6 +7,7 @@ from .protocols import (
     ContentProtocolHandler,
     DhtProtocolHandler,
     VirtualSessionProtocolHandler,
+    VirtualMessageProtocolHandler,
     PingProtocolHandler,
     PhysicalNodeInfoExchangeProtocolHandler,
     PhysicalNodeInfoProtocolHandler,
@@ -39,6 +40,7 @@ class MessageRegistry:
         physical_route_build = RouteBuildProtocolHandler()
         physical_route_execute = RouteExecuteProtocolHandler()
         virtual_content = ContentProtocolHandler()
+        virtual_message = VirtualMessageProtocolHandler()
         virtual_session = VirtualSessionProtocolHandler()
 
         self._definitions: dict[str, MessageDefinition] = {}
@@ -163,6 +165,13 @@ class MessageRegistry:
                     handler=virtual_session,
                     layer="virtual",
                     requires_physical_session=True,
+                ),
+                MessageDefinition(
+                    message_type="VIRTUAL_SESSION_DATA",
+                    handler=virtual_message,
+                    layer="virtual",
+                    requires_physical_session=True,
+                    requires_virtual_session=True,
                 ),
                 MessageDefinition(
                     message_type="VIRTUAL_SESSION_CLOSE",
