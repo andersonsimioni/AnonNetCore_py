@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import math
 import platform
 from pathlib import Path
@@ -360,12 +361,17 @@ async def wait_for_virtual_keepalive_ack(
     *,
     timeout_seconds: float = 70.0,
 ) -> None:
+    observed_after = datetime.now(timezone.utc)
+
     async def has_keepalive_ack() -> bool:
         session = engine.services.session_manager.get_session_by_session_id(session_id)
-        if session is None or session.last_keepalive_sent_at is None:
+        if session is None:
             return False
 
-        return session.last_activity_at > session.last_keepalive_sent_at
+        if session.last_keepalive_sent_at is not None:
+            return session.last_activity_at > session.last_keepalive_sent_at
+
+        return session.last_activity_at > observed_after
 
     await wait_until(has_keepalive_ack, timeout_seconds=timeout_seconds, label="virtual keepalive ack")
 

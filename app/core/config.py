@@ -14,14 +14,13 @@ class CoreConfig:
     bootstrap_dns_seeds: list[DnsSeed] = field(default_factory=list)
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
         default_factory=lambda: [
-        
             BootstrapEndpoint(
-                host="150.162.149.130",
+                host="192.168.1.25",
                 port=19001,
                 source="core_config_bootstrap",
             ),
             BootstrapEndpoint(
-                host="150.162.149.130",
+                host="192.168.1.25",
                 port=19002,
                 source="core_config_bootstrap",
             ),
@@ -46,7 +45,7 @@ class CoreConfig:
     physical_node_info_exchange_interval_seconds: int = 120
     physical_node_info_exchange_runtime_interval_seconds: float = 5.0
     physical_node_info_exchange_max_records: int = 32
-    dht_replication_factor: int = 1
+    dht_replication_factor: int = 3
     dht_maintenance_runtime_interval_seconds: float = 5.0
     dht_maintenance_publish_backoff_seconds: float = 600.0
     dht_client_response_timeout_seconds: float = 6.0
@@ -63,3 +62,4 @@ class CoreConfig:
     api_websocket_path: str = "/v1/events"
     content_storage_dir: str | Path = "data/local/content"
     content_download_range_size: int = 64 * 1024
+    content_provider_advertisement_ttl_seconds: int = 30 * 24 * 60 * 60

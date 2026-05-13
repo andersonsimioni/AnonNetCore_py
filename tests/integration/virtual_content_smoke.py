@@ -12,7 +12,7 @@ APP_ROOT = PROJECT_ROOT / "app"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from storage.models import ContentObject
+from storage.models import ContentAdvertisement, ContentObject
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
@@ -158,6 +158,10 @@ async def run_virtual_content_protocol_smoke(
         downloader_engine,
         content_hash=resolved_content_hash,
     )
+    await wait_for_ddt_provider_advertisement(
+        downloader_engine,
+        content_hash=resolved_content_hash,
+    )
     downloaded_bytes = Path(downloaded_content.storage_path).read_bytes()
     if downloaded_bytes != resolved_content_bytes:
         raise RuntimeError("Downloaded content bytes mismatch.")
@@ -206,6 +210,32 @@ async def wait_for_downloaded_content(engine, *, content_hash: str):
     if content_info.storage_path is None:
         raise RuntimeError("Downloaded content has no storage path.")
     return content_info
+
+
+async def wait_for_ddt_provider_advertisement(engine, *, content_hash: str):
+    async def load_advertisement():
+        with engine.services.database.session_scope() as session:
+            content_object = (
+                session.query(ContentObject)
+                .filter(ContentObject.content_hash == content_hash)
+                .first()
+            )
+            if content_object is None:
+                return None
+
+            return (
+                session.query(ContentAdvertisement)
+                .filter(ContentAdvertisement.content_object_id == content_object.id)
+                .filter(ContentAdvertisement.published_in_ddt.is_(True))
+                .filter(ContentAdvertisement.is_active.is_(True))
+                .first()
+            )
+
+    return await wait_until_value(
+        load_advertisement,
+        timeout_seconds=20.0,
+        label="downloaded content ddt provider advertisement",
+    )
 
 
 def parse_args() -> argparse.Namespace:

@@ -1,6 +1,7 @@
 from .service import (
     ContentDownloadState,
     ContentInfo,
+    ContentProviderAdvertisement,
     ContentRange,
     ContentTransferService,
 )
@@ -8,6 +9,7 @@ from .service import (
 __all__ = [
     "ContentDownloadState",
     "ContentInfo",
+    "ContentProviderAdvertisement",
     "ContentRange",
     "ContentTransferService",
 ]

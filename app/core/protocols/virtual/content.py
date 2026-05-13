@@ -296,6 +296,15 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
             return self._build_invalid_result(envelope, str(error))
 
         if download_state.status == "failed":
+            await self._emit_api_event(
+                services,
+                "content_download_failed",
+                {
+                    "session_id": session_id,
+                    "content_id": download_state.content_id,
+                    "error_message": download_state.error_message,
+                },
+            )
             return self._build_skeleton_result(
                 envelope,
                 action="content_download_failed",
@@ -303,6 +312,23 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 error_message=download_state.error_message,
             )
         if download_state.status == "completed":
+            await self._publish_download_provider_to_ddt(
+                envelope,
+                services,
+                download_state=download_state,
+                session_id=session_id,
+            )
+            await self._emit_api_event(
+                services,
+                "content_download_completed",
+                {
+                    "session_id": session_id,
+                    "content_id": download_state.content_id,
+                    "content_hash": download_state.content_hash,
+                    "size_bytes": download_state.size_bytes,
+                    "storage_path": str(download_state.final_path),
+                },
+            )
             return self._build_skeleton_result(
                 envelope,
                 action="content_download_completed",
@@ -342,6 +368,17 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
             data_base64_size=len(range_response.data_base64),
             download_status=download_state.status,
         )
+
+    async def _emit_api_event(
+        self,
+        services: EngineServices,
+        event_type: str,
+        data: dict[str, object],
+    ) -> None:
+        api_service = getattr(services, "api_service", None)
+        if api_service is None:
+            return
+        await api_service.emit_event(event_type, data)
 
     def _handle_content_not_found(
         self,
@@ -418,6 +455,103 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
             content_id=content_id,
             error_code=error_code,
             error_message=error_message,
+        )
+
+    async def _publish_download_provider_to_ddt(
+        self,
+        envelope: ProtocolEnvelope,
+        services: EngineServices,
+        *,
+        download_state,
+        session_id: str,
+    ) -> None:
+        session = services.session_manager.get_session_by_session_id(session_id)
+        if session is None or session.local_identity_type != "virtual_node":
+            services.log_service.warning(
+                "content_transfer",
+                "download completed but local virtual session was not found for ddt publish",
+                session_id=session_id,
+                content_id=download_state.content_id,
+            )
+            return
+
+        advertisement = services.content_transfer_service.build_provider_advertisement(
+            content_id=download_state.content_id,
+            local_virtual_node_id=session.local_identity_id,
+            ttl_seconds=services.config.content_provider_advertisement_ttl_seconds,
+        )
+        if advertisement is None:
+            services.log_service.warning(
+                "content_transfer",
+                "download completed but ddt provider advertisement could not be built",
+                session_id=session_id,
+                content_id=download_state.content_id,
+                local_virtual_node_id=session.local_identity_id,
+            )
+            return
+        if services.protocol_clients is None:
+            services.log_service.warning(
+                "content_transfer",
+                "download completed but protocol clients are unavailable for ddt publish",
+                session_id=session_id,
+                content_id=download_state.content_id,
+                ddt_key=advertisement.key,
+            )
+            return
+
+        try:
+            publish_result = await services.protocol_clients.physical.dht.publish(
+                namespace=advertisement.namespace,
+                logical_key=advertisement.logical_key,
+                record_json=advertisement.record_json,
+                expires_at=advertisement.expires_at.isoformat(),
+            )
+        except Exception as error:
+            services.log_service.warning(
+                "content_transfer",
+                "failed to publish downloaded content provider to ddt",
+                session_id=session_id,
+                content_id=download_state.content_id,
+                ddt_key=advertisement.key,
+                error=str(error),
+            )
+            return
+
+        if publish_result.get("status") != "stored":
+            services.log_service.warning(
+                "content_transfer",
+                "downloaded content provider ddt publish did not store record",
+                session_id=session_id,
+                content_id=download_state.content_id,
+                ddt_key=advertisement.key,
+                status=publish_result.get("status"),
+            )
+            return
+
+        services.content_transfer_service.mark_provider_advertisement_published(
+            content_id=download_state.content_id,
+            local_virtual_node_id=session.local_identity_id,
+            expires_at=advertisement.expires_at,
+        )
+        services.log_service.info(
+            "content_transfer",
+            "published downloaded content provider to ddt",
+            session_id=session_id,
+            content_id=download_state.content_id,
+            local_virtual_node_id=session.local_identity_id,
+            ddt_key=advertisement.key,
+            message_id=envelope.header.get("message_id"),
+        )
+        await self._emit_api_event(
+            services,
+            "content_provider_published",
+            {
+                "session_id": session_id,
+                "content_id": download_state.content_id,
+                "local_virtual_node_id": session.local_identity_id,
+                "ddt_key": advertisement.key,
+                "expires_at": advertisement.expires_at.isoformat(),
+            },
         )
 
     def _require_active_virtual_session(

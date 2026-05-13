@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import inspect
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from crypto import sha512_hex
+from core.protocols.virtual.content import VirtualContentProtocolHandler
 from identity import VirtualNodeIdentityCreateInput
 from sessions import VirtualSessionMessage
 
 
 VirtualMessageSink = Callable[[dict[str, object]], Awaitable[None] | None]
+ApiEventSink = Callable[[dict[str, object]], Awaitable[None] | None]
 
 
 class CoreApiError(Exception):
@@ -35,6 +39,7 @@ class CoreApiService:
         self._owned_virtual_handlers: set[str] = set()
         self._inbox_virtual_message_types: set[str] = set()
         self._virtual_message_sinks: set[VirtualMessageSink] = set()
+        self._event_sinks: set[ApiEventSink] = set()
 
     def get_status(self) -> dict[str, object]:
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
@@ -55,6 +60,14 @@ class CoreApiService:
             only_active=only_active,
         )
         return [self._serialize_virtual_node(node, local=True) for node in nodes]
+
+    def list_remote_virtual_nodes(
+        self,
+        *,
+        status: str | None = None,
+    ) -> list[dict[str, object]]:
+        nodes = self.engine.services.identity_service.list_remote_virtual_nodes(status=status)
+        return [self._serialize_virtual_node(node, local=False) for node in nodes]
 
     def create_local_virtual_node(
         self,
@@ -171,6 +184,179 @@ class CoreApiService:
             "request_id": resolved_request_id,
         }
 
+    async def close_virtual_session(
+        self,
+        *,
+        session_id: str,
+        close_reason: str = "api_closed",
+    ) -> dict[str, object]:
+        await self.engine.services.protocol_clients.virtual.session.close_session(
+            session_id=session_id,
+            close_reason=close_reason,
+        )
+        session = self.engine.services.session_manager.close_session(
+            session_id,
+            close_reason=close_reason,
+        )
+        if session is None:
+            raise CoreApiError("session_not_found", "Virtual session nao encontrada.", status_code=404)
+        return self._serialize_session(session)
+
+    def store_content(
+        self,
+        *,
+        data_base64: str,
+        title: str | None = None,
+        content_type: str = "application/octet-stream",
+        tags: list[str] | None = None,
+        is_encrypted: bool = False,
+        encryption_scheme: str | None = None,
+    ) -> dict[str, object]:
+        try:
+            data = base64.b64decode(data_base64.encode("ascii"), validate=True)
+        except (UnicodeEncodeError, binascii.Error) as error:
+            raise CoreApiError("invalid_base64", "data_base64 invalido.") from error
+
+        content = self.engine.services.content_transfer_service.store_local_content(
+            data=data,
+            title=title,
+            content_type=content_type,
+            tags=tags or [],
+            is_encrypted=is_encrypted,
+            encryption_scheme=encryption_scheme,
+        )
+        return self._serialize_content_info(content)
+
+    def list_content(self, *, limit: int = 100) -> list[dict[str, object]]:
+        content_items = self.engine.services.content_transfer_service.list_content(limit=limit)
+        return [self._serialize_content_info(content) for content in content_items]
+
+    def get_content_info(self, *, content_id: str) -> dict[str, object]:
+        content = self.engine.services.content_transfer_service.get_content_info(content_id)
+        if content is None:
+            raise CoreApiError("content_not_found", "Conteudo nao encontrado.", status_code=404)
+        return self._serialize_content_info(content)
+
+    def read_content_range(
+        self,
+        *,
+        content_id: str,
+        start_byte: int,
+        end_byte: int,
+    ) -> dict[str, object]:
+        try:
+            content_range = self.engine.services.content_transfer_service.read_content_range(
+                content_id=content_id,
+                start_byte=start_byte,
+                end_byte=end_byte,
+            )
+        except FileNotFoundError as error:
+            raise CoreApiError("content_not_found", "Conteudo nao encontrado.", status_code=404) from error
+        except ValueError as error:
+            raise CoreApiError("invalid_content_range", str(error)) from error
+
+        return {
+            "content_id": content_range.content_id,
+            "start_byte": content_range.start_byte,
+            "end_byte": content_range.end_byte,
+            "length": content_range.end_byte - content_range.start_byte,
+            "data_base64": content_range.data_base64,
+        }
+
+    async def publish_content_provider(
+        self,
+        *,
+        content_id: str,
+        local_virtual_node_id: str,
+        ttl_seconds: int | None = None,
+    ) -> dict[str, object]:
+        ttl = ttl_seconds or self.engine.services.config.content_provider_advertisement_ttl_seconds
+        advertisement = self.engine.services.content_transfer_service.build_provider_advertisement(
+            content_id=content_id,
+            local_virtual_node_id=local_virtual_node_id,
+            ttl_seconds=ttl,
+        )
+        if advertisement is None:
+            raise CoreApiError(
+                "provider_advertisement_not_available",
+                "Nao foi possivel montar o anuncio DDT para esse conteudo/VN.",
+            )
+
+        publish_result = await self.engine.services.protocol_clients.physical.dht.publish(
+            namespace=advertisement.namespace,
+            logical_key=advertisement.logical_key,
+            record_json=advertisement.record_json,
+            expires_at=advertisement.expires_at.isoformat(),
+        )
+        if publish_result.get("status") == "stored":
+            self.engine.services.content_transfer_service.mark_provider_advertisement_published(
+                content_id=content_id,
+                local_virtual_node_id=local_virtual_node_id,
+                expires_at=advertisement.expires_at,
+            )
+
+        data = {
+            "namespace": advertisement.namespace,
+            "logical_key": advertisement.logical_key,
+            "key": advertisement.key,
+            "expires_at": advertisement.expires_at.isoformat(),
+            "publish_result": publish_result,
+        }
+        await self.emit_event("content_provider_published", data)
+        return data
+
+    async def start_content_download(
+        self,
+        *,
+        session_id: str,
+        content_id: str,
+        ddt_key: str | None = None,
+    ) -> dict[str, object]:
+        if not content_id and not ddt_key:
+            raise CoreApiError("content_id_or_ddt_key_required", "Informe content_id ou ddt_key.")
+
+        await self.engine.services.protocol_clients.virtual.session.send_protocol_message(
+            session_id=session_id,
+            message_type="VIRTUAL_CONTENT_INFO_REQUEST",
+            payload=VirtualContentProtocolHandler.build_content_info_request_payload(
+                content_id=content_id or None,
+                ddt_key=ddt_key,
+            ),
+            virtual_envelope_ciphered=True,
+        )
+        data = {
+            "session_id": session_id,
+            "content_id": content_id,
+            "ddt_key": ddt_key,
+            "status": "requested",
+        }
+        await self.emit_event("content_download_requested", data)
+        return data
+
+    def list_content_downloads(
+        self,
+        *,
+        session_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        states = self.engine.services.content_transfer_service.list_download_states(
+            session_id=session_id,
+        )
+        return [self._serialize_download_state(state) for state in states]
+
+    def get_content_download(
+        self,
+        *,
+        session_id: str,
+        content_id: str,
+    ) -> dict[str, object]:
+        state = self.engine.services.content_transfer_service.get_download_state(
+            session_id=session_id,
+            content_id=content_id,
+        )
+        if state is None:
+            raise CoreApiError("download_not_found", "Download nao encontrado.", status_code=404)
+        return self._serialize_download_state(state)
+
     def subscribe_virtual_messages(self, *, app_message_type: str) -> dict[str, object]:
         self.ensure_virtual_message_handler(app_message_type)
         self._inbox_virtual_message_types.add(app_message_type)
@@ -205,6 +391,23 @@ class CoreApiService:
 
     def remove_virtual_message_sink(self, sink: VirtualMessageSink) -> None:
         self._virtual_message_sinks.discard(sink)
+
+    def add_event_sink(self, sink: ApiEventSink) -> None:
+        self._event_sinks.add(sink)
+
+    def remove_event_sink(self, sink: ApiEventSink) -> None:
+        self._event_sinks.discard(sink)
+
+    async def emit_event(self, event_type: str, data: dict[str, object]) -> None:
+        event = {
+            "type": event_type,
+            "data": data,
+            "emitted_at": datetime.now().astimezone().isoformat(),
+        }
+        for sink in list(self._event_sinks):
+            result = sink(event)
+            if inspect.isawaitable(result):
+                await result
 
     def read_virtual_messages(
         self,
@@ -255,6 +458,7 @@ class CoreApiService:
             "type": "virtual_message_received",
             "data": message_data,
         }
+        await self.emit_event("virtual_message_received", message_data)
         for sink in list(self._virtual_message_sinks):
             result = sink(event)
             if inspect.isawaitable(result):
@@ -309,6 +513,33 @@ class CoreApiService:
             "keepalive_interval_seconds": session.keepalive_interval_seconds,
             "keepalive_deadline": _datetime_to_iso(session.keepalive_deadline),
             "metadata_json": session.metadata_json,
+        }
+
+    @staticmethod
+    def _serialize_content_info(content) -> dict[str, object]:
+        return {
+            "content_id": content.content_id,
+            "content_hash": content.content_hash,
+            "size_bytes": content.size_bytes,
+            "content_type": content.content_type,
+            "storage_path": content.storage_path,
+        }
+
+    @staticmethod
+    def _serialize_download_state(state) -> dict[str, object]:
+        progress = 1.0 if state.size_bytes == 0 else state.next_start_byte / state.size_bytes
+        return {
+            "session_id": state.session_id,
+            "content_id": state.content_id,
+            "content_hash": state.content_hash,
+            "size_bytes": state.size_bytes,
+            "content_type": state.content_type,
+            "downloaded_bytes": state.next_start_byte,
+            "progress": min(1.0, progress),
+            "status": state.status,
+            "error_message": state.error_message,
+            "partial_path": str(state.partial_path),
+            "final_path": str(state.final_path),
         }
 
     @staticmethod

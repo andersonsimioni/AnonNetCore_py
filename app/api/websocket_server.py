@@ -10,7 +10,8 @@ from .service import CoreApiError, CoreApiService
 @dataclass(slots=True)
 class WebSocketApiClient:
     websocket: Any
-    subscriptions: set[str] = field(default_factory=set)
+    app_message_types: set[str] = field(default_factory=set)
+    event_types: set[str] = field(default_factory=set)
 
 
 class CoreWebSocketApiServer:
@@ -37,14 +38,14 @@ class CoreWebSocketApiServer:
 
         from websockets.legacy.server import serve
 
-        self.api_service.add_virtual_message_sink(self._send_virtual_message_event)
+        self.api_service.add_event_sink(self._send_event)
         self._server = await serve(self._handle_connection, self.host, self.port)
 
     async def stop(self) -> None:
         if self._server is None:
             return
 
-        self.api_service.remove_virtual_message_sink(self._send_virtual_message_event)
+        self.api_service.remove_event_sink(self._send_event)
         for client in list(self._clients):
             await self._close_client(client)
 
@@ -109,18 +110,21 @@ class CoreWebSocketApiServer:
         message: dict[str, object],
     ) -> None:
         app_message_types = self._extract_app_message_types(message)
-        if not app_message_types:
+        event_types = self._extract_event_types(message)
+        if not app_message_types and not event_types:
             await self._send_error(
                 client.websocket,
-                "app_message_type_required",
-                "Informe app_message_type ou app_message_types.",
+                "subscription_required",
+                "Informe event_type/event_types ou app_message_type/app_message_types.",
             )
             return
 
         try:
             for app_message_type in app_message_types:
                 self.api_service.ensure_virtual_message_handler(app_message_type)
-                client.subscriptions.add(app_message_type)
+                client.app_message_types.add(app_message_type)
+                client.event_types.add("virtual_message_received")
+            client.event_types.update(event_types)
         except CoreApiError as error:
             await self._send_error(client.websocket, error.code, error.message)
             return
@@ -130,7 +134,8 @@ class CoreWebSocketApiServer:
             {
                 "type": "subscribed",
                 "data": {
-                    "app_message_types": sorted(client.subscriptions),
+                    "event_types": sorted(client.event_types),
+                    "app_message_types": sorted(client.app_message_types),
                 },
             },
         )
@@ -141,30 +146,25 @@ class CoreWebSocketApiServer:
         message: dict[str, object],
     ) -> None:
         for app_message_type in self._extract_app_message_types(message):
-            client.subscriptions.discard(app_message_type)
+            client.app_message_types.discard(app_message_type)
+        for event_type in self._extract_event_types(message):
+            client.event_types.discard(event_type)
 
         await self._send_json(
             client.websocket,
             {
                 "type": "unsubscribed",
                 "data": {
-                    "app_message_types": sorted(client.subscriptions),
+                    "event_types": sorted(client.event_types),
+                    "app_message_types": sorted(client.app_message_types),
                 },
             },
         )
 
-    async def _send_virtual_message_event(self, event: dict[str, object]) -> None:
-        data = event.get("data")
-        if not isinstance(data, dict):
-            return
-
-        app_message_type = data.get("app_message_type")
-        if not isinstance(app_message_type, str) or not app_message_type:
-            return
-
+    async def _send_event(self, event: dict[str, object]) -> None:
         dead_clients: list[WebSocketApiClient] = []
         for client in list(self._clients):
-            if app_message_type not in client.subscriptions:
+            if not self._client_accepts_event(client, event):
                 continue
             try:
                 await self._send_json(client.websocket, event)
@@ -173,6 +173,23 @@ class CoreWebSocketApiServer:
 
         for client in dead_clients:
             self._remove_client(client)
+
+    @staticmethod
+    def _client_accepts_event(client: WebSocketApiClient, event: dict[str, object]) -> bool:
+        event_type = event.get("type")
+        if not isinstance(event_type, str) or not event_type:
+            return False
+        if client.event_types and event_type not in client.event_types:
+            return False
+
+        if event_type != "virtual_message_received" or not client.app_message_types:
+            return True
+
+        data = event.get("data")
+        if not isinstance(data, dict):
+            return False
+        app_message_type = data.get("app_message_type")
+        return isinstance(app_message_type, str) and app_message_type in client.app_message_types
 
     async def _close_client(self, client: WebSocketApiClient) -> None:
         self._remove_client(client)
@@ -217,4 +234,20 @@ class CoreWebSocketApiServer:
             app_message_type
             for app_message_type in multiple_types
             if isinstance(app_message_type, str) and app_message_type
+        ]
+
+    @staticmethod
+    def _extract_event_types(message: dict[str, object]) -> list[str]:
+        single_type = message.get("event_type")
+        if isinstance(single_type, str) and single_type:
+            return [single_type]
+
+        multiple_types = message.get("event_types")
+        if not isinstance(multiple_types, list):
+            return []
+
+        return [
+            event_type
+            for event_type in multiple_types
+            if isinstance(event_type, str) and event_type
         ]

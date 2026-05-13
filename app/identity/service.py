@@ -174,6 +174,20 @@ class IdentityService:
         with self.database.session_scope() as session:
             return session.get(RemoteVirtualNodeIdentity, node_id)
 
+    def list_remote_virtual_nodes(
+        self,
+        *,
+        status: str | None = None,
+    ) -> list[RemoteVirtualNodeIdentity]:
+        with self.database.session_scope() as session:
+            query = select(RemoteVirtualNodeIdentity).order_by(
+                RemoteVirtualNodeIdentity.last_seen_at.desc(),
+                RemoteVirtualNodeIdentity.id.asc(),
+            )
+            if status:
+                query = query.where(RemoteVirtualNodeIdentity.status == status)
+            return list(session.scalars(query).all())
+
     def upsert_remote_virtual_node(
         self,
         *,

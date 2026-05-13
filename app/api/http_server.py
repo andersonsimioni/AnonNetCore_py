@@ -107,6 +107,7 @@ class CoreHttpApiServer:
             ("GET", "/health"): self._health,
             ("GET", "/v1/status"): self._status,
             ("GET", "/v1/virtual-nodes/local"): self._list_local_virtual_nodes,
+            ("GET", "/v1/virtual-nodes/remote"): self._list_remote_virtual_nodes,
             ("POST", "/v1/virtual-nodes"): self._create_local_virtual_node,
             ("POST", "/v1/virtual-nodes/remote"): self._upsert_remote_virtual_node,
             ("POST", "/v1/dht/publish"): self._dht_publish,
@@ -115,11 +116,24 @@ class CoreHttpApiServer:
             ("POST", "/v1/sessions/virtual"): self._start_virtual_session,
             ("POST", "/v1/messages/virtual/subscribe"): self._subscribe_virtual_messages,
             ("GET", "/v1/messages/virtual"): self._read_virtual_messages,
-            ("POST", "/v1/downloads"): self._downloads_not_ready,
+            ("GET", "/v1/content"): self._list_content,
+            ("POST", "/v1/content"): self._store_content,
+            ("GET", "/v1/downloads"): self._list_downloads,
+            ("POST", "/v1/downloads"): self._start_download,
         }
         handler = routes.get((request.method, request.path))
         if handler is None and request.method == "POST":
-            handler = self._match_virtual_message_sender(request.path)
+            handler = (
+                self._match_virtual_message_sender(request.path)
+                or self._match_virtual_session_closer(request.path)
+                or self._match_content_provider_publisher(request.path)
+            )
+        if handler is None and request.method == "GET":
+            handler = (
+                self._match_content_getter(request.path)
+                or self._match_content_range_getter(request.path)
+                or self._match_download_getter(request.path)
+            )
         if handler is None:
             raise CoreApiError("route_not_found", "Rota da API nao encontrada.", status_code=404)
 
@@ -137,6 +151,11 @@ class CoreHttpApiServer:
     def _list_local_virtual_nodes(self, request: "HttpRequest") -> list[dict[str, object]]:
         return self.api_service.list_local_virtual_nodes(
             only_active=self._query_bool(request, "only_active", default=False),
+        )
+
+    def _list_remote_virtual_nodes(self, request: "HttpRequest") -> list[dict[str, object]]:
+        return self.api_service.list_remote_virtual_nodes(
+            status=self._first_query_value(request, "status"),
         )
 
     def _create_local_virtual_node(self, request: "HttpRequest") -> dict[str, object]:
@@ -201,6 +220,33 @@ class CoreHttpApiServer:
             consume=self._query_bool(request, "consume", default=True),
         )
 
+    def _list_content(self, request: "HttpRequest") -> list[dict[str, object]]:
+        return self.api_service.list_content(limit=self._query_int(request, "limit", default=100))
+
+    def _store_content(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return self.api_service.store_content(
+            data_base64=str(body.get("data_base64") or ""),
+            title=self._optional_str(body.get("title")),
+            content_type=str(body.get("content_type") or "application/octet-stream"),
+            tags=self._optional_list_of_strings(body.get("tags")) or [],
+            is_encrypted=bool(body.get("is_encrypted", False)),
+            encryption_scheme=self._optional_str(body.get("encryption_scheme")),
+        )
+
+    async def _start_download(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return await self.api_service.start_content_download(
+            session_id=str(body.get("session_id") or ""),
+            content_id=str(body.get("content_id") or ""),
+            ddt_key=self._optional_str(body.get("ddt_key")),
+        )
+
+    def _list_downloads(self, request: "HttpRequest") -> list[dict[str, object]]:
+        return self.api_service.list_content_downloads(
+            session_id=self._first_query_value(request, "session_id"),
+        )
+
     def _match_virtual_message_sender(
         self,
         path: str,
@@ -225,12 +271,109 @@ class CoreHttpApiServer:
 
         return _send
 
-    def _downloads_not_ready(self, _request: "HttpRequest") -> object:
-        raise CoreApiError(
-            "download_protocol_not_implemented",
-            "O protocolo de download ainda nao foi implementado.",
-            status_code=501,
-        )
+    def _match_virtual_session_closer(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], Awaitable[dict[str, object]]] | None:
+        prefix = "/v1/sessions/virtual/"
+        suffix = "/close"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        session_id = path[len(prefix):-len(suffix)].strip("/")
+        if not session_id:
+            return None
+
+        async def _close(request: HttpRequest) -> dict[str, object]:
+            body = self._json_body(request)
+            return await self.api_service.close_virtual_session(
+                session_id=session_id,
+                close_reason=str(body.get("close_reason") or "api_closed"),
+            )
+
+        return _close
+
+    def _match_content_provider_publisher(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], Awaitable[dict[str, object]]] | None:
+        prefix = "/v1/content/"
+        suffix = "/providers/ddt"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        content_id = path[len(prefix):-len(suffix)].strip("/")
+        if not content_id:
+            return None
+
+        async def _publish(request: HttpRequest) -> dict[str, object]:
+            body = self._json_body(request)
+            return await self.api_service.publish_content_provider(
+                content_id=content_id,
+                local_virtual_node_id=str(body.get("local_virtual_node_id") or ""),
+                ttl_seconds=self._optional_int(body.get("ttl_seconds")),
+            )
+
+        return _publish
+
+    def _match_content_getter(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], dict[str, object]] | None:
+        prefix = "/v1/content/"
+        if not path.startswith(prefix) or path.endswith("/range"):
+            return None
+
+        content_id = path[len(prefix):].strip("/")
+        if not content_id or "/" in content_id:
+            return None
+
+        def _get(_request: HttpRequest) -> dict[str, object]:
+            return self.api_service.get_content_info(content_id=content_id)
+
+        return _get
+
+    def _match_content_range_getter(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], dict[str, object]] | None:
+        prefix = "/v1/content/"
+        suffix = "/range"
+        if not path.startswith(prefix) or not path.endswith(suffix):
+            return None
+
+        content_id = path[len(prefix):-len(suffix)].strip("/")
+        if not content_id:
+            return None
+
+        def _get_range(request: HttpRequest) -> dict[str, object]:
+            return self.api_service.read_content_range(
+                content_id=content_id,
+                start_byte=self._query_int(request, "start_byte", default=0),
+                end_byte=self._query_int(request, "end_byte", default=0),
+            )
+
+        return _get_range
+
+    def _match_download_getter(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], dict[str, object]] | None:
+        prefix = "/v1/downloads/"
+        if not path.startswith(prefix):
+            return None
+
+        parts = path[len(prefix):].strip("/").split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            return None
+
+        def _get_download(_request: HttpRequest) -> dict[str, object]:
+            return self.api_service.get_content_download(
+                session_id=parts[0],
+                content_id=parts[1],
+            )
+
+        return _get_download
 
     async def _write_json_response(
         self,
@@ -286,6 +429,27 @@ class CoreHttpApiServer:
         if not isinstance(value, dict):
             raise CoreApiError("invalid_object", "Valor precisa ser objeto JSON.")
         return value
+
+    @staticmethod
+    def _optional_list_of_strings(value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise CoreApiError("invalid_list", "Valor precisa ser lista JSON.")
+        items: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise CoreApiError("invalid_list_item", "Lista precisa conter apenas strings.")
+            items.append(item)
+        return items
+
+    @staticmethod
+    def _optional_int(value: object) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        raise CoreApiError("invalid_integer", "Valor precisa ser inteiro.")
 
     @staticmethod
     def _first_query_value(request: "HttpRequest", name: str) -> str | None:
