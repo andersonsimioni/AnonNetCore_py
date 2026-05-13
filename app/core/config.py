@@ -16,12 +16,12 @@ class CoreConfig:
         default_factory=lambda: [
         
             BootstrapEndpoint(
-                host="192.168.1.25",
+                host="150.162.149.130",
                 port=19001,
                 source="core_config_bootstrap",
             ),
             BootstrapEndpoint(
-                host="192.168.1.25",
+                host="150.162.149.130",
                 port=19002,
                 source="core_config_bootstrap",
             ),
@@ -34,6 +34,8 @@ class CoreConfig:
     physical_ping_runtime_interval_seconds: float = 30.0
     physical_ping_runtime_candidate_limit: int = 4
     random_walk_ttl_route_candidate_limit: int = 32
+    random_walk_ttl_route_error_ms: int = 1000
+    random_walk_ttl_previous_hop_fallback_rtt_ms: float = 40.0
     route_pow_difficulty_bits: int = 16
     physical_session_keepalive_seconds: int = 45
     physical_session_runtime_interval_seconds: float = 2.0
@@ -51,3 +53,13 @@ class CoreConfig:
     dht_client_max_hops: int = 8
     virtual_session_drt_lookup_timeout_seconds: float = 45.0
     virtual_session_drt_lookup_retry_seconds: float = 2.0
+    api_enabled: bool = True
+    api_host: str = "127.0.0.1"
+    api_port: int = 18080
+    api_cors_allow_origin: str = "*"
+    api_websocket_enabled: bool = True
+    api_websocket_host: str = "127.0.0.1"
+    api_websocket_port: int = 18081
+    api_websocket_path: str = "/v1/events"
+    content_storage_dir: str | Path = "data/local/content"
+    content_download_range_size: int = 64 * 1024

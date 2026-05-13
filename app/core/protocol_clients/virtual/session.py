@@ -33,7 +33,6 @@ class VirtualSessionClient:
         *,
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
-        keepalive_interval_seconds: int | None = None,
     ) -> str:
         self.engine.services.log_service.info(
             "virtual_session_client",
@@ -49,7 +48,6 @@ class VirtualSessionClient:
             remote_virtual_node_id=remote_virtual_node_id,
             remote_public_key=remote_virtual_node.public_key,
             entry_point=entry_point,
-            keepalive_interval_seconds=keepalive_interval_seconds,
         )
 
     async def start_session(
@@ -58,7 +56,6 @@ class VirtualSessionClient:
         local_route_path_id: str,
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
-        keepalive_interval_seconds: int | None = None,
     ) -> str:
         existing_session = self.engine.services.session_manager.get_active_session_by_remote_virtual_node_id(
             remote_virtual_node_id
@@ -74,9 +71,7 @@ class VirtualSessionClient:
 
         remote_virtual_node = self._require_remote_virtual_node(remote_virtual_node_id)
 
-        keepalive_seconds = keepalive_interval_seconds or (
-            self.engine.services.config.physical_session_keepalive_seconds
-        )
+        keepalive_seconds = self.engine.services.config.physical_session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
@@ -112,7 +107,6 @@ class VirtualSessionClient:
         remote_virtual_node_id: str,
         remote_public_key: str,
         entry_point: "VirtualRouteEntryPoint",
-        keepalive_interval_seconds: int | None,
     ) -> str:
         existing_session = self.engine.services.session_manager.get_active_session_by_remote_virtual_node_id(
             remote_virtual_node_id
@@ -126,9 +120,7 @@ class VirtualSessionClient:
         if local_virtual_node is None:
             raise ValueError("O virtual node local informado nao existe.")
 
-        keepalive_seconds = keepalive_interval_seconds or (
-            self.engine.services.config.physical_session_keepalive_seconds
-        )
+        keepalive_seconds = self.engine.services.config.physical_session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
@@ -225,6 +217,36 @@ class VirtualSessionClient:
             bound_route_id=session.bound_route_id,
         )
         return message_request_id
+
+    async def send_protocol_message(
+        self,
+        *,
+        session_id: str,
+        message_type: str,
+        payload: dict[str, object] | None = None,
+        virtual_envelope_ciphered: bool = True,
+    ) -> None:
+        if not message_type:
+            raise ValueError("message_type nao pode ser vazio.")
+        if payload is not None and not isinstance(payload, dict):
+            raise ValueError("payload precisa ser um objeto.")
+
+        session = self._require_active_session(session_id)
+        await self._send_virtual_envelope(
+            session=session,
+            message_type=message_type,
+            payload=payload or {},
+            virtual_envelope_ciphered=virtual_envelope_ciphered,
+        )
+        self.engine.services.log_service.info(
+            "virtual_session_client",
+            "sent virtual protocol message",
+            session_id=session.session_id,
+            message_type=message_type,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+        )
 
     async def close_session(
         self,

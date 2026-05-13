@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from .protocols import (
-    ContentProtocolHandler,
     DhtProtocolHandler,
+    VirtualContentProtocolHandler,
     VirtualSessionProtocolHandler,
     VirtualMessageProtocolHandler,
     PingProtocolHandler,
@@ -39,7 +39,7 @@ class MessageRegistry:
         physical_dht = DhtProtocolHandler()
         physical_route_build = RouteBuildProtocolHandler()
         physical_route_execute = RouteExecuteProtocolHandler()
-        virtual_content = ContentProtocolHandler()
+        virtual_content = VirtualContentProtocolHandler()
         virtual_message = VirtualMessageProtocolHandler()
         virtual_session = VirtualSessionProtocolHandler()
 
@@ -200,6 +200,7 @@ class MessageRegistry:
             virtual_content,
             layer="virtual",
             requires_physical_session=True,
+            requires_virtual_session=True,
         )
 
     def get_definition(self, message_type: str | None) -> MessageDefinition | None:

@@ -19,8 +19,10 @@ from smoke_helpers import (
     create_test_core,
     reset_cluster,
     resolve_required_ready_nodes,
+    resolve_cluster_node_count,
     start_cluster,
     wait_for_cluster_containers,
+    wait_for_cluster_network_maturity,
     wait_for_network_ready,
     wait_for_route_active,
     wait_for_virtual_keepalive_ack,
@@ -32,21 +34,20 @@ TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "virtual-sess
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
 CORE_A_PORT = 19101
 CORE_B_PORT = 19102
-VIRTUAL_SESSION_KEEPALIVE_SECONDS = 4
-
 
 async def main() -> None:
     args = parse_args()
+    cluster_nodes = resolve_cluster_node_count(args.cluster_nodes)
     required_ready_nodes = resolve_required_ready_nodes(
-        cluster_nodes=args.cluster_nodes,
+        cluster_nodes=cluster_nodes,
         minimum_remote_nodes=args.minimum_remote_nodes,
     )
 
     reset_core_data_dir(TEST_DATA_ROOT)
     print(f"reset test data: {TEST_DATA_ROOT}")
     reset_cluster()
-    start_cluster(node_count=args.cluster_nodes)
-    wait_for_cluster_containers(expected_count=args.cluster_nodes)
+    start_cluster(node_count=cluster_nodes)
+    wait_for_cluster_containers(expected_count=cluster_nodes)
 
     core_a = create_test_core(
         data_dir=TEST_DATA_ROOT / "core-a",
@@ -80,6 +81,13 @@ async def main() -> None:
         await wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes)
         print(f"cores A/B know enough physical nodes: required_ready_nodes={required_ready_nodes}")
 
+        await wait_for_cluster_network_maturity(
+            core_a,
+            core_b,
+            required_ready_nodes=required_ready_nodes,
+        )
+        print("cluster network maturity reached")
+
         route_result = await create_route_for_virtual_node(core_a)
         initial_path_id = str(route_result["initial_path_id"])
         active_route = await wait_for_route_active(core_a, initial_path_id)
@@ -97,15 +105,18 @@ async def main() -> None:
         session_id = await core_b.services.protocol_clients.virtual.session.start_session_to_virtual_node(
             local_virtual_node_id=vn_b.id,
             remote_virtual_node_id=vn_a.id,
-            keepalive_interval_seconds=VIRTUAL_SESSION_KEEPALIVE_SECONDS,
         )
         await wait_for_virtual_session_active(core_b, session_id)
         print(f"virtual session active: session_id={session_id}")
 
-        await wait_for_virtual_keepalive_ack(core_b, session_id)
-        print(f"OK virtual session keepalive received: session_id={session_id}")
+        await run_virtual_session_protocol_smoke(core_b, session_id)
+        print(f"OK virtual session smoke passed: session_id={session_id}")
     finally:
         await stop_cores(core_b, core_a)
+
+
+async def run_virtual_session_protocol_smoke(engine, session_id: str) -> None:
+    await wait_for_virtual_keepalive_ack(engine, session_id)
 
 
 def parse_args() -> argparse.Namespace:

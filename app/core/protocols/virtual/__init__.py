@@ -1,9 +1,9 @@
-from .content import ContentProtocolHandler
+from .content import VirtualContentProtocolHandler
 from .message import VirtualMessageProtocolHandler
 from .session import VirtualSessionProtocolHandler
 
 __all__ = [
-    "ContentProtocolHandler",
+    "VirtualContentProtocolHandler",
     "VirtualMessageProtocolHandler",
     "VirtualSessionProtocolHandler",
 ]

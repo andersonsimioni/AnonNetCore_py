@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from dataclasses import dataclass
@@ -519,6 +520,18 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         if updated_endpoint_resolution is None:
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
 
+        services.log_service.debug(
+            "route_build",
+            "prepared route ping validation",
+            path_id=validation_request.path_id,
+            final_path_id=final_path_id,
+            ping_id=ping_id,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            remote_virtual_node_id=virtual_node_id,
+            endpoint_status=updated_endpoint_resolution.status,
+        )
+
         route_create_ping = RandomWalkTtlRouteCreatePing(
             path_id=validation_request.path_id,
             ping_id=ping_id,
@@ -669,10 +682,28 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         services,
         route_create_pong: "RandomWalkTtlRouteCreatePong",
     ) -> PacketProcessingResult:
+        services.log_service.debug(
+            "route_build",
+            "received local route create pong",
+            path_id=route_create_pong.path_id,
+            ping_id=route_create_pong.ping_id,
+        )
         route_endpoint_state = services.route_service.get_endpoint_resolution_by_path_id(
             route_path_id=route_create_pong.path_id,
         )
         if route_endpoint_state is None or not route_endpoint_state.shared_secret_hex:
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because endpoint state is missing",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                has_endpoint_state=route_endpoint_state is not None,
+                has_shared_secret=(
+                    route_endpoint_state.shared_secret_hex is not None
+                    if route_endpoint_state is not None
+                    else False
+                ),
+            )
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
 
         metadata = _load_metadata_dict(route_endpoint_state.metadata_json)
@@ -681,64 +712,223 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         expected_round_trip_ttl_ms = metadata.get("expected_round_trip_ttl_ms")
         remote_virtual_node_id = metadata.get("remote_virtual_node_id")
 
+        services.log_service.debug(
+            "route_build",
+            "loaded route pong validation context",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            route_status=route_endpoint_state.status,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            received_ping_id=route_create_pong.ping_id,
+            expected_ping_id=last_ping_id,
+            ping_started_at_monotonic_ms=started_at_monotonic_ms,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            remote_virtual_node_id=remote_virtual_node_id,
+            has_virtual_node_signature=bool(route_endpoint_state.virtual_node_signature),
+            has_physical_node_signature=bool(route_endpoint_state.physical_node_signature),
+            has_public_route_acceptance_signature=bool(
+                route_endpoint_state.public_route_acceptance_signature
+            ),
+        )
+
         if last_ping_id != route_create_pong.ping_id:
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because ping id does not match",
+                path_id=route_create_pong.path_id,
+                received_ping_id=route_create_pong.ping_id,
+                expected_ping_id=last_ping_id,
+            )
             return self._build_invalid_result(envelope, reason="unexpected_route_create_pong")
         if not isinstance(started_at_monotonic_ms, (int, float)):
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because ping start time is missing",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                ping_started_at_monotonic_ms=started_at_monotonic_ms,
+            )
             return self._build_invalid_result(envelope, reason="missing_route_ping_start_time")
         if not isinstance(remote_virtual_node_id, str) or not remote_virtual_node_id:
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because remote virtual node id is missing",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+            )
             return self._build_invalid_result(envelope, reason="missing_remote_virtual_node_id")
 
         observed_round_trip_ms = (monotonic() * 1000.0) - float(started_at_monotonic_ms)
         if not isinstance(expected_round_trip_ttl_ms, (int, float)):
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because expected ttl is missing",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+                observed_round_trip_ms=round(observed_round_trip_ms, 3),
+            )
             return self._build_invalid_result(envelope, reason="missing_expected_round_trip_ttl_ms")
 
-        is_within_expected_ttl = observed_round_trip_ms <= float(expected_round_trip_ttl_ms)
+        route_error_ms = services.config.random_walk_ttl_route_error_ms
+        lower = float(expected_round_trip_ttl_ms - route_error_ms)
+        upper = float(expected_round_trip_ttl_ms + route_error_ms)
+        is_within_expected_ttl = observed_round_trip_ms <= upper
+        services.log_service.debug(
+            "route_build",
+            "calculated route pong rtt window",
+            path_id=route_create_pong.path_id,
+            ping_id=route_create_pong.ping_id,
+            observed_round_trip_ms=round(observed_round_trip_ms, 3),
+            observed_round_trip_ms_rounded=int(round(observed_round_trip_ms)),
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            allowed_error_ms=route_error_ms,
+            allowed_lower_ms=lower,
+            allowed_upper_ms=upper,
+            is_within_expected_ttl=is_within_expected_ttl,
+        )
         if not is_within_expected_ttl:
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because observed rtt exceeded ttl window",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                observed_round_trip_ms=round(observed_round_trip_ms, 3),
+                expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+                allowed_lower_ms=lower,
+                allowed_upper_ms=upper,
+            )
             return self._build_invalid_result(envelope, reason="route_round_trip_ttl_exceeded")
 
         route_endpoint_state = services.route_service.mark_endpoint_resolution_active(
             route_path_id=route_create_pong.path_id,
         )
         if route_endpoint_state is None:
+            services.log_service.warning(
+                "route_build",
+                "route create pong could not activate endpoint resolution",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+            )
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
+        services.log_service.debug(
+            "route_build",
+            "endpoint route resolution activated after pong",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            status=route_endpoint_state.status,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+        )
 
         local_node = services.identity_service.get_local_physical_node_result()
         if local_node is None:
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because local physical node is missing",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+            )
             return self._build_invalid_result(envelope, reason="local_physical_node_not_initialized")
 
         drt_expires_at = _build_drt_entry_expires_at()
+        observed_round_trip_ms_rounded = int(round(observed_round_trip_ms))
+        services.log_service.debug(
+            "route_build",
+            "signing route rtt for drt publication",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            physical_node_id=local_node.id,
+            rtt=observed_round_trip_ms_rounded,
+            expires_at=drt_expires_at,
+        )
         drt_rtt_physical_node_signature = _sign_drt_route_rtt(
             pk_physical_node=local_node.public_key,
             expires_at=drt_expires_at,
-            rtt=int(round(observed_round_trip_ms)),
+            rtt=observed_round_trip_ms_rounded,
             local_physical_node_private_key_pem=local_node.private_key_pem,
         )
         drt_publish_request = services.route_service.build_drt_publish_request_from_endpoint_resolution(
             route_path_id=route_create_pong.path_id,
             physical_node_public_key=local_node.public_key,
             rtt_physical_node_signature=drt_rtt_physical_node_signature,
-            observed_round_trip_ms=int(round(observed_round_trip_ms)),
+            observed_round_trip_ms=observed_round_trip_ms_rounded,
             expires_at=drt_expires_at,
         )
         if drt_publish_request is None:
+            services.log_service.warning(
+                "route_build",
+                "route create pong could not build drt publish request",
+                path_id=route_create_pong.path_id,
+                ping_id=route_create_pong.ping_id,
+                final_path_id=route_endpoint_state.final_path_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+                has_virtual_node_signature=bool(route_endpoint_state.virtual_node_signature),
+                has_physical_node_signature=bool(route_endpoint_state.physical_node_signature),
+                has_final_path_id=bool(route_endpoint_state.final_path_id),
+            )
             return self._build_invalid_result(envelope, reason="drt_publish_request_not_available")
 
+        services.log_service.debug(
+            "route_build",
+            "built drt publish request after pong",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            namespace=drt_publish_request["namespace"],
+            logical_key=drt_publish_request["logical_key"],
+            expires_at=drt_publish_request["expires_at"],
+            record_json_size=len(drt_publish_request["record_json"]),
+            rtt=observed_round_trip_ms_rounded,
+        )
         services.log_service.info(
             "route_build",
             "publishing route in drt",
             path_id=route_create_pong.path_id,
             final_path_id=route_endpoint_state.final_path_id,
             virtual_node_id=remote_virtual_node_id,
-            observed_round_trip_ms=int(round(observed_round_trip_ms)),
+            observed_round_trip_ms=observed_round_trip_ms_rounded,
             expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
             logical_key=drt_publish_request["logical_key"],
         )
-        drt_publish_result = await services.protocol_clients.physical.dht.publish(
-            namespace=drt_publish_request["namespace"],
-            logical_key=drt_publish_request["logical_key"],
-            record_json=drt_publish_request["record_json"],
-            expires_at=drt_publish_request["expires_at"],
+        drt_key = services.dht_service.build_key(
+            drt_publish_request["namespace"],
+            drt_publish_request["logical_key"],
         )
+        try:
+            drt_publish_result = await services.protocol_clients.physical.dht.publish(
+                namespace=drt_publish_request["namespace"],
+                logical_key=drt_publish_request["logical_key"],
+                record_json=drt_publish_request["record_json"],
+                expires_at=drt_publish_request["expires_at"],
+            )
+        except asyncio.TimeoutError:
+            drt_publish_result = {
+                "status": "publish_ack_timeout",
+                "key": drt_key,
+            }
+            services.log_service.warning(
+                "route_build",
+                "drt publish ack timed out after route pong validation",
+                path_id=route_create_pong.path_id,
+                final_path_id=route_endpoint_state.final_path_id,
+                virtual_node_id=remote_virtual_node_id,
+                key=drt_key,
+            )
+        except Exception as error:
+            drt_publish_result = {
+                "status": "publish_failed",
+                "key": drt_key,
+                "error": str(error),
+            }
+            services.log_service.warning(
+                "route_build",
+                "drt publish failed after route pong validation",
+                path_id=route_create_pong.path_id,
+                final_path_id=route_endpoint_state.final_path_id,
+                virtual_node_id=remote_virtual_node_id,
+                key=drt_key,
+                error=str(error),
+            )
         services.log_service.info(
             "route_build",
             "published route in drt",
@@ -747,6 +937,8 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             virtual_node_id=remote_virtual_node_id,
             status=drt_publish_result.get("status"),
             key=drt_publish_result.get("key"),
+            visited_count=drt_publish_result.get("visited_count"),
+            target_node_id=drt_publish_result.get("target_node_id"),
         )
 
         encrypted_ok_payload = aes_encrypt_text(
@@ -766,6 +958,18 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             path_id=route_create_pong.path_id,
             encrypted_payload_hex=encrypted_ok_payload.payload_hex,
             public_route_acceptance_signature=route_endpoint_state.public_route_acceptance_signature,
+        )
+        services.log_service.debug(
+            "route_build",
+            "built route create ok after pong",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            target_previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            encrypted_payload_size=len(encrypted_ok_payload.payload_hex),
+            has_public_route_acceptance_signature=bool(
+                route_endpoint_state.public_route_acceptance_signature
+            ),
+            drt_status=drt_publish_result.get("status"),
         )
 
         return self._build_forward_result(
@@ -796,12 +1000,27 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         selected_candidate = self._select_next_candidate(
             services=services,
             final_physical_node_id=final_physical_node_id,
+            previous_physical_node_id=from_physical_node_id,
             remaining_ttl_ms=route_create.remaining_ttl_ms,
         )
 
-        one_way_rtt_ms = _build_one_way_rtt_ms(selected_candidate.average_rtt_ms)
-        next_remaining_ttl_ms = max(1, int(route_create.remaining_ttl_ms - one_way_rtt_ms))
+        selected_one_way_rtt_ms = _build_one_way_rtt_ms(selected_candidate.average_rtt_ms)
+        next_remaining_ttl_ms = max(1, int(route_create.remaining_ttl_ms - selected_one_way_rtt_ms))
         next_path_id = str(uuid4())
+        services.log_service.debug(
+            "route_build",
+            "selected random walk next hop",
+            current_path_id=route_create.path_id,
+            next_path_id=next_path_id,
+            previous_physical_node_id=from_physical_node_id,
+            selected_physical_node_id=selected_candidate.node_id,
+            final_physical_node_id=final_physical_node_id,
+            selection_reason=selected_candidate.selection_reason,
+            selected_average_rtt_ms=selected_candidate.average_rtt_ms,
+            selected_one_way_rtt_ms=selected_one_way_rtt_ms,
+            remaining_ttl_ms=route_create.remaining_ttl_ms,
+            next_remaining_ttl_ms=next_remaining_ttl_ms,
+        )
 
         services.route_service.create_hop_resolution(
             route_strategy=self.strategy_name,
@@ -821,7 +1040,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             next_remote_physical_node_id=selected_candidate.node_id,
             previous_path_id=route_create.path_id,
             selected_average_rtt_ms=selected_candidate.average_rtt_ms,
-            selected_one_way_rtt_ms=one_way_rtt_ms,
+            selected_one_way_rtt_ms=selected_one_way_rtt_ms,
             payload=next_payload,
         )
 
@@ -930,8 +1149,9 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         *,
         services,
         final_physical_node_id: str,
+        previous_physical_node_id: str,
         remaining_ttl_ms: int,
-    ):
+    ) -> "RandomWalkTtlRouteCandidateSelection":
         route_candidates = services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
             limit=services.config.random_walk_ttl_route_candidate_limit,
         )
@@ -943,7 +1163,34 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             and _build_one_way_rtt_ms(candidate.average_rtt_ms) < remaining_ttl_ms
         ]
         if eligible_intermediaries:
-            return random.choice(eligible_intermediaries)
+            return _as_route_candidate_selection(
+                random.choice(eligible_intermediaries),
+                selection_reason="eligible_intermediary",
+            )
+
+        previous_candidate = next(
+            (
+                candidate
+                for candidate in route_candidates
+                if candidate.node_id == previous_physical_node_id
+                and candidate.node_id != final_physical_node_id
+                and _build_one_way_rtt_ms(candidate.average_rtt_ms) < remaining_ttl_ms
+            ),
+            None,
+        )
+        if previous_candidate is not None:
+            return _as_route_candidate_selection(
+                previous_candidate,
+                selection_reason="previous_hop_revisit",
+            )
+
+        fallback_previous_hop_rtt_ms = services.config.random_walk_ttl_previous_hop_fallback_rtt_ms
+        if previous_physical_node_id != final_physical_node_id and fallback_previous_hop_rtt_ms < remaining_ttl_ms:
+            return RandomWalkTtlRouteCandidateSelection(
+                node_id=previous_physical_node_id,
+                average_rtt_ms=fallback_previous_hop_rtt_ms,
+                selection_reason="previous_hop_revisit_without_rtt",
+            )
 
         final_candidate = next(
             (
@@ -954,9 +1201,16 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             None,
         )
         if final_candidate is not None:
-            return final_candidate
+            return _as_route_candidate_selection(
+                final_candidate,
+                selection_reason="final_candidate",
+            )
 
-        return _FallbackRouteCandidate(node_id=final_physical_node_id, average_rtt_ms=0.0)
+        return RandomWalkTtlRouteCandidateSelection(
+            node_id=final_physical_node_id,
+            average_rtt_ms=0.0,
+            selection_reason="final_fallback",
+        )
 
     def _read_sender_physical_node_id(
         self,
@@ -1118,9 +1372,22 @@ class ForwardRouteCreateResult:
 
 
 @dataclass(slots=True, frozen=True)
-class _FallbackRouteCandidate:
+class RandomWalkTtlRouteCandidateSelection:
     node_id: str
     average_rtt_ms: float
+    selection_reason: str
+
+
+def _as_route_candidate_selection(
+    candidate,
+    *,
+    selection_reason: str,
+) -> RandomWalkTtlRouteCandidateSelection:
+    return RandomWalkTtlRouteCandidateSelection(
+        node_id=candidate.node_id,
+        average_rtt_ms=candidate.average_rtt_ms,
+        selection_reason=selection_reason,
+    )
 
 
 def _build_physical_node_id(public_key: str) -> str:
@@ -1132,7 +1399,7 @@ def _build_virtual_node_id(public_key: str) -> str:
 
 
 def _build_one_way_rtt_ms(observed_rtt_ms: float) -> float:
-    return max(0.0, observed_rtt_ms / 2.0)
+    return max(1.0, observed_rtt_ms / 2.0)
 
 
 def _read_required_string(payload: dict[str, object], field_name: str) -> str:

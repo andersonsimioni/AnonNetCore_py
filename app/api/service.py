@@ -1,0 +1,342 @@
+from __future__ import annotations
+
+import json
+import inspect
+from collections import deque
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict
+from datetime import datetime
+from typing import Any
+
+from crypto import sha512_hex
+from identity import VirtualNodeIdentityCreateInput
+from sessions import VirtualSessionMessage
+
+
+VirtualMessageSink = Callable[[dict[str, object]], Awaitable[None] | None]
+
+
+class CoreApiError(Exception):
+    """Erro esperado da API publica do core."""
+
+    def __init__(self, code: str, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+class CoreApiService:
+    """Fachada publica para apps externas usarem o core sem conhecer internals."""
+
+    def __init__(self, engine, *, inbox_limit: int = 1000) -> None:
+        self.engine = engine
+        self._virtual_message_inbox: deque[dict[str, object]] = deque(maxlen=inbox_limit)
+        self._owned_virtual_handlers: set[str] = set()
+        self._inbox_virtual_message_types: set[str] = set()
+        self._virtual_message_sinks: set[VirtualMessageSink] = set()
+
+    def get_status(self) -> dict[str, object]:
+        local_node = self.engine.services.identity_service.get_local_physical_node_result()
+        sessions = self.engine.services.session_manager.list_sessions()
+        return {
+            "node_name": self.engine.get_runtime_node_name(),
+            "listen_host": self.engine.services.config.listen_host,
+            "listen_port": self.engine.services.config.listen_port,
+            "physical_node_id": local_node.id if local_node else None,
+            "session_count": len(sessions),
+            "active_session_count": len(
+                [session for session in sessions if session.session_state == "active"]
+            ),
+        }
+
+    def list_local_virtual_nodes(self, *, only_active: bool = False) -> list[dict[str, object]]:
+        nodes = self.engine.services.identity_service.list_local_virtual_nodes(
+            only_active=only_active,
+        )
+        return [self._serialize_virtual_node(node, local=True) for node in nodes]
+
+    def create_local_virtual_node(
+        self,
+        *,
+        kind: str = "default",
+        expires_at: str | None = None,
+        is_active: bool = True,
+        metadata_json: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        local_physical_node = self.engine.services.identity_service.ensure_local_physical_node()
+        node = self.engine.services.identity_service.create_local_virtual_node(
+            VirtualNodeIdentityCreateInput(
+                kind=kind,
+                owner_physical_node_id=local_physical_node.id,
+                expires_at=self._parse_optional_datetime(expires_at),
+                is_active=is_active,
+                metadata_json=self._build_metadata_json(metadata_json, metadata),
+            )
+        )
+        return self._serialize_virtual_node(node, local=True)
+
+    def upsert_remote_virtual_node(
+        self,
+        *,
+        public_key: str,
+        node_id: str | None = None,
+        kind: str = "default",
+        status: str = "active",
+        expires_at: str | None = None,
+        metadata_json: str | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        if not public_key:
+            raise CoreApiError("public_key_required", "public_key e obrigatorio.")
+
+        resolved_node_id = node_id or sha512_hex(public_key.encode("utf-8"))
+        node = self.engine.services.identity_service.upsert_remote_virtual_node(
+            node_id=resolved_node_id,
+            public_key=public_key,
+            kind=kind,
+            status=status,
+            expires_at=self._parse_optional_datetime(expires_at),
+            metadata_json=self._build_metadata_json(metadata_json, metadata),
+        )
+        return self._serialize_virtual_node(node, local=False)
+
+    async def dht_publish(
+        self,
+        *,
+        namespace: str,
+        logical_key: str,
+        record_json: str | None = None,
+        record: dict[str, object] | None = None,
+        expires_at: str | None = None,
+    ) -> dict[str, object]:
+        if not record_json and record is None:
+            raise CoreApiError("record_required", "Informe record_json ou record.")
+
+        payload_json = record_json or json.dumps(
+            record,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return await self.engine.services.protocol_clients.physical.dht.publish(
+            namespace=namespace,
+            logical_key=logical_key,
+            record_json=payload_json,
+            expires_at=expires_at,
+        )
+
+    async def dht_query(self, *, namespace: str, logical_key: str) -> dict[str, object]:
+        return await self.engine.services.protocol_clients.physical.dht.query(
+            namespace=namespace,
+            logical_key=logical_key,
+        )
+
+    def list_virtual_sessions(self) -> list[dict[str, object]]:
+        sessions = self.engine.services.session_manager.list_sessions(session_scope="virtual")
+        return [self._serialize_session(session) for session in sessions]
+
+    async def start_virtual_session(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+    ) -> dict[str, object]:
+        session_id = await self.engine.services.protocol_clients.virtual.session.start_session_to_virtual_node(
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
+        )
+        session = self.engine.services.session_manager.get_session_by_session_id(session_id)
+        if session is None:
+            raise CoreApiError("session_not_found", "A virtual session nao ficou disponivel.")
+        return self._serialize_session(session)
+
+    async def send_virtual_message(
+        self,
+        *,
+        session_id: str,
+        app_message_type: str,
+        payload: dict[str, object] | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, object]:
+        resolved_request_id = await self.engine.services.protocol_clients.virtual.session.send_message(
+            session_id=session_id,
+            app_message_type=app_message_type,
+            payload=payload,
+            request_id=request_id,
+        )
+        return {
+            "session_id": session_id,
+            "app_message_type": app_message_type,
+            "request_id": resolved_request_id,
+        }
+
+    def subscribe_virtual_messages(self, *, app_message_type: str) -> dict[str, object]:
+        self.ensure_virtual_message_handler(app_message_type)
+        self._inbox_virtual_message_types.add(app_message_type)
+        return {
+            "app_message_type": app_message_type,
+            "subscribed": True,
+        }
+
+    def ensure_virtual_message_handler(self, app_message_type: str) -> None:
+        if not app_message_type:
+            raise CoreApiError("app_message_type_required", "app_message_type e obrigatorio.")
+
+        session_manager = self.engine.services.session_manager
+        if (
+            session_manager.has_virtual_message_handler(app_message_type)
+            and app_message_type not in self._owned_virtual_handlers
+        ):
+            raise CoreApiError(
+                "handler_already_registered",
+                "Ja existe um handler registrado para esse app_message_type.",
+                status_code=409,
+            )
+
+        session_manager.register_virtual_message_handler(
+            app_message_type,
+            self._handle_virtual_message,
+        )
+        self._owned_virtual_handlers.add(app_message_type)
+
+    def add_virtual_message_sink(self, sink: VirtualMessageSink) -> None:
+        self._virtual_message_sinks.add(sink)
+
+    def remove_virtual_message_sink(self, sink: VirtualMessageSink) -> None:
+        self._virtual_message_sinks.discard(sink)
+
+    def read_virtual_messages(
+        self,
+        *,
+        app_message_type: str | None = None,
+        limit: int = 100,
+        consume: bool = True,
+    ) -> list[dict[str, object]]:
+        resolved_limit = max(1, min(limit, 1000))
+        selected: list[dict[str, object]] = []
+        remaining: deque[dict[str, object]] = deque(maxlen=self._virtual_message_inbox.maxlen)
+
+        while self._virtual_message_inbox:
+            message = self._virtual_message_inbox.popleft()
+            is_match = (
+                app_message_type is None
+                or message.get("app_message_type") == app_message_type
+            )
+            if is_match and len(selected) < resolved_limit:
+                selected.append(message)
+                if consume:
+                    continue
+            remaining.append(message)
+
+        self._virtual_message_inbox = remaining
+        return selected
+
+    async def _handle_virtual_message(self, message: VirtualSessionMessage) -> None:
+        message_data = {
+            **asdict(message),
+            "received_at": datetime.now().astimezone().isoformat(),
+        }
+        if message.app_message_type in self._inbox_virtual_message_types:
+            self._virtual_message_inbox.append(message_data)
+
+        self.engine.services.log_service.info(
+            "core_api",
+            "received inbound virtual message",
+            session_id=message.session_id,
+            app_message_type=message.app_message_type,
+            request_id=message.request_id,
+            sink_count=len(self._virtual_message_sinks),
+        )
+        await self._deliver_virtual_message(message_data)
+
+    async def _deliver_virtual_message(self, message_data: dict[str, object]) -> None:
+        event = {
+            "type": "virtual_message_received",
+            "data": message_data,
+        }
+        for sink in list(self._virtual_message_sinks):
+            result = sink(event)
+            if inspect.isawaitable(result):
+                await result
+
+    @staticmethod
+    def _serialize_virtual_node(node, *, local: bool) -> dict[str, object]:
+        data = {
+            "id": node.id,
+            "public_key": node.public_key,
+            "kind": node.kind,
+            "expires_at": _datetime_to_iso(getattr(node, "expires_at", None)),
+            "metadata_json": getattr(node, "metadata_json", None),
+            "created_at": _datetime_to_iso(getattr(node, "created_at", None)),
+            "updated_at": _datetime_to_iso(getattr(node, "updated_at", None)),
+        }
+        if local:
+            data.update(
+                {
+                    "owner_physical_node_id": node.owner_physical_node_id,
+                    "is_active": node.is_active,
+                }
+            )
+        else:
+            data.update(
+                {
+                    "status": node.status,
+                    "first_seen_at": _datetime_to_iso(node.first_seen_at),
+                    "last_seen_at": _datetime_to_iso(node.last_seen_at),
+                }
+            )
+        return data
+
+    @staticmethod
+    def _serialize_session(session) -> dict[str, object]:
+        return {
+            "id": session.id,
+            "session_id": session.session_id,
+            "session_scope": session.session_scope,
+            "local_identity_type": session.local_identity_type,
+            "local_identity_id": session.local_identity_id,
+            "remote_identity_type": session.remote_identity_type,
+            "remote_identity_id": session.remote_identity_id,
+            "direction": session.direction,
+            "initiator_side": session.initiator_side,
+            "handshake_state": session.handshake_state,
+            "session_state": session.session_state,
+            "bound_route_id": session.bound_route_id,
+            "established_at": _datetime_to_iso(session.established_at),
+            "last_activity_at": _datetime_to_iso(session.last_activity_at),
+            "last_keepalive_sent_at": _datetime_to_iso(session.last_keepalive_sent_at),
+            "keepalive_interval_seconds": session.keepalive_interval_seconds,
+            "keepalive_deadline": _datetime_to_iso(session.keepalive_deadline),
+            "metadata_json": session.metadata_json,
+        }
+
+    @staticmethod
+    def _build_metadata_json(
+        metadata_json: str | None,
+        metadata: dict[str, object] | None,
+    ) -> str | None:
+        if metadata_json:
+            return metadata_json
+        if metadata is None:
+            return None
+        if not isinstance(metadata, dict):
+            raise CoreApiError("metadata_invalid", "metadata precisa ser um objeto.")
+        return json.dumps(metadata, separators=(",", ":"), sort_keys=True)
+
+    @staticmethod
+    def _parse_optional_datetime(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise CoreApiError("datetime_invalid", "Datetime informado e invalido.") from error
+
+
+def _datetime_to_iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)

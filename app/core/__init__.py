@@ -16,8 +16,8 @@ from .protocol_clients import (
     VirtualSessionClient,
 )
 from .protocols import (
-    ContentProtocolHandler,
     DhtProtocolHandler,
+    VirtualContentProtocolHandler,
     VirtualSessionProtocolHandler,
     PacketProtocol,
     PingProtocolHandler,
@@ -47,7 +47,6 @@ from .runtime import (
 from .services import EngineServices
 
 __all__ = [
-    "ContentProtocolHandler",
     "CoreConfig",
     "CoreEngine",
     "DhtMaintenanceRuntime",
@@ -57,6 +56,7 @@ __all__ = [
     "MessageRegistry",
     "MessageRouter",
     "VirtualProtocolClients",
+    "VirtualContentProtocolHandler",
     "VirtualSessionClient",
     "VirtualSessionProtocolHandler",
     "PacketContext",

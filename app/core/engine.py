@@ -42,6 +42,8 @@ class CoreEngine:
         self.bootstrap_result: BootstrapResolutionResult | None = None
         self.message_router = MessageRouter()
         self._message_sequence = 0
+        self._api_http_server = None
+        self._api_websocket_server = None
 
     async def start(self) -> None:
         self._configure_runtime_environment()
@@ -54,8 +56,10 @@ class CoreEngine:
         await self._request_bootstrap_physical_node_info()
         if self.services.runtime_services is not None:
             await self.services.runtime_services.start()
+        await self._start_api_server_if_enabled()
 
     async def stop(self) -> None:
+        await self._stop_api_server()
         if self.services.runtime_services is not None:
             await self.services.runtime_services.stop()
         await self.services.transport.stop()
@@ -120,6 +124,54 @@ class CoreEngine:
             dns_seeds=self.services.config.bootstrap_dns_seeds,
             public_endpoints=self.services.config.bootstrap_public_endpoints,
         )
+
+    async def _start_api_server_if_enabled(self) -> None:
+        config = self.services.config
+        if not config.api_enabled:
+            return
+        if self.services.api_service is None:
+            return
+
+        from api import CoreHttpApiServer, CoreWebSocketApiServer
+
+        self._api_http_server = CoreHttpApiServer(
+            self.services.api_service,
+            host=config.api_host,
+            port=config.api_port,
+            cors_allow_origin=config.api_cors_allow_origin,
+        )
+        await self._api_http_server.start()
+        self.services.log_service.info(
+            "core_api",
+            "http api server started",
+            host=config.api_host,
+            port=config.api_port,
+        )
+        if config.api_websocket_enabled:
+            self._api_websocket_server = CoreWebSocketApiServer(
+                self.services.api_service,
+                host=config.api_websocket_host,
+                port=config.api_websocket_port,
+                path=config.api_websocket_path,
+            )
+            await self._api_websocket_server.start()
+            self.services.log_service.info(
+                "core_api",
+                "websocket api server started",
+                host=config.api_websocket_host,
+                port=config.api_websocket_port,
+                path=config.api_websocket_path,
+            )
+
+    async def _stop_api_server(self) -> None:
+        if self._api_websocket_server is not None:
+            await self._api_websocket_server.stop()
+            self._api_websocket_server = None
+            self.services.log_service.info("core_api", "websocket api server stopped")
+        if self._api_http_server is not None:
+            await self._api_http_server.stop()
+            self._api_http_server = None
+            self.services.log_service.info("core_api", "http api server stopped")
 
     def _configure_runtime_environment(self) -> None:
         self._configure_transport_listener()

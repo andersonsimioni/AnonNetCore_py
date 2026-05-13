@@ -41,6 +41,8 @@ def create_isolated_core(
         listen_port=listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
+    config.api_enabled = False
+    config.content_storage_dir = data_dir / "content"
     if bootstrap_public_endpoints is not None:
         config.bootstrap_public_endpoints = list(bootstrap_public_endpoints)
     if bootstrap_dns_seeds is not None:

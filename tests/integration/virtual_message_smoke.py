@@ -13,6 +13,7 @@ if str(APP_ROOT) not in sys.path:
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
+    MIN_CLUSTER_NODES,
     create_local_virtual_node,
     create_route_for_virtual_node,
     create_test_core,
@@ -20,23 +21,21 @@ from smoke_helpers import (
     resolve_cluster_node_count,
     resolve_required_ready_nodes,
     start_cluster,
+    validate_virtual_message_roundtrip,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
-    wait_for_drt_entry,
     wait_for_network_ready,
     wait_for_route_active,
     wait_for_virtual_session_active,
 )
-from virtual_content_smoke import run_virtual_content_protocol_smoke
-from virtual_message_smoke import run_virtual_message_protocol_smoke
-from virtual_session_smoke import run_virtual_session_protocol_smoke
 
 
-TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "core-full-flow-smoke"
+TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "virtual-message-smoke"
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
-CORE_A_PORT = 19201
-CORE_B_PORT = 19202
-DEFAULT_CLUSTER_NODES = 5
+CORE_A_PORT = 19301
+CORE_B_PORT = 19302
+APP_MESSAGE_TYPE = "integration.virtual-message.echo"
+APP_REPLY_MESSAGE_TYPE = "integration.virtual-message.echo.reply"
 
 
 async def main() -> None:
@@ -70,13 +69,13 @@ async def main() -> None:
 
         vn_a = create_local_virtual_node(
             core_a,
-            kind="full-flow-vn-a",
-            metadata_source="core_full_flow_smoke",
+            kind="virtual-message-vn-a",
+            metadata_source="virtual_message_smoke",
         )
         vn_b = create_local_virtual_node(
             core_b,
-            kind="full-flow-vn-b",
-            metadata_source="core_full_flow_smoke",
+            kind="virtual-message-vn-b",
+            metadata_source="virtual_message_smoke",
         )
         print(f"checkpoint 2 OK: virtual nodes created: vn_a={vn_a.id} vn_b={vn_b.id}")
 
@@ -99,50 +98,48 @@ async def main() -> None:
             f"initial_path_id={initial_path_id} final_path_id={active_route.final_path_id}"
         )
 
-        await wait_for_drt_entry(core_b, virtual_node_public_key=vn_a.public_key)
-        print("checkpoint 6 OK: DRT entry discovered from core B")
-
         core_b.services.identity_service.upsert_remote_virtual_node(
             node_id=vn_a.id,
             public_key=vn_a.public_key,
             kind=vn_a.kind,
             status="active",
-            metadata_json='{"source":"integration_test_identity_exchange"}',
+            metadata_json='{"source":"virtual_message_smoke_identity_exchange"}',
         )
-        print("checkpoint 7 OK: core B learned VN A identity")
+        print("checkpoint 6 OK: core B learned VN A identity")
 
         session_id = await core_b.services.protocol_clients.virtual.session.start_session_to_virtual_node(
             local_virtual_node_id=vn_b.id,
             remote_virtual_node_id=vn_a.id,
         )
         await wait_for_virtual_session_active(core_b, session_id)
-        print(f"checkpoint 8 OK: virtual session active: session_id={session_id}")
+        print(f"checkpoint 7 OK: virtual session active: session_id={session_id}")
 
-        print("running virtual_session_smoke validation with reused cluster and cores")
-        await run_virtual_session_protocol_smoke(core_b, session_id)
-        print("checkpoint 9 OK: virtual session smoke passed")
-
-        print("running virtual_message_smoke validation with reused cluster and cores")
         await run_virtual_message_protocol_smoke(core_a, core_b, session_id)
-        print("checkpoint 10 OK: virtual message smoke passed")
-
-        print("running virtual_content_smoke validation with reused cluster and cores")
-        downloaded_bytes = await run_virtual_content_protocol_smoke(
-            provider_engine=core_a,
-            downloader_engine=core_b,
-            session_id=session_id,
-        )
-        print(f"checkpoint 11 OK: virtual content smoke passed: size_bytes={len(downloaded_bytes)}")
-        print("OK core full flow smoke passed")
+        print("checkpoint 8 OK: virtual message roundtrip delivered")
+        print("OK virtual message smoke passed")
     finally:
         await stop_cores(core_b, core_a)
 
 
+async def run_virtual_message_protocol_smoke(core_a, core_b, session_id: str) -> None:
+    await validate_virtual_message_roundtrip(
+        sender_engine=core_b,
+        receiver_engine=core_a,
+        session_id=session_id,
+        app_message_type=APP_MESSAGE_TYPE,
+        reply_message_type=APP_REPLY_MESSAGE_TYPE,
+        payload={
+            "text": "hello from virtual message smoke",
+            "sequence": 1,
+        },
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Full integration smoke: executa os smokes virtuais reutilizando cluster e cores.",
+        description="Smoke test: VirtualMessageProtocolHandler entrega e responde mensagens virtuais.",
     )
-    parser.add_argument("--cluster-nodes", type=int, default=DEFAULT_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     return parser.parse_args()
 
@@ -151,5 +148,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as error:
-        print(f"core full flow smoke failed: {error}", file=sys.stderr)
+        print(f"virtual message smoke failed: {error}", file=sys.stderr)
         raise

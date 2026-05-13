@@ -16,14 +16,20 @@ if str(APP_ROOT) not in sys.path:
 
 from crypto import sha512_hex
 from identity import VirtualNodeIdentityCreateInput
+from sessions import VirtualSessionMessageReply
 
 from core_helpers import create_isolated_core
 
 
-MIN_CLUSTER_NODES = 3
+MIN_CLUSTER_NODES = 8
 DEFAULT_READY_CLUSTER_RATIO = 0.6
 NETWORK_READY_TIMEOUT_SECONDS = 180.0
 FORCED_EXCHANGE_INTERVAL_SECONDS = 15.0
+CLUSTER_NETWORK_MATURITY_SECONDS = 25.0
+CLUSTER_NETWORK_MATURITY_TICK_SECONDS = 2.0
+CLUSTER_NETWORK_MATURITY_STABLE_TICKS = 3
+SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS = 2_000
+SMOKE_ROUTE_ONE_WAY_TTL_MS = SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS // 2
 
 
 def resolve_required_ready_nodes(
@@ -37,6 +43,10 @@ def resolve_required_ready_nodes(
     return max(1, math.ceil(cluster_nodes * DEFAULT_READY_CLUSTER_RATIO))
 
 
+def resolve_cluster_node_count(node_count: int) -> int:
+    return max(node_count, MIN_CLUSTER_NODES)
+
+
 def reset_cluster() -> None:
     command = [
         sys.executable,
@@ -47,7 +57,7 @@ def reset_cluster() -> None:
 
 
 def start_cluster(*, node_count: int) -> None:
-    node_count = max(node_count, MIN_CLUSTER_NODES)
+    node_count = resolve_cluster_node_count(node_count)
     detach_argument = "-Detach" if platform.system().lower() == "windows" else "--detach"
     command = [
         sys.executable,
@@ -163,6 +173,64 @@ async def wait_for_network_ready(
     )
 
 
+async def wait_for_cluster_network_maturity(
+    *engines,
+    required_ready_nodes: int | None = None,
+    warmup_seconds: float = CLUSTER_NETWORK_MATURITY_SECONDS,
+    tick_seconds: float = CLUSTER_NETWORK_MATURITY_TICK_SECONDS,
+) -> None:
+    if not engines:
+        return
+
+    minimum_ready_nodes = max(1, required_ready_nodes or 1)
+    stable_ticks = 0
+    deadline = asyncio.get_running_loop().time() + warmup_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        snapshots = await asyncio.gather(
+            *(_refresh_engine_network_context(engine) for engine in engines),
+            return_exceptions=True,
+        )
+        ready_counts = [
+            snapshot.ready_route_candidates
+            for snapshot in snapshots
+            if isinstance(snapshot, NetworkMaturitySnapshot)
+        ]
+        network_is_ready = (
+            len(ready_counts) == len(engines)
+            and all(count >= minimum_ready_nodes for count in ready_counts)
+        )
+        stable_ticks = stable_ticks + 1 if network_is_ready else 0
+
+        print(
+            "waiting cluster network maturity: "
+            f"ready_route_candidates={ready_counts} "
+            f"required={minimum_ready_nodes} "
+            f"stable_ticks={stable_ticks}/{CLUSTER_NETWORK_MATURITY_STABLE_TICKS} "
+            f"remaining_seconds={max(0.0, deadline - asyncio.get_running_loop().time()):.1f}"
+        )
+
+        if stable_ticks >= CLUSTER_NETWORK_MATURITY_STABLE_TICKS:
+            return
+
+        await asyncio.sleep(tick_seconds)
+
+    raise TimeoutError("Timed out waiting for cluster network maturity.")
+
+
+class NetworkMaturitySnapshot:
+    def __init__(self, *, ready_route_candidates: int) -> None:
+        self.ready_route_candidates = ready_route_candidates
+
+
+async def _refresh_engine_network_context(engine) -> NetworkMaturitySnapshot:
+    await request_known_nodes_from_active_peers(engine)
+    await refresh_route_candidate_rtts(engine)
+    candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
+        limit=32,
+    )
+    return NetworkMaturitySnapshot(ready_route_candidates=len(candidates))
+
+
 async def request_known_nodes_from_active_peers(engine) -> None:
     exchange_candidates = engine.services.identity_service.list_remote_physical_nodes_for_info_exchange(
         limit=4,
@@ -224,8 +292,8 @@ async def create_route_for_virtual_node(engine) -> dict[str, object]:
     return await engine.services.protocol_clients.physical.route_build.start_random_walk_ttl_route(
         first_hop_physical_node_id=first_hop.node_id,
         final_physical_node_public_key=final_node.public_key,
-        remaining_ttl_ms=30_000,
-        expected_round_trip_ttl_ms=30_000,
+        remaining_ttl_ms=SMOKE_ROUTE_ONE_WAY_TTL_MS,
+        expected_round_trip_ttl_ms=SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS,
     )
 
 
@@ -290,7 +358,7 @@ async def wait_for_virtual_keepalive_ack(
     engine,
     session_id: str,
     *,
-    timeout_seconds: float = 20.0,
+    timeout_seconds: float = 70.0,
 ) -> None:
     async def has_keepalive_ack() -> bool:
         session = engine.services.session_manager.get_session_by_session_id(session_id)
@@ -300,6 +368,85 @@ async def wait_for_virtual_keepalive_ack(
         return session.last_activity_at > session.last_keepalive_sent_at
 
     await wait_until(has_keepalive_ack, timeout_seconds=timeout_seconds, label="virtual keepalive ack")
+
+
+async def validate_virtual_message_roundtrip(
+    *,
+    sender_engine,
+    receiver_engine,
+    session_id: str,
+    app_message_type: str = "integration.virtual.message",
+    reply_message_type: str = "integration.virtual.message.reply",
+    payload: dict[str, object] | None = None,
+    timeout_seconds: float = 20.0,
+) -> None:
+    """Valida entrega e resposta via VIRTUAL_SESSION_DATA sobre sessao virtual ativa."""
+
+    message_payload = payload or {"value": "hello-virtual-message"}
+    loop = asyncio.get_running_loop()
+    received_request = loop.create_future()
+    received_reply = loop.create_future()
+
+    def handle_request(message):
+        if message.session_id != session_id:
+            return None
+        if not received_request.done():
+            received_request.set_result(message)
+
+        return VirtualSessionMessageReply(
+            app_message_type=reply_message_type,
+            payload={
+                "echo": message.payload,
+                "received_by": message.local_virtual_node_id,
+            },
+            request_id=message.request_id,
+        )
+
+    def handle_reply(message):
+        if message.session_id != session_id:
+            return None
+        if not received_reply.done():
+            received_reply.set_result(message)
+        return None
+
+    receiver_engine.services.session_manager.register_virtual_message_handler(
+        app_message_type,
+        handle_request,
+    )
+    sender_engine.services.session_manager.register_virtual_message_handler(
+        reply_message_type,
+        handle_reply,
+    )
+
+    request_id = await sender_engine.services.protocol_clients.virtual.session.send_message(
+        session_id=session_id,
+        app_message_type=app_message_type,
+        payload=message_payload,
+    )
+
+    await wait_until(
+        lambda: _future_done(received_request),
+        timeout_seconds=timeout_seconds,
+        label="virtual message request delivered",
+    )
+    await wait_until(
+        lambda: _future_done(received_reply),
+        timeout_seconds=timeout_seconds,
+        label="virtual message reply delivered",
+    )
+
+    request_message = received_request.result()
+    reply_message = received_reply.result()
+    if request_message.request_id != request_id:
+        raise RuntimeError("Virtual message request_id mismatch on receiver.")
+    if reply_message.request_id != request_id:
+        raise RuntimeError("Virtual message reply request_id mismatch.")
+    if reply_message.payload.get("echo") != message_payload:
+        raise RuntimeError("Virtual message reply payload mismatch.")
+
+
+async def _future_done(future: asyncio.Future) -> bool:
+    return future.done()
 
 
 async def wait_until(predicate, *, timeout_seconds: float, label: str) -> None:

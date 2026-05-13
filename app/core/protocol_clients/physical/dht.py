@@ -139,8 +139,22 @@ class PhysicalDhtClient:
                 "no initial session for query, trying local responsibility path",
                 key=key_hex,
             )
-            return self._query_locally_if_responsible(
+            local_result = self._query_locally_if_responsible(
                 key_hex=key_hex,
+            )
+            if local_result.get("status") == "found":
+                return local_result
+
+            current_session = self._select_any_active_remote_session()
+            if current_session is None:
+                return local_result
+
+            self.engine.services.log_service.info(
+                "physical_dht_client",
+                "using active remote session after local query miss",
+                key=key_hex,
+                session_id=current_session.session_id,
+                remote_physical_node_id=current_session.remote_identity_id,
             )
 
         for _ in range(self._max_hops):
@@ -169,6 +183,21 @@ class PhysicalDhtClient:
                 return result
 
             if result.get("status") == "not_found":
+                next_session = await self._advance_to_next_session(
+                    responsible_nodes=result.get("responsible_nodes", []),
+                    visited_node_ids=visited_node_ids,
+                )
+                if next_session is not None:
+                    self.engine.services.log_service.info(
+                        "physical_dht_client",
+                        "dht query continuing after responsible node miss",
+                        key=result.get("key"),
+                        next_remote_physical_node_id=next_session.remote_identity_id,
+                        visited_count=len(visited_node_ids),
+                    )
+                    current_session = next_session
+                    continue
+
                 self.engine.services.log_service.info(
                     "physical_dht_client",
                     "dht query finished with not found",
@@ -426,6 +455,13 @@ class PhysicalDhtClient:
                 return session
 
         return None
+
+    def _select_any_active_remote_session(self):
+        active_sessions = self.engine.services.session_manager.list_active_physical_sessions()
+        if not active_sessions:
+            return None
+
+        return random.choice(active_sessions)
 
     def _publish_locally_if_responsible(
         self,
