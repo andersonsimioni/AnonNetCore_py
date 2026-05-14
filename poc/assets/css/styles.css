@@ -38,6 +38,7 @@ textarea {
 }
 
 button {
+  max-width: 100%;
   border: 0;
   border-radius: 999px;
   padding: 0.78rem 1.05rem;
@@ -148,6 +149,7 @@ code {
 
 .topbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   justify-content: flex-end;
@@ -316,13 +318,12 @@ code {
   display: grid;
   align-content: start;
   gap: 1rem;
+  min-width: 0;
 }
 
 .left-rail {
   position: sticky;
   top: 5rem;
-  max-height: calc(100vh - 6rem);
-  overflow: auto;
   padding-bottom: 1rem;
 }
 
@@ -347,8 +348,9 @@ code {
 
 .profile-card {
   position: relative;
-  min-height: 17.5rem;
-  overflow: visible;
+  display: grid;
+  justify-items: center;
+  overflow: hidden;
   padding: 0 1.1rem 1.25rem;
   text-align: center;
 }
@@ -375,9 +377,11 @@ code {
 }
 
 .avatar {
+  position: relative;
+  z-index: 1;
   width: clamp(6.4rem, 9vw, 7.4rem);
   height: clamp(6.4rem, 9vw, 7.4rem);
-  margin: clamp(-3.7rem, -4.5vw, -3.2rem) auto 0.8rem;
+  margin: -3.35rem auto 0.8rem;
   border: 5px solid #fff;
   font-size: 2.1rem;
   box-shadow: 0 12px 28px rgba(20, 32, 51, 0.18);
@@ -398,6 +402,7 @@ code {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.6rem;
+  width: 100%;
 }
 
 .profile-stats span {
@@ -455,6 +460,7 @@ code {
   display: grid;
   align-content: start;
   gap: 1rem;
+  min-width: 0;
 }
 
 .hero-feed {
@@ -507,6 +513,7 @@ code {
 }
 
 .composer textarea {
+  min-width: 0;
   min-height: 6rem;
   border-radius: 18px;
   background: #f5f7fb;
@@ -549,12 +556,18 @@ code {
   grid-template-columns: auto 1fr;
   gap: 0.85rem;
   padding: 1rem;
+  min-width: 0;
+}
+
+.post-body {
+  min-width: 0;
 }
 
 .post-body header,
 .post-body footer,
 .section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -582,6 +595,7 @@ code {
   color: #23324a;
   font-size: 1.02rem;
   line-height: 1.62;
+  overflow-wrap: anywhere;
 }
 
 .post-body footer {
@@ -604,6 +618,11 @@ code {
   padding: 0.65rem;
   background: var(--surface-soft);
   cursor: pointer;
+  min-width: 0;
+}
+
+.friend-item > div {
+  min-width: 0;
 }
 
 .friend-item strong,
@@ -616,6 +635,7 @@ code {
 .friend-item small {
   color: var(--muted);
   font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .friend-item small {
@@ -680,6 +700,7 @@ code {
 @media (max-width: 860px) {
   .topbar {
     grid-template-columns: 1fr;
+    padding: 0.75rem 1rem;
   }
 
   .topbar-actions {
@@ -709,6 +730,7 @@ code {
 @media (max-width: 560px) {
   .social-shell {
     width: min(100% - 0.8rem, 1320px);
+    padding-top: 0.65rem;
   }
 
   .composer,
@@ -716,9 +738,19 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .mini-avatar,
+  .post-avatar {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
   .composer-actions {
     grid-column: auto;
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .profile-stats {
+    grid-template-columns: 1fr;
   }
 }

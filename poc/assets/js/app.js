@@ -366,6 +366,9 @@ async function publishLocalPost(event) {
     authorName: active.profile.display_name || "Voce",
     text,
   }));
+  saveLocalState();
+  render();
+  event.currentTarget.reset();
   try {
     const result = await saveCurrentUserState();
     appendEvent({
@@ -375,8 +378,6 @@ async function publishLocalPost(event) {
         content_id: result.content.content_id,
       },
     });
-    event.currentTarget.reset();
-    render();
     notifyUser("success", "Post publicado", "Seu estado social foi atualizado.");
   } catch (error) {
     appendError(error);

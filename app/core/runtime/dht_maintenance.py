@@ -185,24 +185,41 @@ class DhtMaintenanceRuntime:
                 ),
             )
         except Exception as error:
+            self._remember_publish(dht_record)
             services.log_service.warning(
                 "dht_maintenance_runtime",
                 "failed to publish validated dht record",
                 key=dht_record.key,
                 namespace=dht_record.namespace,
                 logical_key=dht_record.logical_key,
-                error=str(error),
+                error_type=type(error).__name__,
+                error=repr(error),
             )
             return
 
         self._remember_publish(dht_record)
+        publish_status = publish_result.get("status")
+        if publish_status not in {"stored", "stored_locally"}:
+            services.log_service.warning(
+                "dht_maintenance_runtime",
+                "dht record maintenance publish did not store record",
+                key=dht_record.key,
+                namespace=dht_record.namespace,
+                logical_key=dht_record.logical_key,
+                status=publish_status,
+                visited_count=len(publish_result.get("visited_node_ids", [])),
+                responsible_node_count=len(publish_result.get("responsible_nodes", [])),
+                reason=publish_result.get("reason"),
+            )
+            return
+
         services.log_service.info(
             "dht_maintenance_runtime",
             "finished dht record maintenance publish",
             key=dht_record.key,
             namespace=dht_record.namespace,
             logical_key=dht_record.logical_key,
-            status=publish_result.get("status"),
+            status=publish_status,
         )
 
     def _build_seed_parent_payload(self, namespace: str, fragment_payload):

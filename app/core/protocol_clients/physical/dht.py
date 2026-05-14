@@ -61,13 +61,32 @@ class PhysicalDhtClient:
                 remote_physical_node_id=current_session.remote_identity_id,
                 visited_count=len(visited_node_ids),
             )
-            result = await self._request_publish_once(
-                session_id=current_session.session_id,
-                namespace=namespace,
-                logical_key=logical_key,
-                record_json=record_json,
-                expires_at=expires_at,
-            )
+            try:
+                result = await self._request_publish_once(
+                    session_id=current_session.session_id,
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    record_json=record_json,
+                    expires_at=expires_at,
+                )
+            except asyncio.TimeoutError:
+                self.engine.services.log_service.warning(
+                    "physical_dht_client",
+                    "dht publish timed out waiting for hop response",
+                    key=key_hex,
+                    session_id=current_session.session_id,
+                    remote_physical_node_id=current_session.remote_identity_id,
+                    timeout_seconds=self._response_timeout_seconds,
+                    visited_count=len(visited_node_ids),
+                )
+                return {
+                    "status": "publish_ack_timeout",
+                    "key": key_hex,
+                    "reason": "dht_publish_hop_timeout",
+                    "timeout_seconds": self._response_timeout_seconds,
+                    "remote_physical_node_id": current_session.remote_identity_id,
+                    "visited_node_ids": sorted(visited_node_ids),
+                }
             if result.get("status") == "stored":
                 self.engine.services.log_service.info(
                     "physical_dht_client",
