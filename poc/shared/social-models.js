@@ -1,6 +1,6 @@
 export const SOCIAL_APP_ID = "anonnet.social";
 export const SOCIAL_PROFILE_DPT_TITLE = "profile";
-export const SOCIAL_PROFILE_CONTENT_TYPE = "application/anonnet-social-profile+json";
+export const SOCIAL_PROFILE_CONTENT_TYPE = "application/anonnet-social-user-state+json";
 export const SOCIAL_DIRECT_MESSAGE_TYPE = "social.direct_message";
 export const SOCIAL_FEED_POST_TYPE = "social.feed_post";
 
@@ -57,6 +57,19 @@ export function createFeedPost({
     author_name: authorName,
     text,
     created_at: new Date().toISOString(),
+  };
+}
+
+export function createUserState({
+  profile,
+  feedPosts = [],
+}) {
+  return {
+    schema: "anonnet.social.user_state.v1",
+    app_id: SOCIAL_APP_ID,
+    profile,
+    feed_posts: feedPosts,
+    updated_at: new Date().toISOString(),
   };
 }
 

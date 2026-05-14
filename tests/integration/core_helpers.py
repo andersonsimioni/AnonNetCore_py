@@ -43,6 +43,9 @@ def create_isolated_core(
     )
     config.api_enabled = False
     config.content_storage_dir = data_dir / "content"
+    config.virtual_route_maintenance_runtime_interval_seconds = 1.0
+    config.virtual_route_maintenance_expected_round_trip_ttl_ms = 2000
+    config.virtual_route_maintenance_candidate_limit = 16
     if bootstrap_public_endpoints is not None:
         config.bootstrap_public_endpoints = list(bootstrap_public_endpoints)
     if bootstrap_dns_seeds is not None:

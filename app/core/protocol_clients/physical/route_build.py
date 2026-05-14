@@ -18,12 +18,14 @@ class RouteBuildClient:
         remaining_ttl_ms: int,
         nonce: int | None = None,
         expected_round_trip_ttl_ms: int | None = None,
+        local_virtual_node_id: str | None = None,
     ) -> dict[str, object]:
         initial_path_id = str(uuid4())
         self.engine.services.log_service.info(
             "route_build_client",
             "starting random walk ttl route build",
             initial_path_id=initial_path_id,
+            local_virtual_node_id=local_virtual_node_id,
             first_hop_physical_node_id=first_hop_physical_node_id,
             remaining_ttl_ms=remaining_ttl_ms,
             expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
@@ -45,6 +47,7 @@ class RouteBuildClient:
             expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
             route_strategy="random_walk_ttl_based",
             route_nonce=route_nonce,
+            local_virtual_node_id=local_virtual_node_id,
         )
 
         payload = strategy.build_initial_route_create(
@@ -69,6 +72,7 @@ class RouteBuildClient:
         return {
             "route_strategy": "random_walk_ttl_based",
             "initial_path_id": initial_path_id,
+            "local_virtual_node_id": local_virtual_node_id,
             "first_hop_physical_node_id": first_hop_physical_node_id,
             "final_physical_node_public_key": final_physical_node_public_key,
             "remaining_ttl_ms": remaining_ttl_ms,

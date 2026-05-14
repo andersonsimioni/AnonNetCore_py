@@ -15,12 +15,12 @@ class CoreConfig:
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
         default_factory=lambda: [
             BootstrapEndpoint(
-                host="192.168.1.25",
+                host="150.162.148.55",
                 port=19001,
                 source="core_config_bootstrap",
             ),
             BootstrapEndpoint(
-                host="192.168.1.25",
+                host="150.162.148.55",
                 port=19002,
                 source="core_config_bootstrap",
             ),
@@ -35,6 +35,10 @@ class CoreConfig:
     random_walk_ttl_route_candidate_limit: int = 32
     random_walk_ttl_route_error_ms: int = 1000
     random_walk_ttl_previous_hop_fallback_rtt_ms: float = 40.0
+    virtual_route_maintenance_runtime_interval_seconds: float = 10.0
+    virtual_route_maintenance_route_build_interval_seconds: float = 24 * 60 * 60
+    virtual_route_maintenance_expected_round_trip_ttl_ms: int = 2000
+    virtual_route_maintenance_candidate_limit: int = 16
     route_pow_difficulty_bits: int = 16
     physical_session_keepalive_seconds: int = 45
     physical_session_runtime_interval_seconds: float = 2.0

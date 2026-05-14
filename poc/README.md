@@ -49,6 +49,14 @@ Fluxo inicial esperado:
 
 ## Rodar
 
+Ambiente completo com cluster Docker, core local e front:
+
+```powershell
+python run_poc.py 10
+```
+
+Use `Ctrl+C` para parar o core local e o servidor web. O cluster Docker fica em background e pode ser derrubado com `python cluster\down_nodes.py`.
+
 Sirva a pasta `poc` como raiz estatica para o browser conseguir importar `poc/shared`:
 
 ```powershell
@@ -60,5 +68,13 @@ Abra `http://127.0.0.1:18100/web/`.
 ## Smoke JS
 
 ```powershell
-node poc\tests\social-smoke.mjs
+node poc\tests\social-service-smoke.mjs
+```
+
+## Smoke Integrado
+
+Esse e o smoke principal da PoC. Ele sobe cluster Docker, dois cores locais, cria VNs reais, salva estado de usuario, cria rota, abre sessao virtual e valida mensagem direta entregue pela rede.
+
+```powershell
+python poc\tests\social-smoke.py --cluster-nodes 5
 ```

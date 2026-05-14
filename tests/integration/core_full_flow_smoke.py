@@ -14,7 +14,6 @@ if str(APP_ROOT) not in sys.path:
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
     create_local_virtual_node,
-    create_route_for_virtual_node,
     create_test_core,
     reset_cluster,
     resolve_cluster_node_count,
@@ -24,7 +23,7 @@ from smoke_helpers import (
     wait_for_cluster_network_maturity,
     wait_for_drt_entry,
     wait_for_network_ready,
-    wait_for_route_active,
+    wait_for_runtime_route_active,
     wait_for_virtual_session_active,
 )
 from virtual_content_smoke import run_virtual_content_protocol_smoke
@@ -91,12 +90,10 @@ async def main() -> None:
         )
         print("checkpoint 4 OK: cluster network maturity reached")
 
-        route_result = await create_route_for_virtual_node(core_a)
-        initial_path_id = str(route_result["initial_path_id"])
-        active_route = await wait_for_route_active(core_a, initial_path_id)
+        active_route = await wait_for_runtime_route_active(core_a, local_virtual_node_id=vn_a.id)
         print(
-            "checkpoint 5 OK: route active: "
-            f"initial_path_id={initial_path_id} final_path_id={active_route.final_path_id}"
+            "checkpoint 5 OK: route active from runtime: "
+            f"initial_path_id={active_route.initial_path_id} final_path_id={active_route.final_path_id}"
         )
 
         await wait_for_drt_entry(core_b, virtual_node_public_key=vn_a.public_key)

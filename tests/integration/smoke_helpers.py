@@ -29,8 +29,6 @@ FORCED_EXCHANGE_INTERVAL_SECONDS = 15.0
 CLUSTER_NETWORK_MATURITY_SECONDS = 25.0
 CLUSTER_NETWORK_MATURITY_TICK_SECONDS = 2.0
 CLUSTER_NETWORK_MATURITY_STABLE_TICKS = 3
-SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS = 2_000
-SMOKE_ROUTE_ONE_WAY_TTL_MS = SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS // 2
 
 
 def resolve_required_ready_nodes(
@@ -283,43 +281,22 @@ async def refresh_route_candidate_rtts(engine) -> None:
             )
 
 
-async def create_route_for_virtual_node(engine) -> dict[str, object]:
-    candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(limit=16)
-    if len(candidates) < 2:
-        raise RuntimeError("Not enough physical route candidates with RTT.")
-
-    first_hop = candidates[0]
-    final_node = select_final_physical_node(candidates, first_hop.node_id)
-    return await engine.services.protocol_clients.physical.route_build.start_random_walk_ttl_route(
-        first_hop_physical_node_id=first_hop.node_id,
-        final_physical_node_public_key=final_node.public_key,
-        remaining_ttl_ms=SMOKE_ROUTE_ONE_WAY_TTL_MS,
-        expected_round_trip_ttl_ms=SMOKE_ROUTE_EXPECTED_ROUND_TRIP_TTL_MS,
-    )
-
-
-def select_final_physical_node(candidates, first_hop_node_id: str):
-    for candidate in candidates:
-        if candidate.node_id != first_hop_node_id:
-            return candidate
-    return candidates[0]
-
-
-async def wait_for_route_active(
+async def wait_for_runtime_route_active(
     engine,
-    initial_path_id: str,
     *,
-    timeout_seconds: float = 90.0,
+    local_virtual_node_id: str,
+    timeout_seconds: float = 120.0,
 ):
     async def load_active_route():
-        route = engine.services.route_service.get_initiator_resolution_by_initial_path_id(
-            initial_path_id=initial_path_id,
+        return engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
+            local_virtual_node_id=local_virtual_node_id,
         )
-        if route is not None and route.status == "active" and route.final_path_id:
-            return route
-        return None
 
-    return await wait_until_value(load_active_route, timeout_seconds=timeout_seconds, label="route active")
+    return await wait_until_value(
+        load_active_route,
+        timeout_seconds=timeout_seconds,
+        label="runtime-created route active",
+    )
 
 
 async def wait_for_drt_entry(

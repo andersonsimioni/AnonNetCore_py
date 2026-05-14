@@ -1,14 +1,17 @@
 import { AnonNetClient } from "../../shared/anonnet-client.js";
 import { SocialService } from "../../shared/social-service.js";
+import { SocialSessionStore } from "../../shared/social-session-store.js";
 import { createState } from "./state.js";
 import {
   SOCIAL_DIRECT_MESSAGE_TYPE,
   createFeedPost,
 } from "../../shared/social-models.js";
 
-const client = new AnonNetClient();
-const socialService = new SocialService(client);
+const LOCAL_STATE_KEY = "anonnet.poc.social.local_state.v1";
 const state = createState();
+const client = new AnonNetClient();
+const sessionStore = new SocialSessionStore();
+const socialService = new SocialService(client, { sessionStore });
 
 const elements = {
   connectionPill: document.querySelector("#connection-pill"),
@@ -37,6 +40,7 @@ document.querySelector("#message-form").addEventListener("submit", sendMessage);
 document.querySelector("#post-form").addEventListener("submit", publishLocalPost);
 document.querySelector("#profile-photo").addEventListener("change", previewProfilePhoto);
 
+restoreLocalState();
 connectEvents();
 render();
 
@@ -56,6 +60,7 @@ async function createLocalVirtualNode(event) {
   try {
     const virtualNode = await socialService.createLocalProfileNode();
     state.localVirtualNode = virtualNode;
+    saveLocalState();
     appendEvent({ type: "local_virtual_node_created", data: { id: virtualNode.id } });
     render();
   } catch (error) {
@@ -79,10 +84,13 @@ async function saveProfile(event) {
       photoContentId: state.localProfile?.photo_content_id || null,
       friendVirtualNodeIds: state.localProfile?.friend_virtual_node_ids || [],
       friendPublicKeys: state.localProfile?.friend_public_keys || [],
+      feedPosts: state.feedPosts,
     });
 
     state.localProfile = result.profile;
-    appendEvent({ type: "profile_saved", data: { content_id: result.content.content_id } });
+    state.localUserStateContent = result.content;
+    saveLocalState();
+    appendEvent({ type: "user_state_saved", data: { content_id: result.content.content_id } });
     render();
   } catch (error) {
     appendError(error);
@@ -114,9 +122,19 @@ function addFriend(event) {
     public_key: friendPublicKey || null,
     status: "online",
   });
-  appendEvent({ type: "friend_added_locally", data: { friendVirtualNodeId } });
-  event.currentTarget.reset();
-  render();
+  saveCurrentUserState()
+    .then((result) => {
+      appendEvent({
+        type: "friend_added_and_user_state_saved",
+        data: {
+          friendVirtualNodeId,
+          content_id: result.content.content_id,
+        },
+      });
+      event.currentTarget.reset();
+      render();
+    })
+    .catch(appendError);
 }
 
 async function sendMessage(event) {
@@ -147,11 +165,13 @@ async function sendMessage(event) {
       text,
       sent_at: new Date().toISOString(),
     });
+    saveLocalState();
     appendEvent({
       type: "direct_message_sent",
       data: {
         toVirtualNodeId,
         session_id: result.sessionId,
+        session_reused: result.reused,
       },
     });
     event.currentTarget.reset();
@@ -160,8 +180,13 @@ async function sendMessage(event) {
   }
 }
 
-function publishLocalPost(event) {
+async function publishLocalPost(event) {
   event.preventDefault();
+  if (!state.localVirtualNode || !state.localProfile) {
+    appendEvent({ type: "poc_error", data: { message: "Crie um VN e salve o perfil primeiro." } });
+    return;
+  }
+
   const form = new FormData(event.currentTarget);
   const text = form.get("postText")?.toString().trim();
   if (!text) {
@@ -174,10 +199,20 @@ function publishLocalPost(event) {
     text,
   });
   state.feedPosts.unshift(post);
-  appendEvent({ type: "post_created_locally", data: { text } });
-  event.currentTarget.reset();
-  renderFeed();
-  renderProfile();
+  try {
+    const result = await saveCurrentUserState();
+    appendEvent({
+      type: "post_created_and_user_state_saved",
+      data: {
+        content_id: result.content.content_id,
+      },
+    });
+    event.currentTarget.reset();
+    renderFeed();
+    renderProfile();
+  } catch (error) {
+    appendError(error);
+  }
 }
 
 function previewProfilePhoto(event) {
@@ -189,6 +224,7 @@ function previewProfilePhoto(event) {
   const reader = new FileReader();
   reader.addEventListener("load", () => {
     state.profilePhotoPreview = reader.result;
+    saveLocalState();
     renderProfile();
   });
   reader.readAsDataURL(file);
@@ -248,6 +284,59 @@ function renderProfile() {
   if (state.profilePhotoPreview) {
     elements.profileAvatar.style.backgroundImage = `url("${state.profilePhotoPreview}")`;
     elements.profileAvatar.style.backgroundSize = "cover";
+  }
+}
+
+async function saveCurrentUserState() {
+  if (!state.localVirtualNode || !state.localProfile) {
+    throw new Error("VN local e perfil sao obrigatorios para salvar o estado do usuario.");
+  }
+
+  const result = await socialService.saveUserState({
+    localVirtualNode: state.localVirtualNode,
+    profile: state.localProfile,
+    feedPosts: state.feedPosts,
+  });
+  state.localProfile = result.profile;
+  state.localUserStateContent = result.content;
+  saveLocalState();
+  return result;
+}
+
+function saveLocalState() {
+  localStorage.setItem(
+    LOCAL_STATE_KEY,
+    JSON.stringify({
+      localVirtualNode: state.localVirtualNode,
+      localProfile: state.localProfile,
+      localUserStateContent: state.localUserStateContent,
+      profilePhotoPreview: state.profilePhotoPreview,
+      contacts: state.contacts,
+      directMessages: state.directMessages,
+      feedPosts: state.feedPosts,
+    }),
+  );
+}
+
+function restoreLocalState() {
+  const rawState = localStorage.getItem(LOCAL_STATE_KEY);
+  if (!rawState) {
+    return;
+  }
+
+  try {
+    const savedState = JSON.parse(rawState);
+    state.localVirtualNode = savedState.localVirtualNode || null;
+    state.localProfile = savedState.localProfile || null;
+    state.localUserStateContent = savedState.localUserStateContent || null;
+    state.profilePhotoPreview = savedState.profilePhotoPreview || null;
+    state.contacts = Array.isArray(savedState.contacts) ? savedState.contacts : [];
+    state.directMessages = Array.isArray(savedState.directMessages)
+      ? savedState.directMessages
+      : [];
+    state.feedPosts = Array.isArray(savedState.feedPosts) ? savedState.feedPosts : [];
+  } catch {
+    localStorage.removeItem(LOCAL_STATE_KEY);
   }
 }
 

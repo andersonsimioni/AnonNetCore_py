@@ -15,7 +15,6 @@ from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
     MIN_CLUSTER_NODES,
     create_local_virtual_node,
-    create_route_for_virtual_node,
     create_test_core,
     reset_cluster,
     resolve_required_ready_nodes,
@@ -24,7 +23,7 @@ from smoke_helpers import (
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
     wait_for_network_ready,
-    wait_for_route_active,
+    wait_for_runtime_route_active,
     wait_for_virtual_keepalive_ack,
     wait_for_virtual_session_active,
 )
@@ -88,10 +87,11 @@ async def main() -> None:
         )
         print("cluster network maturity reached")
 
-        route_result = await create_route_for_virtual_node(core_a)
-        initial_path_id = str(route_result["initial_path_id"])
-        active_route = await wait_for_route_active(core_a, initial_path_id)
-        print(f"route active: initial_path_id={initial_path_id} final_path_id={active_route.final_path_id}")
+        active_route = await wait_for_runtime_route_active(core_a, local_virtual_node_id=vn_a.id)
+        print(
+            "route active from runtime: "
+            f"initial_path_id={active_route.initial_path_id} final_path_id={active_route.final_path_id}"
+        )
 
         core_b.services.identity_service.upsert_remote_virtual_node(
             node_id=vn_a.id,

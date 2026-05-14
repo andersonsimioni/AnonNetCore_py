@@ -218,6 +218,47 @@ class RouteService:
                 .first()
             )
 
+    def get_pending_initiator_resolution_for_local_virtual_node(
+        self,
+        *,
+        local_virtual_node_id: str,
+    ) -> RouteResolution | None:
+        pending_statuses = (
+            "pending_kem_offer",
+            "pending_final_validation",
+        )
+        with self.database.session_scope() as session:
+            return (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.local_virtual_node_id == local_virtual_node_id,
+                    RouteResolution.status.in_(pending_statuses),
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+
+    def get_active_initiator_resolution_for_local_virtual_node(
+        self,
+        *,
+        local_virtual_node_id: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            return (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.local_virtual_node_id == local_virtual_node_id,
+                    RouteResolution.status == "active",
+                    RouteResolution.final_path_id.is_not(None),
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+
     def update_initiator_resolution_validation_payload(
         self,
         *,

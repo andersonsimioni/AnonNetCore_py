@@ -6,6 +6,7 @@ import {
   buildProfileDptLogicalKey,
   createDirectMessage,
   createProfile,
+  createUserState,
   encodeJsonToBase64,
   normalizeUniqueStrings,
 } from "./social-models.js";
@@ -34,6 +35,7 @@ export class SocialService {
     photoContentId = null,
     friendVirtualNodeIds = [],
     friendPublicKeys = [],
+    feedPosts = [],
   }) {
     const profile = createProfile({
       virtualNodeId: localVirtualNode.id,
@@ -45,14 +47,45 @@ export class SocialService {
       friendPublicKeys,
     });
 
+    const userState = createUserState({
+      profile,
+      feedPosts,
+    });
     const content = await this.client.storeContent({
-      dataBase64: encodeJsonToBase64(profile),
+      dataBase64: encodeJsonToBase64(userState),
       title: SOCIAL_PROFILE_DPT_TITLE,
       contentType: SOCIAL_PROFILE_CONTENT_TYPE,
-      tags: ["profile", "social"],
+      tags: ["profile", "social", "user-state"],
     });
 
-    return { profile, content };
+    return { profile, userState, content };
+  }
+
+  async saveUserState({
+    localVirtualNode,
+    profile,
+    feedPosts = [],
+  }) {
+    const userState = createUserState({
+      profile: {
+        ...profile,
+        virtual_node_id: localVirtualNode.id,
+        public_key: localVirtualNode.public_key,
+        updated_at: new Date().toISOString(),
+      },
+      feedPosts,
+    });
+    const content = await this.client.storeContent({
+      dataBase64: encodeJsonToBase64(userState),
+      title: SOCIAL_PROFILE_DPT_TITLE,
+      contentType: SOCIAL_PROFILE_CONTENT_TYPE,
+      tags: ["profile", "social", "user-state"],
+    });
+    return {
+      profile: userState.profile,
+      userState,
+      content,
+    };
   }
 
   async publishLocalProfilePointer({ localVirtualNode, profileContentId }) {
@@ -98,18 +131,18 @@ export class SocialService {
     remotePublicKey = null,
     text,
   }) {
-    const sessionId = await this.resolveDirectSessionId({
+    const session = await this.getOrCreateDirectSession({
       localVirtualNodeId,
       remoteVirtualNodeId,
       remotePublicKey,
     });
     await this.sendDirectMessage({
-      sessionId,
+      sessionId: session.sessionId,
       fromVirtualNodeId: localVirtualNodeId,
       toVirtualNodeId: remoteVirtualNodeId,
       text,
     });
-    return { sessionId };
+    return session;
   }
 
   async resolveDirectSessionId({
@@ -117,9 +150,25 @@ export class SocialService {
     remoteVirtualNodeId,
     remotePublicKey = null,
   }) {
+    const session = await this.getOrCreateDirectSession({
+      localVirtualNodeId,
+      remoteVirtualNodeId,
+      remotePublicKey,
+    });
+    return session.sessionId;
+  }
+
+  async getOrCreateDirectSession({
+    localVirtualNodeId,
+    remoteVirtualNodeId,
+    remotePublicKey = null,
+  }) {
     const existingSessionId = this.sessionStore.get(remoteVirtualNodeId);
     if (existingSessionId) {
-      return existingSessionId;
+      return {
+        sessionId: existingSessionId,
+        reused: true,
+      };
     }
 
     const session = await this.startDirectSession({
@@ -127,7 +176,10 @@ export class SocialService {
       remoteVirtualNodeId,
       remotePublicKey,
     });
-    return this.sessionStore.set(remoteVirtualNodeId, session.session_id);
+    return {
+      sessionId: this.sessionStore.set(remoteVirtualNodeId, session.session_id),
+      reused: false,
+    };
   }
 
   async sendDirectMessage({

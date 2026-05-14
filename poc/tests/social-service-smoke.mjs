@@ -78,13 +78,23 @@ const profileResult = await social.saveLocalProfile({
   displayName: "Anderson",
   bio: "PoC social",
   friendVirtualNodeIds: ["remote-vn-1"],
+  feedPosts: [
+    {
+      author_name: "Anderson",
+      author_virtual_node_id: localVirtualNode.id,
+      text: "primeiro post",
+      created_at: new Date().toISOString(),
+    },
+  ],
 });
 assert.equal(profileResult.profile.display_name, "Anderson");
 assert.deepEqual(profileResult.profile.friend_virtual_node_ids, ["remote-vn-1"]);
 
-const storedProfile = decodeJsonFromBase64(client.storedContent[0].dataBase64);
-assert.equal(storedProfile.schema, "anonnet.social.profile.v1");
-assert.equal(storedProfile.virtual_node_id, localVirtualNode.id);
+const storedUserState = decodeJsonFromBase64(client.storedContent[0].dataBase64);
+assert.equal(storedUserState.schema, "anonnet.social.user_state.v1");
+assert.equal(storedUserState.profile.schema, "anonnet.social.profile.v1");
+assert.equal(storedUserState.profile.virtual_node_id, localVirtualNode.id);
+assert.equal(storedUserState.feed_posts.length, 1);
 
 const updatedProfile = social.addFriendToProfile({
   profile: profileResult.profile,
@@ -93,6 +103,22 @@ const updatedProfile = social.addFriendToProfile({
 });
 assert.deepEqual(updatedProfile.friend_virtual_node_ids, ["remote-vn-1"]);
 assert.deepEqual(updatedProfile.friend_public_keys, ["remote-public-key-1"]);
+
+const updatedUserState = await social.saveUserState({
+  localVirtualNode,
+  profile: updatedProfile,
+  feedPosts: [
+    ...storedUserState.feed_posts,
+    {
+      author_name: "Anderson",
+      author_virtual_node_id: localVirtualNode.id,
+      text: "segundo post",
+      created_at: new Date().toISOString(),
+    },
+  ],
+});
+assert.equal(updatedUserState.userState.profile.friend_public_keys[0], "remote-public-key-1");
+assert.equal(updatedUserState.userState.feed_posts.length, 2);
 
 const firstMessage = await social.sendDirectMessageToVirtualNode({
   localVirtualNodeId: localVirtualNode.id,
@@ -109,6 +135,8 @@ const secondMessage = await social.sendDirectMessageToVirtualNode({
 
 assert.equal(firstMessage.sessionId, "session-1");
 assert.equal(secondMessage.sessionId, "session-1");
+assert.equal(firstMessage.reused, false);
+assert.equal(secondMessage.reused, true);
 assert.equal(client.startedSessions.length, 1);
 assert.equal(client.remoteVirtualNodes.length, 1);
 assert.equal(client.sentMessages.length, 2);
@@ -116,4 +144,4 @@ assert.equal(client.sentMessages[0].appMessageType, "social.direct_message");
 assert.equal(client.sentMessages[0].payload.to_virtual_node_id, "remote-vn-1");
 assert.equal(sessionStore.get("remote-vn-1"), "session-1");
 
-console.log("OK poc social smoke passed");
+console.log("OK poc social service smoke passed");
