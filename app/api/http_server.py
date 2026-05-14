@@ -112,6 +112,9 @@ class CoreHttpApiServer:
             ("POST", "/v1/virtual-nodes/remote"): self._upsert_remote_virtual_node,
             ("POST", "/v1/dht/publish"): self._dht_publish,
             ("POST", "/v1/dht/query"): self._dht_query,
+            ("POST", "/v1/dht/key"): self._dht_key,
+            ("POST", "/v1/virtual-nodes/local/sign"): self._sign_local_virtual_node_payload,
+            ("POST", "/v1/virtual-nodes/verify-signature"): self._verify_virtual_node_payload_signature,
             ("GET", "/v1/sessions/virtual"): self._list_virtual_sessions,
             ("POST", "/v1/sessions/virtual"): self._start_virtual_session,
             ("POST", "/v1/messages/virtual/subscribe"): self._subscribe_virtual_messages,
@@ -195,6 +198,28 @@ class CoreHttpApiServer:
         return await self.api_service.dht_query(
             namespace=str(body.get("namespace") or ""),
             logical_key=str(body.get("logical_key") or ""),
+        )
+
+    def _dht_key(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return self.api_service.build_dht_key(
+            namespace=str(body.get("namespace") or ""),
+            logical_key=str(body.get("logical_key") or ""),
+        )
+
+    def _sign_local_virtual_node_payload(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return self.api_service.sign_local_virtual_node_payload(
+            local_virtual_node_id=str(body.get("local_virtual_node_id") or ""),
+            payload=self._optional_dict(body.get("payload")) or {},
+        )
+
+    def _verify_virtual_node_payload_signature(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return self.api_service.verify_virtual_node_payload_signature(
+            public_key=str(body.get("public_key") or ""),
+            payload=self._optional_dict(body.get("payload")) or {},
+            signature_hex=str(body.get("signature_hex") or ""),
         )
 
     def _list_virtual_sessions(self, _request: "HttpRequest") -> list[dict[str, object]]:

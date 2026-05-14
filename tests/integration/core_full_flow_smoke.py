@@ -96,7 +96,11 @@ async def main() -> None:
             f"initial_path_id={active_route.initial_path_id} final_path_id={active_route.final_path_id}"
         )
 
-        await wait_for_drt_entry(core_b, virtual_node_public_key=vn_a.public_key)
+        await wait_for_drt_entry(
+            core_b,
+            virtual_node_public_key=vn_a.public_key,
+            expected_final_path_id=active_route.final_path_id,
+        )
         print("checkpoint 6 OK: DRT entry discovered from core B")
 
         core_b.services.identity_service.upsert_remote_virtual_node(

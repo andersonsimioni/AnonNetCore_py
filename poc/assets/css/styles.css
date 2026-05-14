@@ -47,6 +47,12 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+  transform: none;
+}
+
 button:hover {
   transform: translateY(-1px);
 }
@@ -147,6 +153,22 @@ code {
   justify-content: flex-end;
 }
 
+.profile-switcher {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.profile-switcher select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.65rem 0.9rem;
+  color: var(--ink);
+  background: #eef3fb;
+  font: inherit;
+  outline: none;
+}
+
 .ghost-button {
   color: var(--brand-dark);
   background: var(--brand-soft);
@@ -178,6 +200,108 @@ code {
   background: var(--ok);
 }
 
+.app-feedback {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  display: grid;
+  gap: 0.65rem;
+  width: min(28rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.feedback-message {
+  border: 1px solid rgba(217, 224, 236, 0.9);
+  border-left: 5px solid var(--brand);
+  border-radius: 18px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  animation: toast-in 180ms ease-out;
+}
+
+.feedback-message strong,
+.feedback-message span {
+  display: block;
+}
+
+.feedback-message span {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.feedback-message.error {
+  border-left-color: var(--danger);
+}
+
+.feedback-message.success {
+  border-left-color: var(--ok);
+}
+
+.app-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(20, 32, 51, 0.32);
+  backdrop-filter: blur(4px);
+}
+
+.app-loading[hidden] {
+  display: none;
+}
+
+.loading-card {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  width: min(24rem, 100%);
+  border: 1px solid rgba(217, 224, 236, 0.9);
+  border-radius: 24px;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.loading-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.loading-spinner {
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 4px solid var(--brand-soft);
+  border-top-color: var(--brand);
+  border-radius: 999px;
+  animation: spin 820ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .social-shell {
   display: grid;
   grid-template-columns: 290px minmax(0, 1fr) 330px;
@@ -197,7 +321,7 @@ code {
 .left-rail {
   position: sticky;
   top: 5rem;
-  height: calc(100vh - 6rem);
+  max-height: calc(100vh - 6rem);
   overflow: auto;
   padding-bottom: 1rem;
 }
@@ -223,14 +347,16 @@ code {
 
 .profile-card {
   position: relative;
-  overflow: hidden;
-  padding: 0 1.1rem 1.2rem;
+  min-height: 17.5rem;
+  overflow: visible;
+  padding: 0 1.1rem 1.25rem;
   text-align: center;
 }
 
 .cover {
-  height: 6.8rem;
+  height: clamp(7.5rem, 12vw, 9.25rem);
   margin: 0 -1.1rem;
+  border-radius: var(--radius) var(--radius) 0 0;
   background:
     linear-gradient(135deg, rgba(43, 98, 217, 0.85), rgba(255, 176, 0, 0.8)),
     repeating-linear-gradient(45deg, transparent 0 10px, rgba(255, 255, 255, 0.16) 10px 20px);
@@ -249,11 +375,12 @@ code {
 }
 
 .avatar {
-  width: 6.2rem;
-  height: 6.2rem;
-  margin: -3.1rem auto 0.7rem;
+  width: clamp(6.4rem, 9vw, 7.4rem);
+  height: clamp(6.4rem, 9vw, 7.4rem);
+  margin: clamp(-3.7rem, -4.5vw, -3.2rem) auto 0.8rem;
   border: 5px solid #fff;
   font-size: 2.1rem;
+  box-shadow: 0 12px 28px rgba(20, 32, 51, 0.18);
 }
 
 .profile-card h1 {
@@ -476,16 +603,23 @@ code {
   border-radius: 18px;
   padding: 0.65rem;
   background: var(--surface-soft);
+  cursor: pointer;
 }
 
 .friend-item strong,
-.friend-item span {
+.friend-item span,
+.friend-item small {
   display: block;
 }
 
-.friend-item span {
+.friend-item span,
+.friend-item small {
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.friend-item small {
+  margin-top: 0.18rem;
 }
 
 .friend-status {

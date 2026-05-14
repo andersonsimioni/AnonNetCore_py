@@ -1,14 +1,14 @@
-export const SOCIAL_APP_ID = "anonnet.social";
-export const SOCIAL_PROFILE_DPT_TITLE = "profile";
-export const SOCIAL_PROFILE_CONTENT_TYPE = "application/anonnet-social-user-state+json";
-export const SOCIAL_DIRECT_MESSAGE_TYPE = "social.direct_message";
-export const SOCIAL_FEED_POST_TYPE = "social.feed_post";
+const SOCIAL_APP_ID = "anonnet.social";
+const SOCIAL_PROFILE_DPT_TITLE = "profile";
+const SOCIAL_PROFILE_CONTENT_TYPE = "application/anonnet-social-user-state+json";
+const SOCIAL_DIRECT_MESSAGE_TYPE = "social.direct_message";
+const SOCIAL_FEED_POST_TYPE = "social.feed_post";
 
-export function buildProfileDptLogicalKey(virtualNodeId) {
-  return `${SOCIAL_APP_ID}|${virtualNodeId}|${SOCIAL_PROFILE_DPT_TITLE}`;
+function buildProfileDptLogicalKey(virtualNodeId) {
+  return `${SOCIAL_APP_ID}|${virtualNodeId}`;
 }
 
-export function createProfile({
+function createProfile({
   virtualNodeId,
   publicKey,
   displayName,
@@ -31,7 +31,7 @@ export function createProfile({
   };
 }
 
-export function createDirectMessage({
+function createDirectMessage({
   fromVirtualNodeId,
   toVirtualNodeId,
   text,
@@ -45,7 +45,7 @@ export function createDirectMessage({
   };
 }
 
-export function createFeedPost({
+function createFeedPost({
   authorVirtualNodeId,
   authorName,
   text,
@@ -60,7 +60,7 @@ export function createFeedPost({
   };
 }
 
-export function createUserState({
+function createUserState({
   profile,
   feedPosts = [],
 }) {
@@ -73,15 +73,15 @@ export function createUserState({
   };
 }
 
-export function encodeJsonToBase64(value) {
+function encodeJsonToBase64(value) {
   return encodeBase64Utf8(JSON.stringify(value));
 }
 
-export function decodeJsonFromBase64(value) {
+function decodeJsonFromBase64(value) {
   return JSON.parse(decodeBase64Utf8(value));
 }
 
-export function normalizeUniqueStrings(values) {
+function normalizeUniqueStrings(values) {
   return [...new Set(
     values
       .map((value) => value?.toString().trim())
@@ -102,3 +102,19 @@ function decodeBase64Utf8(value) {
   }
   return decodeURIComponent(escape(atob(value)));
 }
+
+window.AnonNetSocialModels = {
+  SOCIAL_APP_ID,
+  SOCIAL_PROFILE_DPT_TITLE,
+  SOCIAL_PROFILE_CONTENT_TYPE,
+  SOCIAL_DIRECT_MESSAGE_TYPE,
+  SOCIAL_FEED_POST_TYPE,
+  buildProfileDptLogicalKey,
+  createProfile,
+  createDirectMessage,
+  createFeedPost,
+  createUserState,
+  encodeJsonToBase64,
+  decodeJsonFromBase64,
+  normalizeUniqueStrings,
+};

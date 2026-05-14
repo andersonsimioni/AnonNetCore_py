@@ -412,7 +412,13 @@ class VirtualSessionClient:
         if not valid_entries:
             raise ValueError("drt_has_no_valid_entry_point")
 
-        valid_entries.sort(key=lambda entry: entry.rtt)
+        valid_entries.sort(
+            key=lambda entry: (
+                _expires_at_sort_key(entry.expires_at),
+                -entry.rtt,
+            ),
+            reverse=True,
+        )
         return valid_entries[0]
 
     async def _ensure_entry_point_physical_node(
@@ -493,6 +499,7 @@ class VirtualSessionClient:
             physical_node_public_key=route_entry.pk_physical_node,
             final_path_id=route_entry.final_path_id,
             rtt=route_entry.rtt,
+            expires_at=route_entry.expires_at,
         )
 
     def _is_valid_drt_route_entry(
@@ -614,6 +621,7 @@ class VirtualRouteEntryPoint:
     physical_node_public_key: str
     final_path_id: str
     rtt: int
+    expires_at: str
 
 
 def _canonical_payload_hex(payload: dict[str, object]) -> str:
@@ -622,3 +630,14 @@ def _canonical_payload_hex(payload: dict[str, object]) -> str:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8").hex()
+
+
+def _expires_at_sort_key(expires_at: str) -> float:
+    try:
+        parsed = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()

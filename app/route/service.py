@@ -240,6 +240,36 @@ class RouteService:
                 .first()
             )
 
+    def invalidate_initiator_resolution(
+        self,
+        *,
+        initial_path_id: str,
+        reason: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            resolution = (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.initial_path_id == initial_path_id,
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+            if resolution is None:
+                return None
+
+            metadata = _load_metadata(resolution.metadata_json)
+            metadata["invalidated_reason"] = reason
+            metadata["invalidated_at"] = datetime.now(timezone.utc).isoformat()
+            resolution.status = "invalid"
+            resolution.is_valid = False
+            resolution.metadata_json = _dump_metadata(metadata)
+            session.flush()
+            session.refresh(resolution)
+            return resolution
+
     def get_active_initiator_resolution_for_local_virtual_node(
         self,
         *,

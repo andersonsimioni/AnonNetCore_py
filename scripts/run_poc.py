@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import argparse
-import os
 import signal
 import subprocess
 import sys
 import time
+import webbrowser
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-CLUSTER_UP_SCRIPT = PROJECT_ROOT / "cluster" / "up_nodes.py"
-CORE_ENTRYPOINT = PROJECT_ROOT / "app" / "main.py"
-POC_ROOT = PROJECT_ROOT / "poc"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUN_CLUSTER_SCRIPT = PROJECT_ROOT / "scripts" / "run_cluster.py"
+RUN_LOCAL_CORE_SCRIPT = PROJECT_ROOT / "scripts" / "run_local_core.py"
+POC_INDEX = PROJECT_ROOT / "poc" / "index.html"
 
 
 def main() -> int:
@@ -21,19 +21,22 @@ def main() -> int:
 
     try:
         if not args.skip_cluster:
-            run_cluster(args.cluster_nodes)
+            start_cluster(args.cluster_nodes)
+            wait_before_local_core(args.local_core_delay_seconds)
 
         processes.append(start_local_core(args.core_listen_port))
-        processes.append(start_poc_server(args.poc_port))
+
+        if not args.no_open:
+            open_poc_html()
 
         print("")
         print("PoC pronta.")
         print(f"- Core TCP local: 0.0.0.0:{args.core_listen_port}")
         print("- Core HTTP API: http://127.0.0.1:18080")
         print("- Core WebSocket: ws://127.0.0.1:18081/v1/events")
-        print(f"- Front PoC: http://127.0.0.1:{args.poc_port}/web/")
+        print(f"- Front PoC local: {POC_INDEX}")
         print("")
-        print("Pressione Ctrl+C para parar o core local e o servidor da PoC.")
+        print("Pressione Ctrl+C para parar o core local.")
 
         wait_until_interrupted(processes)
         return 0
@@ -43,7 +46,7 @@ def main() -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sobe cluster Docker, core local e servidor web da PoC social.",
+        description="Sobe cluster Docker, core local e abre a PoC como HTML local.",
     )
     parser.add_argument(
         "cluster_nodes",
@@ -59,15 +62,20 @@ def parse_args() -> argparse.Namespace:
         help="Porta TCP do core local fora do cluster.",
     )
     parser.add_argument(
-        "--poc-port",
-        type=int,
-        default=18100,
-        help="Porta HTTP estatica para servir a PoC.",
+        "--local-core-delay-seconds",
+        type=float,
+        default=8.0,
+        help="Tempo de espera apos subir o cluster antes de iniciar o core local.",
     )
     parser.add_argument(
         "--skip-cluster",
         action="store_true",
-        help="Nao sobe o cluster Docker; inicia apenas core local e PoC.",
+        help="Nao sobe o cluster Docker; inicia apenas o core local.",
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Nao abre o HTML automaticamente.",
     )
     args = parser.parse_args()
     if args.cluster_nodes < 2 and not args.skip_cluster:
@@ -75,48 +83,44 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def run_cluster(node_count: int) -> None:
+def start_cluster(node_count: int) -> None:
     print(f"Subindo cluster Docker com {node_count} nodes...")
     run_command(
         [
             sys.executable,
-            str(CLUSTER_UP_SCRIPT),
+            str(RUN_CLUSTER_SCRIPT),
             str(node_count),
-            "--detach",
         ],
     )
+
+
+def wait_before_local_core(delay_seconds: float) -> None:
+    if delay_seconds <= 0:
+        return
+
+    print(f"Aguardando {delay_seconds:.1f}s antes de iniciar o core local...")
+    time.sleep(delay_seconds)
 
 
 def start_local_core(listen_port: int) -> subprocess.Popen:
     print(f"Iniciando core local na porta TCP {listen_port}...")
-    env = build_child_environment()
     return subprocess.Popen(
         [
             sys.executable,
-            str(CORE_ENTRYPOINT),
+            str(RUN_LOCAL_CORE_SCRIPT),
             "--listen-port",
             str(listen_port),
         ],
         cwd=PROJECT_ROOT,
-        env=env,
     )
 
 
-def start_poc_server(port: int) -> subprocess.Popen:
-    print(f"Servindo PoC em http://127.0.0.1:{port}/web/ ...")
-    env = build_child_environment()
-    return subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "http.server",
-            str(port),
-            "-d",
-            str(POC_ROOT),
-        ],
-        cwd=PROJECT_ROOT,
-        env=env,
-    )
+def open_poc_html() -> None:
+    if not POC_INDEX.exists():
+        raise FileNotFoundError(f"PoC HTML nao encontrado: {POC_INDEX}")
+
+    print(f"Abrindo PoC local: {POC_INDEX}")
+    webbrowser.open(POC_INDEX.as_uri())
 
 
 def wait_until_interrupted(processes: list[subprocess.Popen]) -> None:
@@ -146,12 +150,6 @@ def stop_process(process: subprocess.Popen) -> None:
 
 def run_command(command: list[str]) -> None:
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
-
-
-def build_child_environment() -> dict[str, str]:
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
-    return env
 
 
 if __name__ == "__main__":

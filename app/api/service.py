@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from crypto import sha512_hex
+from crypto import dilithium_sign_hex, dilithium_verify_hex
 from core.protocols.virtual.content import VirtualContentProtocolHandler
 from identity import VirtualNodeIdentityCreateInput
 from sessions import VirtualSessionMessage
@@ -144,6 +145,51 @@ class CoreApiService:
             namespace=namespace,
             logical_key=logical_key,
         )
+
+    def build_dht_key(self, *, namespace: str, logical_key: str) -> dict[str, object]:
+        normalized_namespace = namespace.strip().lower()
+        if not normalized_namespace or not logical_key:
+            raise CoreApiError("dht_key_input_required", "namespace e logical_key sao obrigatorios.")
+        return {
+            "namespace": normalized_namespace,
+            "logical_key": logical_key,
+            "key": sha512_hex(f"{normalized_namespace}|{logical_key}".encode("utf-8")),
+        }
+
+    def sign_local_virtual_node_payload(
+        self,
+        *,
+        local_virtual_node_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        virtual_node = self.engine.services.identity_service.get_local_virtual_node_by_id(
+            local_virtual_node_id,
+        )
+        if virtual_node is None:
+            raise CoreApiError("local_virtual_node_not_found", "Virtual node local nao encontrado.")
+
+        payload_hex = self._canonical_payload_hex(payload)
+        return {
+            "local_virtual_node_id": local_virtual_node_id,
+            "signature_hex": dilithium_sign_hex(payload_hex, virtual_node.private_key_encrypted),
+        }
+
+    def verify_virtual_node_payload_signature(
+        self,
+        *,
+        public_key: str,
+        payload: dict[str, object],
+        signature_hex: str,
+    ) -> dict[str, object]:
+        if not public_key or not signature_hex:
+            raise CoreApiError("signature_input_required", "public_key e signature_hex sao obrigatorios.")
+
+        payload_hex = self._canonical_payload_hex(payload)
+        try:
+            is_valid = dilithium_verify_hex(payload_hex, signature_hex, public_key)
+        except Exception:
+            is_valid = False
+        return {"valid": is_valid}
 
     def list_virtual_sessions(self) -> list[dict[str, object]]:
         sessions = self.engine.services.session_manager.list_sessions(session_scope="virtual")
@@ -491,6 +537,14 @@ class CoreApiService:
                 }
             )
         return data
+
+    @staticmethod
+    def _canonical_payload_hex(payload: dict[str, object]) -> str:
+        return json.dumps(
+            payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8").hex()
 
     @staticmethod
     def _serialize_session(session) -> dict[str, object]:

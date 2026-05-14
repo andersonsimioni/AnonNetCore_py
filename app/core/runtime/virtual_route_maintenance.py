@@ -26,11 +26,15 @@ class VirtualRouteMaintenanceRuntime:
         self._route_build_interval_seconds = (
             self.engine.services.config.virtual_route_maintenance_route_build_interval_seconds
         )
+        self._pending_route_timeout_seconds = (
+            self.engine.services.config.virtual_route_maintenance_pending_route_timeout_seconds
+        )
         self._candidate_limit = self.engine.services.config.virtual_route_maintenance_candidate_limit
         self._expected_round_trip_ttl_ms = (
             self.engine.services.config.virtual_route_maintenance_expected_round_trip_ttl_ms
         )
         self._last_route_build_by_virtual_node_id: dict[str, float] = {}
+        self._pending_seen_at_by_initial_path_id: dict[str, float] = {}
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -90,6 +94,14 @@ class VirtualRouteMaintenanceRuntime:
         if self._has_pending_route_build(local_virtual_node_id):
             return False
 
+        active_route = (
+            self.engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
+                local_virtual_node_id=local_virtual_node_id,
+            )
+        )
+        if active_route is None:
+            return True
+
         last_build_at = self._last_route_build_by_virtual_node_id.get(local_virtual_node_id)
         if last_build_at is None:
             return True
@@ -116,6 +128,31 @@ class VirtualRouteMaintenanceRuntime:
         if resolution is None:
             return False
 
+        pending_elapsed_seconds = self._pending_elapsed_seconds(
+            local_virtual_node_id=local_virtual_node_id,
+            initial_path_id=resolution.initial_path_id,
+        )
+        if (
+            resolution.initial_path_id is not None
+            and pending_elapsed_seconds >= self._pending_route_timeout_seconds
+        ):
+            self.engine.services.route_service.invalidate_initiator_resolution(
+                initial_path_id=resolution.initial_path_id,
+                reason="virtual_route_build_pending_timeout",
+            )
+            self._pending_seen_at_by_initial_path_id.pop(resolution.initial_path_id, None)
+            self.engine.services.log_service.warning(
+                "virtual_route_maintenance_runtime",
+                "expired pending virtual route build",
+                local_virtual_node_id=local_virtual_node_id,
+                initial_path_id=resolution.initial_path_id,
+                final_path_id=resolution.final_path_id,
+                status=resolution.status,
+                pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
+                pending_timeout_seconds=self._pending_route_timeout_seconds,
+            )
+            return False
+
         self.engine.services.log_service.debug(
             "virtual_route_maintenance_runtime",
             "virtual node already has pending route build",
@@ -123,8 +160,26 @@ class VirtualRouteMaintenanceRuntime:
             initial_path_id=resolution.initial_path_id,
             final_path_id=resolution.final_path_id,
             status=resolution.status,
+            pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
         )
         return True
+
+    def _pending_elapsed_seconds(
+        self,
+        *,
+        local_virtual_node_id: str,
+        initial_path_id: str | None,
+    ) -> float:
+        now = monotonic()
+        started_at = self._last_route_build_by_virtual_node_id.get(local_virtual_node_id)
+        if started_at is not None:
+            return now - started_at
+
+        if initial_path_id is None:
+            return 0.0
+
+        first_seen_at = self._pending_seen_at_by_initial_path_id.setdefault(initial_path_id, now)
+        return now - first_seen_at
 
     def _select_route_build_pair(self) -> RouteBuildPair | None:
         candidates = self.engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
@@ -170,11 +225,16 @@ class VirtualRouteMaintenanceRuntime:
             return
 
         self._last_route_build_by_virtual_node_id[local_virtual_node_id] = monotonic()
+        initial_path_id = result.get("initial_path_id")
+        if initial_path_id:
+            self._pending_seen_at_by_initial_path_id[initial_path_id] = (
+                self._last_route_build_by_virtual_node_id[local_virtual_node_id]
+            )
         self.engine.services.log_service.info(
             "virtual_route_maintenance_runtime",
             "virtual route build started",
             local_virtual_node_id=local_virtual_node_id,
-            initial_path_id=result.get("initial_path_id"),
+            initial_path_id=initial_path_id,
             first_hop_physical_node_id=route_pair.first_hop.node_id,
             final_physical_node_id=route_pair.final_node.node_id,
             remaining_ttl_ms=remaining_ttl_ms,

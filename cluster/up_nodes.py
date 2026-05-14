@@ -16,6 +16,7 @@ CLUSTER_STATE_ROOT = CLUSTER_ROOT / "state"
 def main() -> int:
     args = parse_args()
     verify_docker_is_available()
+    down_existing_cluster()
     generate_cluster(args.node_count)
     reset_cluster_node_state()
     start_compose(detach=args.detach)
@@ -46,6 +47,24 @@ def generate_cluster(node_count: int) -> None:
             str(node_count),
             "--output-dir",
             str(CLUSTER_ROOT),
+        ],
+        cwd=PROJECT_ROOT,
+    )
+
+
+def down_existing_cluster() -> None:
+    if not COMPOSE_FILE.exists():
+        return
+
+    print("Derrubando cluster Docker anterior...")
+    run_command(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(COMPOSE_FILE),
+            "down",
+            "--remove-orphans",
         ],
         cwd=PROJECT_ROOT,
     )

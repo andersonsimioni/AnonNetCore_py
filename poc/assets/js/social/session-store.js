@@ -1,4 +1,4 @@
-export class SocialSessionStore {
+class SocialSessionStore {
   constructor(initialSessions = {}) {
     this.sessionsByVirtualNodeId = { ...initialSessions };
   }
@@ -16,3 +16,5 @@ export class SocialSessionStore {
     return { ...this.sessionsByVirtualNodeId };
   }
 }
+
+window.SocialSessionStore = SocialSessionStore;

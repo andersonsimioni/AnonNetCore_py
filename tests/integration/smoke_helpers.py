@@ -16,6 +16,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from crypto import sha512_hex
+from dht import DrtRecordPayload, parse_record
 from identity import VirtualNodeIdentityCreateInput
 from sessions import VirtualSessionMessageReply
 
@@ -303,6 +304,7 @@ async def wait_for_drt_entry(
     engine,
     *,
     virtual_node_public_key: str,
+    expected_final_path_id: str | None = None,
     timeout_seconds: float = 60.0,
 ) -> dict[str, object]:
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
@@ -312,7 +314,26 @@ async def wait_for_drt_entry(
             namespace="drt",
             logical_key=logical_key,
         )
-        if result.get("status") == "found":
+        if result.get("status") != "found":
+            return None
+        if expected_final_path_id is None:
+            return result
+
+        record_json = result.get("record_json")
+        if not isinstance(record_json, str) or not record_json:
+            return None
+        try:
+            record = parse_record("drt", record_json)
+        except Exception:
+            return None
+        if not isinstance(record, DrtRecordPayload):
+            return None
+
+        has_expected_route = any(
+            entry.final_path_id == expected_final_path_id
+            for entry in record.route_entries
+        )
+        if has_expected_route:
             return result
         return None
 
