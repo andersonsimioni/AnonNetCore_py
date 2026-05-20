@@ -57,7 +57,15 @@ class PhysicalNodeInfoExchangeRuntime:
             await self.engine.services.protocol_clients.physical.node_info_exchange.request_known_physical_nodes(
                 session_id=session.session_id,
             )
-        except Exception:
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_node_info_exchange_runtime",
+                "physical node info exchange request failed",
+                remote_physical_node_id=candidate.node_id,
+                session_id=session.session_id,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
             return
 
     def _select_remote_node_for_exchange(self) -> RemotePhysicalNodeExchangeCandidate | None:
@@ -88,7 +96,14 @@ class PhysicalNodeInfoExchangeRuntime:
             session_id = await self.engine.services.protocol_clients.physical.session.start_session(
                 remote_physical_node_id=remote_physical_node_id,
             )
-        except Exception:
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_node_info_exchange_runtime",
+                "could not open session for physical node info exchange",
+                remote_physical_node_id=remote_physical_node_id,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
             return None
 
         return self.engine.services.session_manager.get_session_by_session_id(session_id)

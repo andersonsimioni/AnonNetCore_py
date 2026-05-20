@@ -156,6 +156,14 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
             requester_node_id=requester_node_id,
             record_count=len(records),
             max_records=max_records,
+            sample_records=[
+                {
+                    "physical_node_id": record.get("physical_node_id"),
+                    "endpoint_count": len(record.get("endpoints", [])),
+                    "endpoints": record.get("endpoints", [])[:2],
+                }
+                for record in records[:5]
+            ],
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -199,9 +207,11 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
 
         persisted_count = 0
         skipped_count = 0
+        skip_reasons: dict[str, int] = {}
         for record in records:
             if not isinstance(record, dict):
                 skipped_count += 1
+                _count_skip(skip_reasons, "record_not_object")
                 continue
 
             physical_node_id = record.get("physical_node_id")
@@ -216,13 +226,23 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                 or not endpoints
             ):
                 skipped_count += 1
+                _count_skip(skip_reasons, "missing_required_record_fields")
                 continue
 
             valid_endpoints = _select_valid_endpoints(endpoints)
             if not valid_endpoints:
                 skipped_count += 1
+                _count_skip(skip_reasons, "no_valid_endpoints")
                 continue
 
+            services.log_service.debug(
+                "physical_node_info_exchange",
+                "persisting exchanged physical node",
+                physical_node_id=physical_node_id,
+                advertised_endpoint_count=len(endpoints),
+                valid_endpoint_count=len(valid_endpoints),
+                valid_endpoints=valid_endpoints,
+            )
             services.identity_service.upsert_discovered_remote_physical_node(
                 node_id=physical_node_id,
                 public_key=public_key,
@@ -238,6 +258,11 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                         "advertised_last_validated_at": _optional_string(record.get("last_validated_at")),
                         "advertised_endpoints": endpoints,
                         "dpnt_signature": _optional_string(record.get("dpnt_signature")),
+                        "dpnt_reachability_class": _optional_string(record.get("reachability_class")),
+                        "dpnt_relay_capable": bool(record.get("relay_capable", False)),
+                        "dpnt_hole_punch_capable": bool(record.get("hole_punch_capable", False)),
+                        "dpnt_protocol_version": _optional_string(record.get("protocol_version")),
+                        "dpnt_status": _optional_string(record.get("status")),
                         "dpnt_feature_flags": _select_string_items(record.get("feature_flags")),
                     },
                     separators=(",", ":"),
@@ -252,6 +277,7 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
             received_count=len(records),
             persisted_count=persisted_count,
             skipped_count=skipped_count,
+            skip_reasons=skip_reasons,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -386,3 +412,7 @@ def _select_valid_endpoints(endpoints: list[object]) -> list[dict[str, object]]:
             )
 
     return valid_endpoints
+
+
+def _count_skip(skip_reasons: dict[str, int], reason: str) -> None:
+    skip_reasons[reason] = skip_reasons.get(reason, 0) + 1

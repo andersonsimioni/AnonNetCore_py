@@ -3,7 +3,7 @@ class AnonNetClient {
     httpBaseUrl = "http://127.0.0.1:18080",
     wsUrl = "ws://127.0.0.1:18081/v1/events",
     webSocketFactory = (url) => new WebSocket(url),
-    requestTimeoutMs = 60000,
+    requestTimeoutMs = 180000,
   } = {}) {
     this.httpBaseUrl = httpBaseUrl.replace(/\/$/, "");
     this.wsUrl = wsUrl;
@@ -37,6 +37,20 @@ class AnonNetClient {
       record_json: recordJson,
       expires_at: expiresAt,
     });
+  }
+
+  async dhtPublishJob({ namespace, logicalKey, record, recordJson = null, expiresAt = null }) {
+    return this.#post("/v1/dht/publish-jobs", {
+      namespace,
+      logical_key: logicalKey,
+      record,
+      record_json: recordJson,
+      expires_at: expiresAt,
+    });
+  }
+
+  async getDhtPublishJob({ jobId }) {
+    return this.#get(`/v1/dht/publish-jobs/${encodeURIComponent(jobId)}`);
   }
 
   async dhtQuery({ namespace, logicalKey }) {
@@ -107,10 +121,16 @@ class AnonNetClient {
     );
   }
 
-  async publishContentProvider({ contentId, localVirtualNodeId, ttlSeconds = null }) {
+  async publishContentProvider({
+    contentId,
+    localVirtualNodeId,
+    ttlSeconds = null,
+    asyncPublish = false,
+  }) {
     return this.#post(`/v1/content/${encodeURIComponent(contentId)}/providers/ddt`, {
       local_virtual_node_id: localVirtualNodeId,
       ttl_seconds: ttlSeconds,
+      async_publish: asyncPublish,
     });
   }
 
@@ -177,7 +197,11 @@ class AnonNetClient {
 
   async #request(path, options) {
     const method = options?.method || "GET";
-    console.debug("[AnonNet API] request", { method, path });
+    console.debug("[AnonNet API] request", {
+      method,
+      path,
+      body: compactAnonNetApiPayload(options?.body),
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     let response;
@@ -223,9 +247,90 @@ class AnonNetClient {
       });
       throw error;
     }
-    console.debug("[AnonNet API] response", { method, path, status: response.status });
+    console.debug("[AnonNet API] response", {
+      method,
+      path,
+      status: response.status,
+      data: compactAnonNetApiPayload(payload.data),
+    });
     return payload.data;
   }
 }
 
 window.AnonNetClient = AnonNetClient;
+
+function compactAnonNetApiPayload(value) {
+  if (!value) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      return compactAnonNetApiPayload(JSON.parse(value));
+    } catch {
+      return compactTextForLog(value);
+    }
+  }
+  if (Array.isArray(value)) {
+    return `[${value.length} items]`;
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+
+  const compact = {};
+  for (const [key, item] of Object.entries(value)) {
+    compact[key] = compactLogValue(key, item);
+  }
+  return compact;
+}
+
+function compactLogValue(key, value) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if ([
+    "public_key",
+    "pk_virtual_node",
+    "pk_virtual_node_owner",
+    "pk_physical_node",
+    "private_key",
+    "signature",
+    "signature_hex",
+    "record_json",
+    "data_base64",
+    "payload",
+    "record",
+  ].includes(key)) {
+    return summarizeHeavyLogValue(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.length} items]`;
+  }
+  if (typeof value === "object") {
+    return compactAnonNetApiPayload(value);
+  }
+  if (typeof value === "string") {
+    return compactTextForLog(value);
+  }
+  return value;
+}
+
+function summarizeHeavyLogValue(value) {
+  if (typeof value === "string") {
+    return compactTextForLog(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.length} items]`;
+  }
+  if (value && typeof value === "object") {
+    return "{...}";
+  }
+  return value;
+}
+
+function compactTextForLog(value) {
+  if (value.length <= 80) {
+    return value;
+  }
+  return `${value.slice(0, 80)}...(${value.length} chars)`;
+}

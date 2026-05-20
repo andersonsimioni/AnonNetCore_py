@@ -86,6 +86,40 @@ class RouteExecuteClient:
         virtual_envelope_ciphered: bool,
         virtual_session_id: str | None = None,
     ) -> dict[str, object]:
+        local_entry_point_target = self._resolve_local_entry_point_target(
+            entry_point_physical_node_id=entry_point_physical_node_id,
+            final_path_id=route_path_id,
+        )
+        if local_entry_point_target is not None:
+            route_data_payload = self._build_route_data_payload(
+                virtual_session_id=virtual_session_id,
+                virtual_envelope=virtual_envelope,
+                virtual_envelope_ciphered=virtual_envelope_ciphered,
+            )
+            await self.engine.forward_message_to_remote_physical_node(
+                remote_physical_node_id=local_entry_point_target["target_remote_physical_node_id"],
+                message_type="ROUTE_DATA",
+                payload={
+                    "path_id": local_entry_point_target["path_id"],
+                    **route_data_payload,
+                },
+            )
+            self.engine.services.log_service.debug(
+                "route_execute_client",
+                "sent route data through local entry point",
+                entry_point_physical_node_id=entry_point_physical_node_id,
+                final_path_id=route_path_id,
+                route_path_id=local_entry_point_target["path_id"],
+                target_remote_physical_node_id=local_entry_point_target["target_remote_physical_node_id"],
+                virtual_session_id=virtual_session_id,
+            )
+            return {
+                "entry_point_physical_node_id": entry_point_physical_node_id,
+                "path_id": local_entry_point_target["path_id"],
+                "virtual_session_id": virtual_session_id,
+                "virtual_envelope_ciphered": virtual_envelope_ciphered,
+            }
+
         route_data_payload = self._build_route_data_payload(
             virtual_session_id=virtual_session_id,
             virtual_envelope=virtual_envelope,
@@ -163,3 +197,26 @@ class RouteExecuteClient:
             }
 
         raise ValueError("A rota local informada nao existe ou nao possui proximo hop associado.")
+
+    def _resolve_local_entry_point_target(
+        self,
+        *,
+        entry_point_physical_node_id: str,
+        final_path_id: str,
+    ) -> dict[str, str] | None:
+        local_node = self.engine.services.identity_service.get_local_physical_node_result()
+        if local_node is None or local_node.id != entry_point_physical_node_id:
+            return None
+
+        endpoint_resolution = self.engine.services.route_service.get_endpoint_resolution_by_final_path_id(
+            final_path_id=final_path_id,
+        )
+        if endpoint_resolution is None:
+            return None
+        if not endpoint_resolution.route_path_id or not endpoint_resolution.previous_physical_node_id:
+            return None
+
+        return {
+            "path_id": endpoint_resolution.route_path_id,
+            "target_remote_physical_node_id": endpoint_resolution.previous_physical_node_id,
+        }

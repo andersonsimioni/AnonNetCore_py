@@ -30,7 +30,6 @@
         <p id="app-loading-message">Aguarde enquanto o core executa a acao.</p>
       </div>
     </div>
-
     <main class="social-shell">
       <aside class="left-rail">
         <section class="profile-card">
@@ -113,15 +112,10 @@
             <h2>Amigos</h2>
             <span id="friend-summary">0</span>
           </div>
-          <button id="sync-friends-button" class="ghost-button" type="button">Sincronizar feed dos amigos</button>
           <form id="friend-form" class="stack-form subtle-form">
             <label>
               Friend VN ID
               <input name="friendVirtualNodeId" autocomplete="off" placeholder="sha512 do VN">
-            </label>
-            <label>
-              Friend public key
-              <textarea name="friendPublicKey" rows="3" placeholder="public key opcional"></textarea>
             </label>
             <button type="submit">Adicionar amigo</button>
           </form>
@@ -188,7 +182,9 @@
     <script src="./assets/js/core/anonnet-client.js"></script>
     <script src="./assets/js/social/models.js"></script>
     <script src="./assets/js/social/session-store.js"></script>
+    <script src="./assets/js/social/runtime.js"></script>
     <script src="./assets/js/social/service.js"></script>
+    <script src="./assets/js/social/background-sync.js"></script>
     <script src="./assets/js/state.js"></script>
     <script src="./assets/js/app.js"></script>
   </body>

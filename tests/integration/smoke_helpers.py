@@ -233,7 +233,7 @@ async def _refresh_engine_network_context(engine) -> NetworkMaturitySnapshot:
 
 async def request_known_nodes_from_active_peers(engine) -> None:
     exchange_candidates = engine.services.identity_service.list_remote_physical_nodes_for_info_exchange(
-        limit=4,
+        limit=16,
     )
     for candidate in exchange_candidates:
         try:
@@ -257,22 +257,25 @@ async def request_known_nodes_from_active_peers(engine) -> None:
 
 async def refresh_route_candidate_rtts(engine) -> None:
     ping_candidates = engine.services.identity_service.list_remote_physical_nodes_for_ping(limit=32)
-    for candidate in ping_candidates:
-        has_rtt = any(
-            route_candidate.node_id == candidate.node_id
-            for route_candidate in engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
-                limit=32,
-            )
-        )
-        if has_rtt:
-            continue
+    route_candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
+        limit=32,
+    )
+    route_candidate_ids = {candidate.node_id for candidate in route_candidates}
+    missing_rtt_candidates = [
+        candidate
+        for candidate in ping_candidates
+        if candidate.node_id not in route_candidate_ids
+    ]
+    semaphore = asyncio.Semaphore(8)
 
+    async def refresh_candidate(candidate) -> None:
         try:
-            ping_result = await engine.services.protocol_clients.physical.ping.ping_physical_node(
-                remote_physical_node_id=candidate.node_id,
-            )
+            async with semaphore:
+                ping_result = await engine.services.protocol_clients.physical.ping.ping_physical_node(
+                    remote_physical_node_id=candidate.node_id,
+                )
         except Exception:
-            continue
+            return
 
         observed_rtt_ms = ping_result.get("observed_rtt_ms")
         if isinstance(observed_rtt_ms, (int, float)):
@@ -280,6 +283,8 @@ async def refresh_route_candidate_rtts(engine) -> None:
                 remote_physical_node_id=candidate.node_id,
                 observed_rtt_ms=float(observed_rtt_ms),
             )
+
+    await asyncio.gather(*(refresh_candidate(candidate) for candidate in missing_rtt_candidates))
 
 
 async def wait_for_runtime_route_active(

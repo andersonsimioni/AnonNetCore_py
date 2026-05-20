@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -77,6 +78,17 @@ class TcpTransportAdapter(TransportAdapter):
         self._state = TransportState.STOPPED
 
     async def send(self, message: OutboundMessage) -> None:
+        if message.metadata.get("force_new_connection") is True:
+            await self._close_existing_connection(message.remote_endpoint)
+
+        connection = await self._get_or_create_connection(message.remote_endpoint)
+        try:
+            await LengthPrefixedFrameCodec.write_frame(connection.writer, message.payload)
+            connection.touch()
+            return
+        except (ConnectionError, OSError, RuntimeError):
+            await self._close_connection(connection)
+
         connection = await self._get_or_create_connection(message.remote_endpoint)
         await LengthPrefixedFrameCodec.write_frame(connection.writer, message.payload)
         connection.touch()
@@ -102,7 +114,7 @@ class TcpTransportAdapter(TransportAdapter):
             return existing_connection
 
         reader, writer = await asyncio.open_connection(
-            host=remote_endpoint.host,
+            host=self._resolve_dial_host(remote_endpoint.host),
             port=remote_endpoint.port,
         )
         return self._register_connection(reader, writer)
@@ -136,6 +148,14 @@ class TcpTransportAdapter(TransportAdapter):
         )
         self._connections[self._build_connection_key(remote_endpoint)] = connection
         return connection
+
+    async def _close_existing_connection(
+        self,
+        remote_endpoint: TransportEndpoint,
+    ) -> None:
+        existing_connection = self._connections.get(self._build_connection_key(remote_endpoint))
+        if existing_connection is not None:
+            await self._close_connection(existing_connection)
 
     async def _read_packets(
         self,
@@ -196,3 +216,16 @@ class TcpTransportAdapter(TransportAdapter):
     @staticmethod
     def _build_connection_key(endpoint: TransportEndpoint) -> str:
         return f"{endpoint.transport_name}:{endpoint.host}:{endpoint.port}"
+
+    @staticmethod
+    def _resolve_dial_host(advertised_host: str) -> str:
+        local_advertised_host = os.getenv("ANONNET_ADVERTISED_TCP_HOST")
+        docker_host_gateway = os.getenv("ANONNET_DOCKER_HOST_GATEWAY")
+        if (
+            local_advertised_host
+            and docker_host_gateway
+            and advertised_host == local_advertised_host
+        ):
+            return docker_host_gateway
+
+        return advertised_host

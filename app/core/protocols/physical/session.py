@@ -9,7 +9,9 @@ from crypto import (
     generate_kyber_key_pair,
     kyber_decapsulate_hex,
     kyber_encapsulate_hex,
+    sha512_hex,
 )
+from sessions import SessionStateUpdateInput
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -33,12 +35,16 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         *,
         header: dict[str, object],
         initiator_physical_node_id: str,
+        initiator_public_key: str,
+        initiator_endpoints: list[dict[str, object]],
         keepalive_interval_seconds: int,
     ) -> bytes:
         return _build_packet_bytes(
             header=header,
             payload={
                 "initiator_physical_node_id": initiator_physical_node_id,
+                "initiator_public_key": initiator_public_key,
+                "initiator_endpoints": initiator_endpoints,
                 "keepalive_interval_seconds": keepalive_interval_seconds,
             },
         )
@@ -179,13 +185,19 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             )
             return self._build_invalid_result(envelope, "invalid_physical_session_init")
 
+        self._persist_initiator_node_descriptor(
+            payload=payload,
+            initiator_physical_node_id=initiator_physical_node_id,
+            services=services,
+        )
         remote_node = services.identity_service.get_remote_physical_node_by_id(initiator_physical_node_id)
-        resolved_transport, resolved_host, resolved_port = self._resolve_preferred_remote_endpoint(
+        resolved_transport, resolved_host, resolved_port, endpoint_source = self._resolve_preferred_remote_endpoint(
             services=services,
             remote_physical_node_id=initiator_physical_node_id,
             current_transport=None,
             current_host=None,
             current_port=None,
+            current_endpoint_source=None,
             fallback_transport=context.transport_name,
             fallback_host=context.remote_host,
             fallback_port=context.remote_port,
@@ -199,6 +211,10 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             remote_host=resolved_host,
             remote_port=resolved_port,
             keepalive_interval_seconds=keepalive_interval_seconds,
+        )
+        services.session_manager.update_session_state(
+            session_id,
+            data=_build_endpoint_metadata_update(endpoint_source),
         )
 
         ephemeral_key_pair = generate_kyber_key_pair()
@@ -226,8 +242,11 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             "accepted inbound physical session init",
             session_id=session.session_id,
             initiator_physical_node_id=initiator_physical_node_id,
-            remote_host=context.remote_host,
-            remote_port=context.remote_port,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            bound_remote_host=resolved_host,
+            bound_remote_port=resolved_port,
+            endpoint_source=endpoint_source,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -598,6 +617,59 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         }
         return dilithium_sign_hex(_canonical_payload_hex(signed_payload), local_private_key_pem)
 
+    def _persist_initiator_node_descriptor(
+        self,
+        *,
+        payload: dict[str, object],
+        initiator_physical_node_id: str,
+        services: EngineServices,
+    ) -> None:
+        initiator_public_key = payload.get("initiator_public_key")
+        if not isinstance(initiator_public_key, str) or not initiator_public_key:
+            services.log_service.debug(
+                "physical_session",
+                "session init has no initiator public key descriptor",
+                initiator_physical_node_id=initiator_physical_node_id,
+            )
+            return
+
+        if sha512_hex(initiator_public_key.encode("utf-8")) != initiator_physical_node_id:
+            services.log_service.warning(
+                "physical_session",
+                "session init initiator public key does not match node id",
+                initiator_physical_node_id=initiator_physical_node_id,
+            )
+            return
+
+        initiator_endpoints = _select_valid_endpoints(payload.get("initiator_endpoints"))
+        if not initiator_endpoints:
+            services.log_service.debug(
+                "physical_session",
+                "session init has no usable initiator advertised endpoints",
+                initiator_physical_node_id=initiator_physical_node_id,
+            )
+            return
+
+        services.identity_service.upsert_discovered_remote_physical_node(
+            node_id=initiator_physical_node_id,
+            public_key=initiator_public_key,
+            protocol_version="1",
+            endpoints=initiator_endpoints,
+            status="discovered",
+            notes_json=json.dumps(
+                {"source": "physical_session_init"},
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+        services.log_service.info(
+            "physical_session",
+            "persisted initiator descriptor from session init",
+            initiator_physical_node_id=initiator_physical_node_id,
+            endpoint_count=len(initiator_endpoints),
+            endpoints=initiator_endpoints,
+        )
+
     def _verify_physical_session_init_ok(
         self,
         *,
@@ -632,12 +704,13 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         if session is None:
             return
 
-        resolved_transport, resolved_host, resolved_port = self._resolve_preferred_remote_endpoint(
+        resolved_transport, resolved_host, resolved_port, endpoint_source = self._resolve_preferred_remote_endpoint(
             services=services,
             remote_physical_node_id=session.remote_identity_id,
             current_transport=session.transport,
             current_host=session.remote_host,
             current_port=session.remote_port,
+            current_endpoint_source=_read_endpoint_source(session.metadata_json),
             fallback_transport=context.transport_name,
             fallback_host=context.remote_host,
             fallback_port=context.remote_port,
@@ -648,6 +721,22 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             host=resolved_host,
             port=resolved_port,
         )
+        services.session_manager.update_session_state(
+            session_id,
+            data=_build_endpoint_metadata_update(endpoint_source),
+        )
+        services.log_service.debug(
+            "physical_session",
+            "refreshed physical session endpoint binding",
+            session_id=session_id,
+            remote_physical_node_id=session.remote_identity_id,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            bound_transport=resolved_transport,
+            bound_host=resolved_host,
+            bound_port=resolved_port,
+            endpoint_source=endpoint_source,
+        )
 
     def _resolve_preferred_remote_endpoint(
         self,
@@ -657,23 +746,38 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         current_transport: str | None,
         current_host: str | None,
         current_port: int | None,
+        current_endpoint_source: str | None,
         fallback_transport: str,
         fallback_host: str | None,
         fallback_port: int | None,
-    ) -> tuple[str, str | None, int | None]:
+    ) -> tuple[str, str | None, int | None, str]:
         known_endpoints = services.identity_service.list_remote_physical_node_endpoints(remote_physical_node_id)
         for endpoint in known_endpoints:
             if endpoint.transport == fallback_transport:
-                return endpoint.transport, endpoint.host, endpoint.port
+                return endpoint.transport, endpoint.host, endpoint.port, "advertised"
 
         if known_endpoints:
             endpoint = known_endpoints[0]
-            return endpoint.transport, endpoint.host, endpoint.port
+            return endpoint.transport, endpoint.host, endpoint.port, "advertised"
 
         if current_transport is not None:
-            return current_transport, current_host, current_port
+            source = (
+                "observed"
+                if current_endpoint_source == "observed"
+                or (current_host == fallback_host and current_port == fallback_port)
+                else "current"
+            )
+            return current_transport, current_host, current_port, source
 
-        return fallback_transport, fallback_host, fallback_port
+        services.log_service.debug(
+            "physical_session",
+            "remote advertised endpoint is unknown; using observed tcp peer only as transient session endpoint",
+            remote_physical_node_id=remote_physical_node_id,
+            observed_transport=fallback_transport,
+            observed_host=fallback_host,
+            observed_port=fallback_port,
+        )
+        return fallback_transport, fallback_host, fallback_port, "observed"
 
     def _build_invalid_result(
         self,
@@ -757,3 +861,61 @@ def _read_keepalive_interval(
     if isinstance(value, int) and value > 0:
         return value
     return default_value
+
+
+def _build_endpoint_metadata_update(endpoint_source: str) -> SessionStateUpdateInput:
+    return SessionStateUpdateInput(
+        metadata_json=json.dumps(
+            {"physical_endpoint_source": endpoint_source},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def _read_endpoint_source(metadata_json: str | None) -> str | None:
+    if not metadata_json:
+        return None
+
+    try:
+        metadata = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(metadata, dict):
+        return None
+
+    endpoint_source = metadata.get("physical_endpoint_source")
+    return endpoint_source if isinstance(endpoint_source, str) else None
+
+
+def _select_valid_endpoints(endpoints: object) -> list[dict[str, object]]:
+    if not isinstance(endpoints, list):
+        return []
+
+    valid_endpoints: list[dict[str, object]] = []
+    for endpoint in endpoints:
+        if not isinstance(endpoint, dict):
+            continue
+
+        transport = endpoint.get("transport")
+        host = endpoint.get("host")
+        port = endpoint.get("port")
+        priority = endpoint.get("priority", 0)
+        if not isinstance(transport, str) or not transport:
+            continue
+        if not isinstance(host, str) or not host:
+            continue
+        if not isinstance(port, int):
+            continue
+
+        valid_endpoints.append(
+            {
+                "transport": transport,
+                "host": host,
+                "port": port,
+                "priority": priority if isinstance(priority, int) else 0,
+            }
+        )
+
+    return valid_endpoints

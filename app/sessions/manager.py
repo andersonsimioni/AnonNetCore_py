@@ -243,8 +243,10 @@ class SessionManager:
     ) -> NetworkSession:
         existing_session = self.get_session_by_session_id(session_id)
         if existing_session is not None:
-            if bound_route_id is not None and existing_session.bound_route_id != bound_route_id:
-                existing_session.bound_route_id = bound_route_id
+            # A same-core VN-to-VN flow can receive the inbound side of the
+            # handshake in the same process that created the outbound session.
+            # Keep the outbound route binding intact; it is the route the
+            # initiator must use to send the next handshake packet back.
             return existing_session
 
         return self.create_session(
@@ -349,6 +351,22 @@ class SessionManager:
             remote_identity_type="virtual_node",
             remote_identity_id=remote_virtual_node_id,
         )
+
+    def get_active_virtual_session_by_local_and_remote_node_id(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+    ) -> NetworkSession | None:
+        for session in self.list_active_sessions():
+            if session.session_scope != "virtual":
+                continue
+            if session.local_identity_id != local_virtual_node_id:
+                continue
+            if session.remote_identity_id != remote_virtual_node_id:
+                continue
+            return session
+        return None
 
     def has_open_physical_session(self, remote_physical_node_id: str) -> bool:
         for session in self.list_sessions(session_scope="physical"):

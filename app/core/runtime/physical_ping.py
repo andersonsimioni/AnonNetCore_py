@@ -49,14 +49,33 @@ class PhysicalPingRuntime:
             ping_result = await self.engine.services.protocol_clients.physical.ping.ping_physical_node(
                 remote_physical_node_id=candidate.node_id,
             )
-        except Exception:
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_ping_runtime",
+                "physical ping runtime candidate failed",
+                remote_physical_node_id=candidate.node_id,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
             return
 
         observed_rtt_ms = ping_result.get("observed_rtt_ms")
         if not isinstance(observed_rtt_ms, (int, float)):
+            self.engine.services.log_service.warning(
+                "physical_ping_runtime",
+                "physical ping result did not include a valid rtt",
+                remote_physical_node_id=candidate.node_id,
+                result_status=ping_result.get("status"),
+            )
             return
 
         self.engine.services.identity_service.upsert_rtt_info(
+            remote_physical_node_id=candidate.node_id,
+            observed_rtt_ms=float(observed_rtt_ms),
+        )
+        self.engine.services.log_service.debug(
+            "physical_ping_runtime",
+            "stored physical ping rtt",
             remote_physical_node_id=candidate.node_id,
             observed_rtt_ms=float(observed_rtt_ms),
         )

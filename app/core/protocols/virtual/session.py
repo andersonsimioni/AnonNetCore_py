@@ -9,6 +9,7 @@ from crypto import (
     generate_kyber_key_pair,
     kyber_decapsulate_hex,
     kyber_encapsulate_hex,
+    sha512_hex,
 )
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -66,6 +67,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         payload = _as_payload_dict(envelope)
         session_id = _read_virtual_session_id(envelope)
         initiator_virtual_node_id = payload.get("initiator_virtual_node_id")
+        initiator_virtual_node_public_key = payload.get("initiator_virtual_node_public_key")
         target_virtual_node_id = payload.get("target_virtual_node_id")
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
@@ -75,26 +77,34 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         if (
             not session_id
             or not isinstance(initiator_virtual_node_id, str)
+            or not isinstance(initiator_virtual_node_public_key, str)
             or not isinstance(target_virtual_node_id, str)
         ):
             return self._build_invalid_result(envelope, "invalid_virtual_session_init")
+        if sha512_hex(initiator_virtual_node_public_key.encode("utf-8")) != initiator_virtual_node_id:
+            return self._build_invalid_result(envelope, "invalid_initiator_virtual_node_public_key")
 
         local_virtual_node = services.identity_service.get_local_virtual_node_by_id(target_virtual_node_id)
         if local_virtual_node is None:
             return self._build_invalid_result(envelope, "local_virtual_node_not_found")
 
-        remote_virtual_node = services.identity_service.get_remote_virtual_node_by_id(
-            initiator_virtual_node_id
+        services.identity_service.upsert_remote_virtual_node(
+            node_id=initiator_virtual_node_id,
+            public_key=initiator_virtual_node_public_key,
+            kind="virtual_session_peer",
+            status="active",
+            metadata_json='{"source":"virtual_session_init"}',
         )
         route_path_id = context.metadata.get("route_path_id")
         session = services.session_manager.create_inbound_virtual_session(
             session_id=session_id,
             local_virtual_node_id=target_virtual_node_id,
             remote_virtual_node_id=initiator_virtual_node_id,
-            remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
+            remote_public_key=initiator_virtual_node_public_key,
             bound_route_id=route_path_id if isinstance(route_path_id, str) and route_path_id else None,
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
+        session.remote_public_key = initiator_virtual_node_public_key
         services.log_service.info(
             "virtual_session",
             "accepted virtual session init",
@@ -122,6 +132,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             envelope,
             response_message_type="VIRTUAL_SESSION_INIT_OK",
             payload={
+                "responder_virtual_node_public_key": local_virtual_node.public_key,
                 "responder_ephemeral_public_key": ephemeral_key_pair.public_key_pem,
                 "signature_hex": signature_hex,
                 "keepalive_interval_seconds": keepalive_interval_seconds,
@@ -140,6 +151,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
     ) -> PacketProcessingResult:
         payload = _as_payload_dict(envelope)
         session_id = _read_virtual_session_id(envelope)
+        responder_virtual_node_public_key = payload.get("responder_virtual_node_public_key")
         responder_ephemeral_public_key = payload.get("responder_ephemeral_public_key")
         signature_hex = payload.get("signature_hex")
         keepalive_interval_seconds = _read_keepalive_interval(
@@ -149,6 +161,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
 
         if (
             not session_id
+            or not isinstance(responder_virtual_node_public_key, str)
             or not isinstance(responder_ephemeral_public_key, str)
             or not isinstance(signature_hex, str)
         ):
@@ -158,16 +171,25 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         if session is None:
             return self._build_invalid_result(envelope, "virtual_session_not_found")
 
-        remote_public_key = session.remote_public_key
-        if not remote_public_key:
-            return self._build_invalid_result(envelope, "remote_virtual_node_public_key_not_found")
+        if sha512_hex(responder_virtual_node_public_key.encode("utf-8")) != session.remote_identity_id:
+            services.session_manager.close_session(session_id, close_reason="invalid_responder_public_key")
+            return self._build_invalid_result(envelope, "invalid_responder_virtual_node_public_key")
+
+        session.remote_public_key = responder_virtual_node_public_key
+        services.identity_service.upsert_remote_virtual_node(
+            node_id=session.remote_identity_id,
+            public_key=responder_virtual_node_public_key,
+            kind="virtual_session_peer",
+            status="active",
+            metadata_json='{"source":"virtual_session_init_ok"}',
+        )
 
         signature_valid = self._verify_virtual_session_init_ok(
             session_id=session_id,
             responder_ephemeral_public_key=responder_ephemeral_public_key,
             keepalive_interval_seconds=keepalive_interval_seconds,
             signature_hex=signature_hex,
-            remote_public_key_pem=remote_public_key,
+            remote_public_key_pem=responder_virtual_node_public_key,
         )
         if not signature_valid:
             services.session_manager.close_session(session_id, close_reason="invalid_init_ok_signature")

@@ -76,8 +76,10 @@ async def main() -> None:
         print(f"vn A created: {vn_a.id}")
         print(f"vn B created: {vn_b.id}")
 
-        await wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes)
-        await wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes)
+        await asyncio.gather(
+            wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes),
+            wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes),
+        )
         print(f"cores A/B know enough physical nodes: required_ready_nodes={required_ready_nodes}")
 
         await wait_for_cluster_network_maturity(

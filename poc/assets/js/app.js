@@ -4,6 +4,12 @@ const {
   createFeedPost,
   createProfile,
 } = window.AnonNetSocialModels;
+const {
+  collectSocialFeedPosts,
+  createSocialProfileState,
+  ensureSocialContact,
+  normalizeSocialProfileState,
+} = window.AnonNetSocialRuntime;
 
 const LOCAL_STATE_KEY = "anonnet.poc.social.local_state.v2";
 const LEGACY_LOCAL_STATE_KEY = "anonnet.poc.social.local_state.v1";
@@ -47,14 +53,22 @@ elements.createProfileButton.addEventListener("click", createLocalProfile);
 elements.profileSelect.addEventListener("change", selectActiveProfile);
 elements.profileForm.addEventListener("submit", saveProfile);
 document.querySelector("#friend-form").addEventListener("submit", addFriend);
-document.querySelector("#sync-friends-button").addEventListener("click", syncFriends);
 document.querySelector("#message-form").addEventListener("submit", sendMessage);
 document.querySelector("#post-form").addEventListener("submit", publishLocalPost);
 elements.profilePhotoInput.addEventListener("change", previewProfilePhoto);
 
 restoreLocalState();
+const backgroundSync = new SocialBackgroundSyncService({
+  socialService,
+  getActiveProfile,
+  saveLocalState,
+  render,
+  appendEvent,
+  appendError,
+});
 connectEvents();
 render();
+backgroundSync.start();
 
 async function refreshStatus() {
   const operation = startUiOperation({
@@ -104,6 +118,7 @@ function selectActiveProfile(event) {
   state.activeProfileId = profileId || null;
   saveLocalState();
   render();
+  runBackgroundSync("profile_selected");
 }
 
 async function saveProfile(event) {
@@ -118,7 +133,7 @@ async function saveProfile(event) {
   const operation = startUiOperation({
     name: "save_profile",
     title: "Salvando perfil",
-    message: "Salvando estado local e publicando DDT/DPT na DHT.",
+    message: "Salvando estado local. A rede sera sincronizada em background.",
   });
   try {
     const profile = createProfile({
@@ -128,7 +143,6 @@ async function saveProfile(event) {
       bio: form.get("bio")?.toString().trim(),
       photoContentId: active.profile?.photo_content_id || null,
       friendVirtualNodeIds: active.profile?.friend_virtual_node_ids || [],
-      friendPublicKeys: active.profile?.friend_public_keys || [],
     });
     active.profile = profile;
     saveLocalState();
@@ -141,27 +155,11 @@ async function saveProfile(event) {
       },
     });
 
-    const result = await socialService.publishLocalUserState({
-      localVirtualNode: active.localVirtualNode,
-      profile,
-      feedPosts: active.feedPosts,
-    });
-
-    active.profile = result.profile || profile;
-    active.userStateContent = result.content;
-    active.profilePointer = result.dpt;
-    saveLocalState();
-    appendEvent({
-      type: "profile_published",
-      data: {
-        content_id: result.content.content_id,
-        dpt_key: result.dpt.dhtKey,
-        ddt_key: result.ddt.key,
-      },
-    });
-    render();
-    notifyUser("success", "Perfil publicado", "Perfil salvo e publicado na rede.");
+    runBackgroundSync("profile_saved");
+    notifyUser("success", "Perfil salvo", "O background sync vai publicar o estado na rede.");
   } catch (error) {
+    saveLocalState();
+    renderProfile();
     appendError(error);
   } finally {
     endUiOperation(operation);
@@ -178,8 +176,7 @@ function addFriend(event) {
 
   const form = new FormData(event.currentTarget);
   const friendVirtualNodeId = form.get("friendVirtualNodeId")?.toString().trim();
-  const friendPublicKey = form.get("friendPublicKey")?.toString().trim();
-  if (!friendVirtualNodeId && !friendPublicKey) {
+  if (!friendVirtualNodeId) {
     return;
   }
 
@@ -191,108 +188,23 @@ function addFriend(event) {
   active.profile = socialService.addFriendToProfile({
     profile: active.profile,
     friendVirtualNodeId,
-    friendPublicKey,
   });
-  active.contacts.unshift({
-    virtual_node_id: friendVirtualNodeId || shortKey(friendPublicKey),
-    display_name: `Amigo ${active.contacts.length + 1}`,
-    public_key: friendPublicKey || null,
-    status: "pendente",
-    feed_posts: [],
-    user_state_content_id: null,
-    last_synced_at: null,
-  });
-  saveCurrentUserState()
-    .then((result) => {
-      appendEvent({
-        type: "friend_added_and_user_state_saved",
-        data: {
-          friendVirtualNodeId,
-          content_id: result.content.content_id,
-        },
-      });
-      event.currentTarget.reset();
-      render();
-      notifyUser("success", "Amigo adicionado", "Perfil atualizado com o novo amigo.");
-      return syncFriends();
-    })
-    .catch(appendError)
-    .finally(() => endUiOperation(operation));
-}
-
-async function syncFriends() {
-  const active = getActiveProfile();
-  if (!active) {
-    appendEvent({ type: "poc_error", data: { message: "Crie ou selecione um perfil primeiro." } });
-    return;
-  }
-
-  const contacts = active.contacts.filter((contact) => contact.virtual_node_id && contact.public_key);
-  if (!contacts.length) {
-    appendEvent({
-      type: "friends_sync_skipped",
-      data: { message: "Nenhum amigo com VN ID e public key para sincronizar." },
-    });
-    return;
-  }
-
-  const operation = startUiOperation({
-    name: "sync_friends",
-    title: "Sincronizando amigos",
-    message: "Baixando os estados sociais publicados pelos amigos.",
-  });
-  try {
-    for (const contact of contacts) {
-      try {
-        await syncFriend(contact);
-      } catch (error) {
-        appendEvent({
-          type: "friend_sync_failed",
-          data: {
-            friend: contact.virtual_node_id,
-            code: error.code,
-            message: error.message,
-          },
-        });
-      }
-    }
-    saveLocalState();
-    render();
-    notifyUser("success", "Sincronizacao finalizada", "Tentativa de sincronizacao dos amigos concluida.");
-  } finally {
-    endUiOperation(operation);
-  }
-}
-
-async function syncFriend(contact) {
-  const active = getActiveProfile();
-  const result = await socialService.downloadUserStateFromPointer({
-    localVirtualNodeId: active.localVirtualNode.id,
-    remoteVirtualNodeId: contact.virtual_node_id,
-    remotePublicKey: contact.public_key,
-  });
-  const remoteProfile = result.userState.profile;
-
-  contact.display_name = remoteProfile.display_name || contact.display_name;
-  contact.public_key = remoteProfile.public_key || contact.public_key;
-  contact.status = "sincronizado";
-  contact.bio = remoteProfile.bio || "";
-  contact.feed_posts = Array.isArray(result.userState.feed_posts) ? result.userState.feed_posts : [];
-  contact.user_state_content_id = result.pointer.record.target_ref;
-  contact.last_synced_at = new Date().toISOString();
-
+  const contactResult = ensureSocialContact(active, friendVirtualNodeId);
+  saveLocalState();
   appendEvent({
-    type: "friend_synced",
-    data: {
-      friend: contact.virtual_node_id,
-      posts: contact.feed_posts.length,
-      content_id: contact.user_state_content_id,
-    },
+    type: contactResult.created ? "friend_added" : "friend_already_exists",
+    data: { friendVirtualNodeId },
   });
+  event.currentTarget.reset();
+  render();
+  notifyUser("success", "Amigo adicionado", "O background sync vai atualizar a DPT/DDT e o feed.");
+  runBackgroundSync("friend_added")
+    .finally(() => endUiOperation(operation));
 }
 
 async function sendMessage(event) {
   event.preventDefault();
+  const messageForm = event.currentTarget;
   const active = getActiveProfile();
   if (!active) {
     appendEvent({ type: "poc_error", data: { message: "Crie ou selecione um perfil primeiro." } });
@@ -312,11 +224,16 @@ async function sendMessage(event) {
     message: "Abrindo ou reutilizando sessao virtual para enviar a DM.",
   });
   try {
-    const contact = active.contacts.find((item) => item.virtual_node_id === toVirtualNodeId);
+    appendEvent({
+      type: "direct_message_send_started",
+      data: {
+        fromProfileId: active.localVirtualNode.id,
+        toVirtualNodeId,
+      },
+    });
     const result = await socialService.sendDirectMessageToVirtualNode({
       localVirtualNodeId: active.localVirtualNode.id,
       remoteVirtualNodeId: toVirtualNodeId,
-      remotePublicKey: contact?.public_key || null,
       text,
     });
     active.directMessages.unshift({
@@ -333,7 +250,7 @@ async function sendMessage(event) {
         session_reused: result.reused,
       },
     });
-    event.currentTarget.reset();
+    messageForm.reset();
     notifyUser("success", "Mensagem enviada", "A mensagem direta foi entregue ao core.");
   } catch (error) {
     appendError(error);
@@ -359,7 +276,7 @@ async function publishLocalPost(event) {
   const operation = startUiOperation({
     name: "publish_local_post",
     title: "Publicando post",
-    message: "Atualizando o arquivo do seu usuario e publicando o ponteiro.",
+    message: "Salvando o post local. A rede sera sincronizada em background.",
   });
   active.feedPosts.unshift(createFeedPost({
     authorVirtualNodeId: active.localVirtualNode.id,
@@ -370,16 +287,19 @@ async function publishLocalPost(event) {
   render();
   event.currentTarget.reset();
   try {
-    const result = await saveCurrentUserState();
     appendEvent({
-      type: "post_created_and_user_state_saved",
+      type: "post_created",
       data: {
         profileId: active.localVirtualNode.id,
-        content_id: result.content.content_id,
+        postCount: active.feedPosts.length,
       },
     });
-    notifyUser("success", "Post publicado", "Seu estado social foi atualizado.");
+    runBackgroundSync("post_created");
+    render();
+    notifyUser("success", "Post salvo", "O background sync vai atualizar seu estado publicado.");
   } catch (error) {
+    saveLocalState();
+    renderProfile();
     appendError(error);
   } finally {
     endUiOperation(operation);
@@ -416,6 +336,14 @@ function connectEvents() {
     websocket.addEventListener("open", () => markCoreStatus("events online"));
     websocket.addEventListener("close", () => markCoreStatus("offline"));
     websocket.addEventListener("error", () => markCoreStatus("offline"));
+  } catch (error) {
+    appendError(error);
+  }
+}
+
+async function runBackgroundSync(reason) {
+  try {
+    await backgroundSync.runOnce({ reason });
   } catch (error) {
     appendError(error);
   }
@@ -484,24 +412,6 @@ function renderProfile() {
     elements.profileAvatar.style.backgroundImage = "";
     elements.profileAvatar.style.backgroundSize = "";
   }
-}
-
-async function saveCurrentUserState() {
-  const active = getActiveProfile();
-  if (!active?.profile) {
-    throw new Error("Perfil ativo salvo e VN local sao obrigatorios para salvar o estado do usuario.");
-  }
-
-  const result = await socialService.publishLocalUserState({
-    localVirtualNode: active.localVirtualNode,
-    profile: active.profile,
-    feedPosts: active.feedPosts,
-  });
-  active.profile = result.profile || active.profile;
-  active.userStateContent = result.content;
-  active.profilePointer = result.dpt;
-  saveLocalState();
-  return result;
 }
 
 function saveLocalState() {
@@ -612,16 +522,7 @@ function renderFeed() {
 }
 
 function createProfileState(localVirtualNode) {
-  return {
-    localVirtualNode,
-    profile: null,
-    userStateContent: null,
-    profilePointer: null,
-    profilePhotoPreview: null,
-    contacts: [],
-    directMessages: [],
-    feedPosts: [],
-  };
+  return createSocialProfileState(localVirtualNode);
 }
 
 function normalizeProfiles(profiles) {
@@ -631,18 +532,7 @@ function normalizeProfiles(profiles) {
       continue;
     }
 
-    normalized[profileId] = {
-      ...createProfileState(profileState.localVirtualNode),
-      profile: profileState.profile || null,
-      userStateContent: profileState.userStateContent || null,
-      profilePointer: profileState.profilePointer || null,
-      profilePhotoPreview: profileState.profilePhotoPreview || null,
-      contacts: Array.isArray(profileState.contacts) ? profileState.contacts : [],
-      directMessages: Array.isArray(profileState.directMessages)
-        ? profileState.directMessages
-        : [],
-      feedPosts: Array.isArray(profileState.feedPosts) ? profileState.feedPosts : [],
-    };
+    normalized[profileId] = normalizeSocialProfileState(profileState);
   }
   return normalized;
 }
@@ -665,18 +555,7 @@ function collectFeedPosts(active) {
     return [];
   }
 
-  const localPosts = (active.feedPosts || []).map((post) => ({ ...post, source: "local" }));
-  const friendPosts = (active.contacts || []).flatMap((contact) => (
-    contact.feed_posts || []
-  ).map((post) => ({
-    ...post,
-    source: "friend",
-    author_name: post.author_name || contact.display_name,
-  })));
-
-  return [...localPosts, ...friendPosts].sort((left, right) => (
-    new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-  ));
+  return collectSocialFeedPosts(active);
 }
 
 function buildFriendMeta(contact) {
@@ -684,7 +563,7 @@ function buildFriendMeta(contact) {
   if (contact.last_synced_at) {
     return `${postCount} posts sincronizados - ${formatTime(contact.last_synced_at)}`;
   }
-  return contact.public_key ? "clique para enviar DM; sincronizacao pendente" : "public key pendente";
+  return "aguardando sincronizacao pela DHT";
 }
 
 function findProfileForMessage(message) {

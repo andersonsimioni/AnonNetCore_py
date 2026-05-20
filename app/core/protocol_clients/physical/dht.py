@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import random
+from datetime import datetime
 
 from transport import OutboundMessage, TransportEndpoint
 
@@ -9,7 +11,7 @@ from ...protocols import DhtProtocolHandler
 
 
 class PhysicalDhtClient:
-    """Cliente ativo do protocolo DHT na camada physical."""
+    """Cliente DHT: inicia a operacao e deixa os handlers rotearem hop-by-hop."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
@@ -17,7 +19,11 @@ class PhysicalDhtClient:
         self._response_timeout_seconds = (
             self.engine.services.config.dht_client_response_timeout_seconds
         )
-        self._max_hops = self.engine.services.config.dht_client_max_hops
+        self._publish_attempt_timeout_seconds = self._response_timeout_seconds
+        self._publish_attempt_count = 3
+        self._query_attempt_timeout_seconds = self._response_timeout_seconds
+        self._query_attempt_count = 6
+        self._request_ttl = self.engine.services.config.dht_client_max_hops
 
     async def publish(
         self,
@@ -27,7 +33,6 @@ class PhysicalDhtClient:
         record_json: str,
         expires_at: str | None = None,
     ) -> dict[str, object]:
-        visited_node_ids: set[str] = set()
         key_hex = self.engine.services.dht_service.build_key(namespace, logical_key)
         self.engine.services.log_service.info(
             "physical_dht_client",
@@ -36,105 +41,91 @@ class PhysicalDhtClient:
             logical_key=logical_key,
             key=key_hex,
         )
-        current_session = await self._select_initial_session(key_hex)
-        if current_session is None:
+        local_publish_result = self._publish_locally_if_responsible(
+            key_hex=key_hex,
+            namespace=namespace,
+            logical_key=logical_key,
+            record_json=record_json,
+            expires_at=expires_at,
+        )
+        stored_by = self._read_stored_by(local_publish_result)
+        if local_publish_result.get("status") == "stored":
             self.engine.services.log_service.info(
                 "physical_dht_client",
-                "no initial session for publish, trying local responsibility path",
+                "dht publish completed locally",
+                namespace=namespace,
+                logical_key=logical_key,
                 key=key_hex,
+                status=local_publish_result.get("status"),
+                stored_count=local_publish_result.get("stored_count"),
+                required_stored_count=local_publish_result.get("required_stored_count"),
             )
-            return self._publish_locally_if_responsible(
-                key_hex=key_hex,
+            return local_publish_result
+
+        session = await self._select_random_initial_session()
+        if session is None:
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "dht publish has no active path to responsible nodes",
+                namespace=namespace,
+                logical_key=logical_key,
+                key=key_hex,
+                local_status=local_publish_result.get("status"),
+                local_reason=local_publish_result.get("reason"),
+                stored_count=local_publish_result.get("stored_count"),
+                required_stored_count=local_publish_result.get("required_stored_count"),
+            )
+            return local_publish_result
+
+        result = local_publish_result
+        for attempt in range(1, self._publish_attempt_count + 1):
+            result = await self._request_publish_once(
+                session_id=session.session_id,
                 namespace=namespace,
                 logical_key=logical_key,
                 record_json=record_json,
                 expires_at=expires_at,
+                stored_by=stored_by,
+                timeout_seconds=self._publish_attempt_timeout_seconds,
             )
-
-        for _ in range(self._max_hops):
-            visited_node_ids.add(current_session.remote_identity_id)
-            self.engine.services.log_service.info(
-                "physical_dht_client",
-                "sending dht publish hop",
-                key=key_hex,
-                session_id=current_session.session_id,
-                remote_physical_node_id=current_session.remote_identity_id,
-                visited_count=len(visited_node_ids),
-            )
-            try:
-                result = await self._request_publish_once(
-                    session_id=current_session.session_id,
-                    namespace=namespace,
-                    logical_key=logical_key,
-                    record_json=record_json,
-                    expires_at=expires_at,
-                )
-            except asyncio.TimeoutError:
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "dht publish timed out waiting for hop response",
-                    key=key_hex,
-                    session_id=current_session.session_id,
-                    remote_physical_node_id=current_session.remote_identity_id,
-                    timeout_seconds=self._response_timeout_seconds,
-                    visited_count=len(visited_node_ids),
-                )
-                return {
-                    "status": "publish_ack_timeout",
-                    "key": key_hex,
-                    "reason": "dht_publish_hop_timeout",
-                    "timeout_seconds": self._response_timeout_seconds,
-                    "remote_physical_node_id": current_session.remote_identity_id,
-                    "visited_node_ids": sorted(visited_node_ids),
-                }
+            stored_by = self._merge_stored_by(stored_by, self._read_stored_by(result))
             if result.get("status") == "stored":
-                self.engine.services.log_service.info(
-                    "physical_dht_client",
-                    "dht publish stored successfully",
-                    key=result.get("key"),
-                    visited_count=len(visited_node_ids),
-                )
-                result["visited_node_ids"] = sorted(visited_node_ids)
-                return result
+                break
 
-            if result.get("status") != "closest_nodes":
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "dht publish returned non-routable status",
-                    key=result.get("key"),
-                    status=result.get("status"),
-                )
-                result["visited_node_ids"] = sorted(visited_node_ids)
-                return result
-
-            current_session = await self._advance_to_next_session(
-                responsible_nodes=result.get("responsible_nodes", []),
-                visited_node_ids=visited_node_ids,
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "dht publish attempt did not finish with full storage",
+                namespace=namespace,
+                logical_key=logical_key,
+                key=key_hex,
+                attempt=attempt,
+                max_attempts=self._publish_attempt_count,
+                status=result.get("status"),
+                reason=result.get("reason"),
+                stored_count=result.get("stored_count"),
+                required_stored_count=result.get("required_stored_count"),
+                stored_by=stored_by,
             )
-            if current_session is None:
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "dht publish could not advance to next session",
-                    key=result.get("key"),
-                )
-                return {
-                    "status": "not_routable",
-                    "key": result.get("key"),
-                    "responsible_nodes": result.get("responsible_nodes", []),
-                    "visited_node_ids": sorted(visited_node_ids),
-                }
+            if attempt == self._publish_attempt_count:
+                break
 
-        self.engine.services.log_service.warning(
+            next_session = await self._select_random_initial_session()
+            if next_session is None:
+                break
+            session = next_session
+
+        self.engine.services.log_service.info(
             "physical_dht_client",
-            "dht publish reached max hops",
+            "dht publish completed through network",
+            namespace=namespace,
+            logical_key=logical_key,
             key=key_hex,
-            max_hops=self._max_hops,
+            status=result.get("status"),
+            stored_count=result.get("stored_count"),
+            required_stored_count=result.get("required_stored_count"),
+            stored_by=result.get("stored_by"),
         )
-        return {
-            "status": "max_hops_reached",
-            "key": key_hex,
-            "visited_node_ids": sorted(visited_node_ids),
-        }
+        return result
 
     async def query(
         self,
@@ -142,7 +133,6 @@ class PhysicalDhtClient:
         namespace: str,
         logical_key: str,
     ) -> dict[str, object]:
-        visited_node_ids: set[str] = set()
         key_hex = self.engine.services.dht_service.build_key(namespace, logical_key)
         self.engine.services.log_service.info(
             "physical_dht_client",
@@ -151,119 +141,69 @@ class PhysicalDhtClient:
             logical_key=logical_key,
             key=key_hex,
         )
-        current_session = await self._select_initial_session(key_hex)
-        if current_session is None:
+
+        result = self._query_locally_if_responsible(key_hex=key_hex)
+        if result.get("status") == "found":
             self.engine.services.log_service.info(
                 "physical_dht_client",
-                "no initial session for query, trying local responsibility path",
-                key=key_hex,
-            )
-            local_result = self._query_locally_if_responsible(
-                key_hex=key_hex,
-            )
-            if local_result.get("status") == "found":
-                return local_result
-
-            current_session = self._select_any_active_remote_session()
-            if current_session is None:
-                return local_result
-
-            self.engine.services.log_service.info(
-                "physical_dht_client",
-                "using active remote session after local query miss",
-                key=key_hex,
-                session_id=current_session.session_id,
-                remote_physical_node_id=current_session.remote_identity_id,
-            )
-
-        for _ in range(self._max_hops):
-            visited_node_ids.add(current_session.remote_identity_id)
-            self.engine.services.log_service.info(
-                "physical_dht_client",
-                "sending dht query hop",
-                key=key_hex,
-                session_id=current_session.session_id,
-                remote_physical_node_id=current_session.remote_identity_id,
-                visited_count=len(visited_node_ids),
-            )
-            result = await self._request_query_once(
-                session_id=current_session.session_id,
+                "dht query completed locally",
                 namespace=namespace,
                 logical_key=logical_key,
+                key=key_hex,
+                status=result.get("status"),
+            )
+            return result
+
+        for attempt in range(1, self._query_attempt_count + 1):
+            session = await self._select_random_initial_session()
+            if session is None:
+                self.engine.services.log_service.warning(
+                    "physical_dht_client",
+                    "dht query has no active path to responsible nodes",
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    key=key_hex,
+                    attempt=attempt,
+                    max_attempts=self._query_attempt_count,
+                    local_status=result.get("status"),
+                    local_reason=result.get("reason"),
+                )
+                break
+
+            result = await self._request_query_once(
+                session_id=session.session_id,
+                namespace=namespace,
+                logical_key=logical_key,
+                timeout_seconds=self._query_attempt_timeout_seconds,
+            )
+            self.engine.services.log_service.info(
+                "physical_dht_client",
+                "dht query attempt completed",
+                namespace=namespace,
+                logical_key=logical_key,
+                key=key_hex,
+                attempt=attempt,
+                max_attempts=self._query_attempt_count,
+                status=result.get("status"),
+                reason=result.get("reason"),
+                has_record=bool(result.get("record_json")),
+                responsible_nodes=result.get("responsible_nodes"),
             )
             if result.get("status") == "found":
-                self.engine.services.log_service.info(
-                    "physical_dht_client",
-                    "dht query found record",
-                    key=result.get("key"),
-                    visited_count=len(visited_node_ids),
-                )
-                result["visited_node_ids"] = sorted(visited_node_ids)
-                return result
+                break
 
-            if result.get("status") == "not_found":
-                next_session = await self._advance_to_next_session(
-                    responsible_nodes=result.get("responsible_nodes", []),
-                    visited_node_ids=visited_node_ids,
-                )
-                if next_session is not None:
-                    self.engine.services.log_service.info(
-                        "physical_dht_client",
-                        "dht query continuing after responsible node miss",
-                        key=result.get("key"),
-                        next_remote_physical_node_id=next_session.remote_identity_id,
-                        visited_count=len(visited_node_ids),
-                    )
-                    current_session = next_session
-                    continue
-
-                self.engine.services.log_service.info(
-                    "physical_dht_client",
-                    "dht query finished with not found",
-                    key=result.get("key"),
-                    visited_count=len(visited_node_ids),
-                )
-                result["visited_node_ids"] = sorted(visited_node_ids)
-                return result
-
-            if result.get("status") != "closest_nodes":
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "dht query returned non-routable status",
-                    key=result.get("key"),
-                    status=result.get("status"),
-                )
-                result["visited_node_ids"] = sorted(visited_node_ids)
-                return result
-
-            current_session = await self._advance_to_next_session(
-                responsible_nodes=result.get("responsible_nodes", []),
-                visited_node_ids=visited_node_ids,
-            )
-            if current_session is None:
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "dht query could not advance to next session",
-                    key=result.get("key"),
-                )
-                return {
-                    "status": "not_routable",
-                    "key": result.get("key"),
-                    "responsible_nodes": result.get("responsible_nodes", []),
-                    "visited_node_ids": sorted(visited_node_ids),
-                }
-
-        self.engine.services.log_service.warning(
+        self.engine.services.log_service.info(
             "physical_dht_client",
-            "dht query reached max hops",
+            "dht query completed through network",
+            namespace=namespace,
+            logical_key=logical_key,
             key=key_hex,
-            max_hops=self._max_hops,
+            status=result.get("status"),
+            reason=result.get("reason"),
+            has_record=bool(result.get("record_json")),
+            responsible_nodes=result.get("responsible_nodes"),
         )
-        return {
-            "status": "max_hops_reached",
-            "key": key_hex,
-            "visited_node_ids": sorted(visited_node_ids),
-        }
+        return result
 
     def complete_result(
         self,
@@ -282,6 +222,8 @@ class PhysicalDhtClient:
             response_to_message_id=response_to_message_id,
             status=result_data.get("status"),
             key=result_data.get("key"),
+            stored_count=result_data.get("stored_count"),
+            required_stored_count=result_data.get("required_stored_count"),
         )
 
     async def _request_publish_once(
@@ -292,6 +234,8 @@ class PhysicalDhtClient:
         logical_key: str,
         record_json: str,
         expires_at: str | None,
+        stored_by: list[str],
+        timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         session = self._get_active_session(session_id)
         endpoint = self._build_remote_endpoint(session)
@@ -306,12 +250,15 @@ class PhysicalDhtClient:
             logical_key=logical_key,
             record_json=record_json,
             expires_at=expires_at,
+            ttl=self._request_ttl,
+            stored_by=stored_by,
         )
         return await self._send_and_wait_result(
             message_id=header["message_id"],
             transport_name=endpoint.transport_name,
             payload=payload,
             remote_endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
         )
 
     async def _request_query_once(
@@ -320,6 +267,7 @@ class PhysicalDhtClient:
         session_id: str,
         namespace: str,
         logical_key: str,
+        timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         session = self._get_active_session(session_id)
         endpoint = self._build_remote_endpoint(session)
@@ -332,12 +280,14 @@ class PhysicalDhtClient:
             header=header,
             namespace=namespace,
             logical_key=logical_key,
+            ttl=self._request_ttl,
         )
         return await self._send_and_wait_result(
             message_id=header["message_id"],
             transport_name=endpoint.transport_name,
             payload=payload,
             remote_endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
         )
 
     async def _send_and_wait_result(
@@ -347,10 +297,12 @@ class PhysicalDhtClient:
         transport_name: str,
         payload: bytes,
         remote_endpoint: TransportEndpoint,
+        timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, object]] = loop.create_future()
         self._pending_results[message_id] = future
+        wait_timeout_seconds = timeout_seconds or self._response_timeout_seconds
 
         try:
             await self.engine.send_packet(
@@ -362,104 +314,85 @@ class PhysicalDhtClient:
             )
             self.engine.services.log_service.debug(
                 "physical_dht_client",
-                "sent dht request and waiting result",
+                "sent dht request and waiting final result",
                 message_id=message_id,
                 transport=transport_name,
                 host=remote_endpoint.host,
                 port=remote_endpoint.port,
+                payload_size_bytes=len(payload),
+                timeout_seconds=wait_timeout_seconds,
             )
-            return await asyncio.wait_for(future, timeout=self._response_timeout_seconds)
+            return await asyncio.wait_for(future, timeout=wait_timeout_seconds)
+        except asyncio.TimeoutError:
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "dht request timed out waiting final result",
+                message_id=message_id,
+                timeout_seconds=wait_timeout_seconds,
+                transport=transport_name,
+                host=remote_endpoint.host,
+                port=remote_endpoint.port,
+            )
+            return {
+                "status": "timeout",
+                "reason": "dht_final_result_timeout",
+                "timeout_seconds": wait_timeout_seconds,
+            }
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "failed to send dht request",
+                message_id=message_id,
+                transport=transport_name,
+                host=remote_endpoint.host,
+                port=remote_endpoint.port,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
+            return {
+                "status": "send_failed",
+                "reason": "dht_request_send_failed",
+                "error": repr(error),
+            }
         finally:
             self._pending_results.pop(message_id, None)
 
-    async def _advance_to_next_session(
-        self,
-        *,
-        responsible_nodes: list[object],
-        visited_node_ids: set[str],
-    ):
-        self._remember_responsible_nodes(responsible_nodes)
-
-        for responsible_node in responsible_nodes:
-            if not isinstance(responsible_node, dict):
-                continue
-
-            node_id = responsible_node.get("node_id")
-            if not isinstance(node_id, str) or not node_id:
-                continue
-            if node_id in visited_node_ids:
-                continue
-            if responsible_node.get("is_local") is True:
-                continue
-
-            existing_session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(node_id)
-            if existing_session is not None:
-                self.engine.services.log_service.debug(
-                    "physical_dht_client",
-                    "reusing active physical session for dht hop",
-                    remote_physical_node_id=node_id,
-                    session_id=existing_session.session_id,
-                )
-                return existing_session
-
-            try:
-                session_id = await self.engine.services.protocol_clients.physical.session.start_session(
-                    remote_physical_node_id=node_id,
-                )
-            except Exception:
-                self.engine.services.log_service.warning(
-                    "physical_dht_client",
-                    "failed to open physical session for responsible node",
-                    remote_physical_node_id=node_id,
-                )
-                continue
-
-            session = self.engine.services.session_manager.get_session_by_session_id(session_id)
-            if session is not None and session.session_state == "active":
-                self.engine.services.log_service.info(
-                    "physical_dht_client",
-                    "opened physical session for responsible node",
-                    remote_physical_node_id=node_id,
-                    session_id=session.session_id,
-                )
-                return session
-
-        return None
-
-    async def _select_initial_session(self, key_hex: str):
-        closest_nodes_result = self.engine.services.dht_service.select_k_closest_nodes(key_hex)
-        responsible_nodes = list(closest_nodes_result.get("nodes", []))
-        remote_candidates = [
-            node
-            for node in responsible_nodes
-            if isinstance(node, dict) and node.get("is_local") is not True
+    async def _select_random_initial_session(self):
+        active_sessions = [
+            session
+            for session in self.engine.services.session_manager.list_active_physical_sessions()
+            if not self._is_observed_only_physical_session(session)
         ]
-        random.shuffle(remote_candidates)
+        if active_sessions:
+            session = random.choice(active_sessions)
+            self.engine.services.log_service.debug(
+                "physical_dht_client",
+                "selected random active session for dht request",
+                remote_physical_node_id=session.remote_identity_id,
+                session_id=session.session_id,
+            )
+            return session
 
-        for remote_candidate in remote_candidates:
-            node_id = remote_candidate.get("node_id")
-            if not isinstance(node_id, str) or not node_id:
-                continue
-
-            existing_session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(node_id)
-            if existing_session is not None:
-                self.engine.services.log_service.debug(
-                    "physical_dht_client",
-                    "selected existing initial physical session",
-                    remote_physical_node_id=node_id,
-                    session_id=existing_session.session_id,
-                )
-                return existing_session
-
+        candidates = self.engine.services.identity_service.list_remote_physical_nodes_for_ping(
+            limit=16,
+        )
+        random.shuffle(candidates)
+        self.engine.services.log_service.debug(
+            "physical_dht_client",
+            "opening random initial dht session from known candidates",
+            candidate_count=len(candidates),
+        )
+        for candidate in candidates:
             try:
                 session_id = await self.engine.services.protocol_clients.physical.session.start_session(
-                    remote_physical_node_id=node_id,
+                    remote_physical_node_id=candidate.node_id,
                 )
-            except Exception:
+            except Exception as error:
                 self.engine.services.log_service.warning(
                     "physical_dht_client",
-                    "failed to open initial physical session",
-                    remote_physical_node_id=node_id,
+                    "failed to open random initial dht session",
+                    remote_physical_node_id=candidate.node_id,
+                    error=repr(error),
                 )
                 continue
 
@@ -467,20 +400,13 @@ class PhysicalDhtClient:
             if session is not None and session.session_state == "active":
                 self.engine.services.log_service.info(
                     "physical_dht_client",
-                    "opened initial physical session",
-                    remote_physical_node_id=node_id,
+                    "opened random initial dht session",
+                    remote_physical_node_id=candidate.node_id,
                     session_id=session.session_id,
                 )
                 return session
 
         return None
-
-    def _select_any_active_remote_session(self):
-        active_sessions = self.engine.services.session_manager.list_active_physical_sessions()
-        if not active_sessions:
-            return None
-
-        return random.choice(active_sessions)
 
     def _publish_locally_if_responsible(
         self,
@@ -492,40 +418,62 @@ class PhysicalDhtClient:
         expires_at: str | None,
     ) -> dict[str, object]:
         closest_nodes_result = self.engine.services.dht_service.select_k_closest_nodes(key_hex)
+        responsible_nodes = closest_nodes_result.get("nodes", [])
+        required_stored_count = len(responsible_nodes)
         if not closest_nodes_result.get("local_node_is_responsible"):
-            self.engine.services.log_service.warning(
+            self.engine.services.log_service.debug(
                 "physical_dht_client",
-                "local publish fallback is not responsible",
+                "local node is not responsible for dht publish",
                 key=key_hex,
+                responsible_count=required_stored_count,
             )
             return {
                 "status": "not_routable",
                 "key": key_hex,
-                "responsible_nodes": closest_nodes_result.get("nodes", []),
-                "visited_node_ids": [],
+                "responsible_nodes": [],
+                "stored_by": [],
+                "stored_count": 0,
+                "required_stored_count": required_stored_count,
             }
 
-        parsed_expires_at = self._parse_optional_datetime(expires_at)
+        local_node = self.engine.services.identity_service.get_local_physical_node_result()
+        if local_node is None:
+            return {
+                "status": "not_routable",
+                "reason": "local_physical_node_not_initialized",
+                "key": key_hex,
+                "responsible_nodes": [],
+                "stored_by": [],
+                "stored_count": 0,
+                "required_stored_count": required_stored_count,
+            }
+
         DhtProtocolHandler._upsert_local_record(
             services=self.engine.services,
             key_hex=key_hex,
             namespace=namespace,
             logical_key=logical_key,
             record_json=record_json,
-            expires_at=parsed_expires_at,
+            expires_at=self._parse_optional_datetime(expires_at),
             source="dht_publish",
         )
         self.engine.services.log_service.info(
             "physical_dht_client",
             "stored dht record locally via publish fallback",
             key=key_hex,
+            stored_count=1,
+            required_stored_count=required_stored_count,
+            responsible_count=required_stored_count,
         )
+        status = "stored" if required_stored_count <= 1 else "partially_stored"
         return {
-            "status": "stored",
+            "status": status,
             "key": key_hex,
             "stored_locally": True,
-            "responsible_nodes": closest_nodes_result.get("nodes", []),
-            "visited_node_ids": [],
+            "responsible_nodes": [],
+            "stored_by": [local_node.id],
+            "stored_count": 1,
+            "required_stored_count": required_stored_count,
         }
 
     def _query_locally_if_responsible(
@@ -543,8 +491,7 @@ class PhysicalDhtClient:
             return {
                 "status": "not_routable",
                 "key": key_hex,
-                "responsible_nodes": closest_nodes_result.get("nodes", []),
-                "visited_node_ids": [],
+                "responsible_nodes": [],
             }
 
         dht_record = DhtProtocolHandler._load_validated_local_record(
@@ -561,8 +508,7 @@ class PhysicalDhtClient:
                 "status": "not_found",
                 "key": key_hex,
                 "stored_locally": False,
-                "responsible_nodes": closest_nodes_result.get("nodes", []),
-                "visited_node_ids": [],
+                "responsible_nodes": [],
             }
 
         self.engine.services.log_service.info(
@@ -580,64 +526,8 @@ class PhysicalDhtClient:
                 if dht_record.expires_at is not None
                 else None
             ),
-            "responsible_nodes": closest_nodes_result.get("nodes", []),
-            "visited_node_ids": [],
+            "responsible_nodes": [],
         }
-
-    def _remember_responsible_nodes(self, responsible_nodes: list[object]) -> None:
-        for responsible_node in responsible_nodes:
-            if not isinstance(responsible_node, dict):
-                continue
-            if responsible_node.get("is_local") is True:
-                continue
-
-            node_id = responsible_node.get("node_id")
-            public_key = responsible_node.get("public_key")
-            endpoints = responsible_node.get("endpoints")
-            if (
-                not isinstance(node_id, str)
-                or not node_id
-                or not isinstance(public_key, str)
-                or not public_key
-                or not isinstance(endpoints, list)
-                or not endpoints
-            ):
-                continue
-
-            valid_endpoints: list[dict[str, object]] = []
-            for endpoint in endpoints:
-                if not isinstance(endpoint, dict):
-                    continue
-                transport = endpoint.get("transport")
-                host = endpoint.get("host")
-                port = endpoint.get("port")
-                priority = endpoint.get("priority", 0)
-                if isinstance(transport, str) and transport and isinstance(host, str) and host and isinstance(port, int):
-                    valid_endpoints.append(
-                        {
-                            "transport": transport,
-                            "host": host,
-                            "port": port,
-                            "priority": priority if isinstance(priority, int) else 0,
-                        }
-                    )
-
-            if not valid_endpoints:
-                continue
-
-            self.engine.services.identity_service.upsert_discovered_remote_physical_node(
-                node_id=node_id,
-                public_key=public_key,
-                protocol_version=None,
-                endpoints=valid_endpoints,
-                notes_json='{"source":"dht_result_responsible_nodes"}',
-            )
-            self.engine.services.log_service.debug(
-                "physical_dht_client",
-                "remembered responsible node from dht result",
-                remote_physical_node_id=node_id,
-                endpoint_count=len(valid_endpoints),
-            )
 
     def _get_active_session(self, session_id: str):
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
@@ -664,8 +554,39 @@ class PhysicalDhtClient:
             return None
 
         try:
-            from datetime import datetime
-
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
             return None
+
+    @staticmethod
+    def _read_stored_by(result: dict[str, object]) -> list[str]:
+        value = result.get("stored_by")
+        if not isinstance(value, list):
+            return []
+
+        return [item for item in value if isinstance(item, str) and item]
+
+    @staticmethod
+    def _merge_stored_by(current: list[str], incoming: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for node_id in [*current, *incoming]:
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            merged.append(node_id)
+        return merged
+
+    @staticmethod
+    def _is_observed_only_physical_session(session) -> bool:
+        if not session.metadata_json:
+            return False
+
+        try:
+            metadata = json.loads(session.metadata_json)
+        except json.JSONDecodeError:
+            return False
+
+        if not isinstance(metadata, dict):
+            return False
+        return metadata.get("physical_endpoint_source") == "observed"

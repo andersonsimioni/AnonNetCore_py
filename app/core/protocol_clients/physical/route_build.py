@@ -56,11 +56,24 @@ class RouteBuildClient:
             path_id=initial_path_id,
             nonce=route_nonce,
         )
-        await self.engine.forward_message_to_remote_physical_node(
+        sent = await self.engine.forward_message_to_remote_physical_node(
             remote_physical_node_id=first_hop_physical_node_id,
             message_type="ROUTE_CREATE",
             payload=payload,
         )
+        if not sent:
+            self.engine.services.route_service.invalidate_initiator_resolution(
+                initial_path_id=initial_path_id,
+                reason="route_create_first_hop_send_failed",
+            )
+            self.engine.services.log_service.warning(
+                "route_build_client",
+                "route create was not sent to first hop",
+                initial_path_id=initial_path_id,
+                first_hop_physical_node_id=first_hop_physical_node_id,
+            )
+            raise RuntimeError("Nao foi possivel enviar ROUTE_CREATE para o first hop.")
+
         self.engine.services.log_service.info(
             "route_build_client",
             "sent route create",

@@ -111,6 +111,7 @@ class CoreHttpApiServer:
             ("POST", "/v1/virtual-nodes"): self._create_local_virtual_node,
             ("POST", "/v1/virtual-nodes/remote"): self._upsert_remote_virtual_node,
             ("POST", "/v1/dht/publish"): self._dht_publish,
+            ("POST", "/v1/dht/publish-jobs"): self._dht_publish_job,
             ("POST", "/v1/dht/query"): self._dht_query,
             ("POST", "/v1/dht/key"): self._dht_key,
             ("POST", "/v1/virtual-nodes/local/sign"): self._sign_local_virtual_node_payload,
@@ -136,6 +137,7 @@ class CoreHttpApiServer:
                 self._match_content_getter(request.path)
                 or self._match_content_range_getter(request.path)
                 or self._match_download_getter(request.path)
+                or self._match_dht_publish_job_getter(request.path)
             )
         if handler is None:
             raise CoreApiError("route_not_found", "Rota da API nao encontrada.", status_code=404)
@@ -186,6 +188,16 @@ class CoreHttpApiServer:
     async def _dht_publish(self, request: "HttpRequest") -> dict[str, object]:
         body = self._json_body(request)
         return await self.api_service.dht_publish(
+            namespace=str(body.get("namespace") or ""),
+            logical_key=str(body.get("logical_key") or ""),
+            record_json=self._optional_str(body.get("record_json")),
+            record=self._optional_dict(body.get("record")),
+            expires_at=self._optional_str(body.get("expires_at")),
+        )
+
+    def _dht_publish_job(self, request: "HttpRequest") -> dict[str, object]:
+        body = self._json_body(request)
+        return self.api_service.start_dht_publish_job(
             namespace=str(body.get("namespace") or ""),
             logical_key=str(body.get("logical_key") or ""),
             record_json=self._optional_str(body.get("record_json")),
@@ -337,9 +349,27 @@ class CoreHttpApiServer:
                 content_id=content_id,
                 local_virtual_node_id=str(body.get("local_virtual_node_id") or ""),
                 ttl_seconds=self._optional_int(body.get("ttl_seconds")),
+                async_publish=bool(body.get("async_publish", False)),
             )
 
         return _publish
+
+    def _match_dht_publish_job_getter(
+        self,
+        path: str,
+    ) -> Callable[[HttpRequest], dict[str, object]] | None:
+        prefix = "/v1/dht/publish-jobs/"
+        if not path.startswith(prefix):
+            return None
+
+        job_id = path[len(prefix):].strip("/")
+        if not job_id or "/" in job_id:
+            return None
+
+        def _get(_request: HttpRequest) -> dict[str, object]:
+            return self.api_service.get_dht_publish_job(job_id=job_id)
+
+        return _get
 
     def _match_content_getter(
         self,

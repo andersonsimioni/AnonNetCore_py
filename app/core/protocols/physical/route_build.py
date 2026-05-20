@@ -141,6 +141,7 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
             route_build_action=metadata.get("route_build_action"),
             reason=metadata.get("reason"),
             target_remote_physical_node_id=metadata.get("target_remote_physical_node_id"),
+            target_physical_session_id=metadata.get("target_physical_session_id"),
             forward_message_type=metadata.get("forward_message_type"),
             final_path_id=metadata.get("final_path_id"),
             observed_round_trip_ms=metadata.get("observed_round_trip_ms"),

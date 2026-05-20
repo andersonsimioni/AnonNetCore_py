@@ -50,7 +50,7 @@ class DhtService:
         if not key_hex:
             raise ValueError("key_hex e obrigatorio.")
 
-        node_candidates = self._load_node_candidates()
+        node_candidates = self._deduplicate_node_candidates(self._load_node_candidates())
         ranked_nodes = self._rank_nodes_by_distance(key_hex, node_candidates)
         replication_factor = self.config.dht_replication_factor
         selected_nodes = ranked_nodes[:replication_factor]
@@ -72,8 +72,17 @@ class DhtService:
             )
             remote_nodes = list(
                 session.query(RemotePhysicalNodeIdentity)
+                .join(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
                 .filter(RemotePhysicalNodeIdentity.status == "active")
                 .filter(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .filter(NodeEndpoint.is_active.is_(True))
+                .filter(NodeEndpoint.transport.is_not(None))
+                .filter(NodeEndpoint.host.is_not(None))
+                .filter(NodeEndpoint.port.is_not(None))
+                .distinct()
                 .all()
             )
 
@@ -97,6 +106,28 @@ class DhtService:
             )
 
         return candidates
+
+    @staticmethod
+    def _deduplicate_node_candidates(
+        node_candidates: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        """Mantem um unico candidato por node_id e prefere a identidade local."""
+
+        candidates_by_node_id: dict[str, dict[str, object]] = {}
+        for node_candidate in node_candidates:
+            node_id = node_candidate.get("node_id")
+            if not isinstance(node_id, str) or not node_id:
+                continue
+
+            current_candidate = candidates_by_node_id.get(node_id)
+            if current_candidate is None:
+                candidates_by_node_id[node_id] = node_candidate
+                continue
+
+            if node_candidate.get("is_local") is True:
+                candidates_by_node_id[node_id] = node_candidate
+
+        return list(candidates_by_node_id.values())
 
     def _rank_nodes_by_distance(
         self,

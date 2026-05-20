@@ -57,6 +57,9 @@ class EngineServices:
 
         self.engine = engine
         self.dht_service.config = self.config
+        self.identity_service.endpoint_failure_threshold = (
+            self.config.physical_node_endpoint_failure_threshold
+        )
         self.content_transfer_service.database = self.database
         self.content_transfer_service.configure(
             storage_dir=self.config.content_storage_dir,

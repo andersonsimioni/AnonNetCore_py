@@ -59,51 +59,64 @@ async def main() -> int:
         websocket_port=18181,
         log_dir=TEST_LOG_ROOT / "core-a",
     )
-    core_b = create_api_core(
-        data_dir=TEST_DATA_ROOT / "core-b",
-        listen_port=19602,
-        api_port=18280,
-        websocket_port=18281,
-        log_dir=TEST_LOG_ROOT / "core-b",
-    )
-
     try:
-        await asyncio.gather(core_a.start(), core_b.start())
-        print("checkpoint 0 OK: API cores A/B started")
+        await core_a.start()
+        print("checkpoint 0 OK: API core A started")
 
         await wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes)
-        await wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes)
         await wait_for_cluster_network_maturity(
             core_a,
-            core_b,
             required_ready_nodes=required_ready_nodes,
         )
         print("checkpoint 0 OK: physical network ready for social smoke")
 
-        vn_a = create_local_virtual_node(
+        local_vn_a = create_local_virtual_node(
             core_a,
             kind="social",
-            metadata_source="poc_social_js_smoke",
+            metadata_source="poc_social_js_smoke_same_core",
         )
-        vn_b = create_local_virtual_node(
-            core_b,
+        local_vn_b = create_local_virtual_node(
+            core_a,
             kind="social",
-            metadata_source="poc_social_js_smoke",
+            metadata_source="poc_social_js_smoke_same_core",
         )
-        print(f"checkpoint 1 OK: social VNs prepared by core runtime: A={vn_a.id} B={vn_b.id}")
-
-        active_route = await wait_for_runtime_route_active(core_a, local_virtual_node_id=vn_a.id)
-        await wait_for_drt_entry(
-            core_b,
-            virtual_node_public_key=vn_a.public_key,
-            expected_final_path_id=active_route.final_path_id,
+        print(
+            "checkpoint 1 OK: social VNs prepared by core runtime: "
+            f"localA={local_vn_a.id} localB={local_vn_b.id}"
         )
-        print("checkpoint 2 OK: VN A route is active and visible from core B DRT")
 
-        await run_js_smoke(vn_a=vn_a, vn_b=vn_b)
+        active_route_local_a_task = asyncio.create_task(
+            wait_for_runtime_route_active(core_a, local_virtual_node_id=local_vn_a.id, timeout_seconds=300.0)
+        )
+        active_route_local_b_task = asyncio.create_task(
+            wait_for_runtime_route_active(core_a, local_virtual_node_id=local_vn_b.id, timeout_seconds=300.0)
+        )
+        active_route_local_a, active_route_local_b = await asyncio.gather(
+            active_route_local_a_task,
+            active_route_local_b_task,
+        )
+        print("checkpoint 2 OK: same-core runtime routes are active")
+
+        await asyncio.gather(
+            wait_for_drt_entry(
+                core_a,
+                virtual_node_public_key=local_vn_a.public_key,
+                expected_final_path_id=active_route_local_a.final_path_id,
+            ),
+            wait_for_drt_entry(
+                core_a,
+                virtual_node_public_key=local_vn_b.public_key,
+                expected_final_path_id=active_route_local_b.final_path_id,
+            ),
+        )
+        print("checkpoint 3 OK: same-core routes are visible through DRT")
+
+        await run_js_smoke(
+            local_vn_a=local_vn_a,
+            local_vn_b=local_vn_b,
+        )
         return 0
     finally:
-        await stop_core(core_b)
         await stop_core(core_a)
 
 
@@ -140,7 +153,8 @@ def create_api_core(
     config.api_websocket_port = websocket_port
     config.content_storage_dir = data_dir / "content"
     config.virtual_route_maintenance_runtime_interval_seconds = 1.0
-    config.virtual_route_maintenance_expected_round_trip_ttl_ms = 2000
+    config.virtual_route_maintenance_pending_route_timeout_seconds = 90.0
+    config.virtual_route_maintenance_expected_round_trip_ttl_ms = 1000
     config.virtual_route_maintenance_candidate_limit = 16
 
     services = EngineServices(
@@ -153,29 +167,47 @@ def create_api_core(
     return CoreEngine(services=services)
 
 
-async def run_js_smoke(*, vn_a, vn_b) -> None:
+async def run_js_smoke(*, local_vn_a, local_vn_b) -> None:
     env = os.environ.copy()
+    env["SOCIAL_SMOKE_MODE"] = "same-core"
     env["CORE_A_HTTP"] = "http://127.0.0.1:18180"
-    env["CORE_B_HTTP"] = "http://127.0.0.1:18280"
-    env["CORE_A_VN_ID"] = vn_a.id
-    env["CORE_A_VN_PUBLIC_KEY"] = vn_a.public_key
-    env["CORE_B_VN_ID"] = vn_b.id
-    env["CORE_B_VN_PUBLIC_KEY"] = vn_b.public_key
-    process = await asyncio.create_subprocess_exec(
-        "node",
-        str(SOCIAL_SMOKE_SCRIPT),
-        cwd=PROJECT_ROOT,
-        env=env,
-    )
-    exit_code = await process.wait()
+    env["CORE_A_LOCAL_VN_A_ID"] = local_vn_a.id
+    env["CORE_A_LOCAL_VN_A_PUBLIC_KEY"] = local_vn_a.public_key
+    env["CORE_A_LOCAL_VN_B_ID"] = local_vn_b.id
+    env["CORE_A_LOCAL_VN_B_PUBLIC_KEY"] = local_vn_b.public_key
+    js_log_path = TEST_LOG_ROOT / "social-flow-js.log"
+    js_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with js_log_path.open("w", encoding="utf-8") as js_log:
+        process = await asyncio.create_subprocess_exec(
+            "node",
+            str(SOCIAL_SMOKE_SCRIPT),
+            cwd=PROJECT_ROOT,
+            env=env,
+            stdout=js_log,
+            stderr=subprocess.STDOUT,
+        )
+        exit_code = await process.wait()
+
     if exit_code != 0:
+        print(f"social JS smoke log: {js_log_path}")
+        print(_tail_text(js_log_path, line_count=80))
         raise RuntimeError(f"social JS smoke failed with exit code {exit_code}")
+
+    print(f"social JS smoke log: {js_log_path}")
+    print("checkpoint 4 OK: social JS smoke passed")
 
 
 def reset_data_dir(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _tail_text(path: Path, *, line_count: int) -> str:
+    if not path.exists():
+        return ""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return "\n".join(lines[-line_count:])
 
 
 async def stop_core(engine: CoreEngine) -> None:

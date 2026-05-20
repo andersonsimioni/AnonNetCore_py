@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from transport import OutboundMessage
 
 from ...protocols import PhysicalNodeInfoExchangeProtocolHandler
@@ -22,6 +24,8 @@ class PhysicalNodeInfoExchangeClient:
             raise ValueError("A physical session informada nao existe em memoria.")
         if session.session_state != "active":
             raise ValueError("A physical session informada ainda nao esta ativa.")
+        if _is_observed_only_physical_endpoint(session):
+            raise ValueError("A physical session usa endpoint observado e nao deve iniciar exchange.")
 
         endpoint = self._build_remote_endpoint(session)
         request_limit = max_records or self.engine.services.config.physical_node_info_exchange_max_records
@@ -64,3 +68,15 @@ class PhysicalNodeInfoExchangeClient:
             host=session.remote_host,
             port=session.remote_port,
         )
+
+
+def _is_observed_only_physical_endpoint(session) -> bool:
+    if not session.metadata_json:
+        return False
+
+    try:
+        metadata = json.loads(session.metadata_json)
+    except json.JSONDecodeError:
+        return False
+
+    return isinstance(metadata, dict) and metadata.get("physical_endpoint_source") == "observed"

@@ -24,6 +24,10 @@ from transport import (
 )
 
 
+def _should_force_new_forward_connection(message_type: str) -> bool:
+    return message_type.startswith("ROUTE_CREATE")
+
+
 class CoreEngine:
     """Nucleo generico para identificar e processar pacotes recebidos."""
 
@@ -82,14 +86,44 @@ class CoreEngine:
         )
         result = await self.process_received_packet(context)
         if result.response_payload is not None:
-            await self.send_packet(
-                OutboundMessage(
-                    transport_name=packet.transport_name,
-                    payload=result.response_payload,
-                    remote_endpoint=packet.remote_endpoint,
+            try:
+                await self.send_packet(
+                    OutboundMessage(
+                        transport_name=packet.transport_name,
+                        payload=result.response_payload,
+                        remote_endpoint=packet.remote_endpoint,
+                    )
                 )
+            except (ConnectionError, OSError) as error:
+                self.services.log_service.warning(
+                    "engine",
+                    "failed to send direct response packet",
+                    transport=packet.transport_name,
+                    remote_host=packet.remote_endpoint.host,
+                    remote_port=packet.remote_endpoint.port,
+                    error_type=type(error).__name__,
+                    error=repr(error),
+                )
+        try:
+            await self._execute_processing_result_actions(result)
+        except (ConnectionError, OSError) as error:
+            self.services.log_service.warning(
+                "engine",
+                "failed to execute packet result action",
+                action=result.metadata.get("action"),
+                message_type=result.message_type,
+                error_type=type(error).__name__,
+                error=repr(error),
             )
-        await self._execute_processing_result_actions(result)
+        except Exception as error:
+            self.services.log_service.warning(
+                "engine",
+                "failed to execute packet result action",
+                action=result.metadata.get("action"),
+                message_type=result.message_type,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
 
     async def process_received_packet(self, context: PacketContext) -> PacketProcessingResult:
         try:
@@ -339,24 +373,79 @@ class CoreEngine:
         remote_physical_node_id: str,
         message_type: str,
         payload: dict[str, object],
-    ) -> None:
-        session = await self._ensure_active_physical_session(remote_physical_node_id)
-        endpoint = self._build_session_remote_endpoint(session)
-        header = self.build_message_header(
-            message_type=message_type,
-            physical_session_id=session.session_id,
-        )
-        packet_bytes = self._build_json_packet_bytes(
-            header=header,
-            payload=payload,
-        )
-        await self.send_packet(
-            OutboundMessage(
-                transport_name=endpoint.transport_name,
-                payload=packet_bytes,
-                remote_endpoint=endpoint,
+        force_new_connection: bool = False,
+    ) -> bool:
+        force_new_connection = force_new_connection or _should_force_new_forward_connection(message_type)
+        try:
+            session = await self._ensure_active_physical_session(remote_physical_node_id)
+        except Exception as error:
+            self.services.log_service.warning(
+                "engine",
+                "failed to open physical session for forward",
+                remote_physical_node_id=remote_physical_node_id,
+                message_type=message_type,
+                error_type=type(error).__name__,
+                error=repr(error),
             )
+            return False
+        try:
+            await self._send_message_over_physical_session(
+                session=session,
+                message_type=message_type,
+                payload=payload,
+                force_new_connection=force_new_connection,
+            )
+            self.services.log_service.debug(
+                "engine",
+                "forwarded message to remote physical node",
+                session_id=session.session_id,
+                remote_physical_node_id=remote_physical_node_id,
+                message_type=message_type,
+                force_new_connection=force_new_connection,
+            )
+            return True
+        except (ConnectionError, OSError) as error:
+            self.services.log_service.warning(
+                "engine",
+                "physical session send failed; reopening session and retrying once",
+                session_id=session.session_id,
+                remote_physical_node_id=remote_physical_node_id,
+                message_type=message_type,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
+            self.services.session_manager.close_session(
+                session.session_id,
+                close_reason="transport_send_failed",
+            )
+
+        try:
+            retry_session = await self._ensure_active_physical_session(remote_physical_node_id)
+        except Exception as error:
+            self.services.log_service.warning(
+                "engine",
+                "failed to reopen physical session for forward retry",
+                remote_physical_node_id=remote_physical_node_id,
+                message_type=message_type,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
+            return False
+        await self._send_message_over_physical_session(
+            session=retry_session,
+            message_type=message_type,
+            payload=payload,
+            force_new_connection=True,
         )
+        self.services.log_service.debug(
+            "engine",
+            "forwarded message to remote physical node after retry",
+            session_id=retry_session.session_id,
+            remote_physical_node_id=remote_physical_node_id,
+            message_type=message_type,
+            force_new_connection=True,
+        )
+        return True
 
     def _prepare_outbound_message(self, message: OutboundMessage) -> OutboundMessage:
         packet = self._load_json_packet(message.payload)
@@ -410,26 +499,153 @@ class CoreEngine:
 
         if action == "forward_message":
             await self._execute_forward_message_action(result.metadata)
+        elif action == "send_payload_to_physical_session":
+            await self._execute_send_payload_to_physical_session_action(result.metadata)
 
     async def _execute_forward_message_action(
         self,
         metadata: dict[str, object],
     ) -> None:
         remote_physical_node_id = metadata.get("target_remote_physical_node_id")
+        physical_session_id = metadata.get("target_physical_session_id")
         message_type = metadata.get("forward_message_type")
         payload = metadata.get("forward_payload")
 
-        if not isinstance(remote_physical_node_id, str) or not remote_physical_node_id:
-            return
         if not isinstance(message_type, str) or not message_type:
             return
         if not isinstance(payload, dict):
+            return
+
+        if isinstance(physical_session_id, str) and physical_session_id:
+            session = self.services.session_manager.get_session_by_session_id(physical_session_id)
+            if (
+                session is not None
+                and session.session_state == "active"
+                and not self._is_observed_only_physical_session(session)
+            ):
+                await self._send_message_over_physical_session(
+                    session=session,
+                    message_type=message_type,
+                    payload=payload,
+                )
+                self.services.log_service.debug(
+                    "engine",
+                    "forwarded message through mapped physical session",
+                    session_id=session.session_id,
+                    remote_physical_node_id=session.remote_identity_id,
+                    message_type=message_type,
+                )
+                return
+
+            if session is not None and self._is_observed_only_physical_session(session):
+                self.services.log_service.debug(
+                    "engine",
+                    "mapped physical session is observed-only; falling back to node endpoint",
+                    session_id=physical_session_id,
+                    target_remote_physical_node_id=remote_physical_node_id,
+                    message_type=message_type,
+                )
+            else:
+                self.services.log_service.warning(
+                    "engine",
+                    "mapped physical session is not active for forward",
+                    session_id=physical_session_id,
+                    target_remote_physical_node_id=remote_physical_node_id,
+                    message_type=message_type,
+                )
+
+        if not isinstance(remote_physical_node_id, str) or not remote_physical_node_id:
             return
 
         await self.forward_message_to_remote_physical_node(
             remote_physical_node_id=remote_physical_node_id,
             message_type=message_type,
             payload=payload,
+            force_new_connection=_should_force_new_forward_connection(message_type),
+        )
+
+    async def _execute_send_payload_to_physical_session_action(
+        self,
+        metadata: dict[str, object],
+    ) -> None:
+        session_id = metadata.get("target_physical_session_id")
+        payload = metadata.get("payload")
+
+        if not isinstance(session_id, str) or not session_id:
+            return
+        if not isinstance(payload, bytes):
+            return
+
+        session = self.services.session_manager.get_session_by_session_id(session_id)
+        if session is None or session.session_state != "active":
+            return
+
+        endpoint = self._resolve_session_send_endpoint(session)
+        if endpoint is None:
+            return
+
+        try:
+            await self.send_packet(
+                OutboundMessage(
+                    transport_name=endpoint.transport_name,
+                    payload=payload,
+                    remote_endpoint=endpoint,
+                )
+            )
+            self.services.log_service.debug(
+                "engine",
+                "sent payload to physical session",
+                session_id=session.session_id,
+                remote_physical_node_id=session.remote_identity_id,
+                remote_host=session.remote_host,
+                remote_port=session.remote_port,
+                send_host=endpoint.host,
+                send_port=endpoint.port,
+                payload_size_bytes=len(payload),
+            )
+        except (ConnectionError, OSError) as error:
+            if not self._is_observed_only_physical_session(session):
+                self.services.session_manager.close_session(
+                    session.session_id,
+                    close_reason="transport_send_failed",
+                )
+            self.services.log_service.warning(
+                "engine",
+                "failed to send payload to physical session",
+                session_id=session.session_id,
+                remote_physical_node_id=session.remote_identity_id,
+                remote_host=session.remote_host,
+                remote_port=session.remote_port,
+                send_host=endpoint.host,
+                send_port=endpoint.port,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
+
+    async def _send_message_over_physical_session(
+        self,
+        *,
+        session,
+        message_type: str,
+        payload: dict[str, object],
+        force_new_connection: bool = False,
+    ) -> None:
+        endpoint = self._build_session_remote_endpoint(session)
+        header = self.build_message_header(
+            message_type=message_type,
+            physical_session_id=session.session_id,
+        )
+        packet_bytes = self._build_json_packet_bytes(
+            header=header,
+            payload=payload,
+        )
+        await self.send_packet(
+            OutboundMessage(
+                transport_name=endpoint.transport_name,
+                payload=packet_bytes,
+                remote_endpoint=endpoint,
+                metadata={"force_new_connection": force_new_connection},
+            )
         )
 
     async def _ensure_active_physical_session(
@@ -439,8 +655,17 @@ class CoreEngine:
         active_session = self.services.session_manager.get_active_physical_session_by_remote_node_id(
             remote_physical_node_id
         )
-        if active_session is not None:
+        if active_session is not None and not self._is_observed_only_physical_session(active_session):
             return active_session
+        if active_session is not None:
+            self.services.log_service.debug(
+                "engine",
+                "ignoring observed-only physical session for outbound forward",
+                session_id=active_session.session_id,
+                remote_physical_node_id=remote_physical_node_id,
+                remote_host=active_session.remote_host,
+                remote_port=active_session.remote_port,
+            )
 
         session_id = await self.services.protocol_clients.physical.session.start_session(
             remote_physical_node_id=remote_physical_node_id,
@@ -460,6 +685,58 @@ class CoreEngine:
             host=session.remote_host,
             port=session.remote_port,
         )
+
+    def _resolve_session_send_endpoint(self, session) -> TransportEndpoint | None:
+        if not self._is_observed_only_physical_session(session):
+            return self._build_session_remote_endpoint(session)
+
+        endpoints = self.services.identity_service.list_remote_physical_node_endpoints(
+            session.remote_identity_id,
+            only_active=True,
+        )
+        if not endpoints:
+            self.services.log_service.warning(
+                "engine",
+                "observed-only session has no advertised endpoint; skipping direct session payload",
+                session_id=session.session_id,
+                remote_physical_node_id=session.remote_identity_id,
+                observed_host=session.remote_host,
+                observed_port=session.remote_port,
+            )
+            return None
+
+        endpoint = endpoints[0]
+        self.services.log_service.debug(
+            "engine",
+            "using advertised endpoint for observed-only physical session",
+            session_id=session.session_id,
+            remote_physical_node_id=session.remote_identity_id,
+            observed_host=session.remote_host,
+            observed_port=session.remote_port,
+            advertised_host=endpoint.host,
+            advertised_port=endpoint.port,
+        )
+        return TransportEndpoint(
+            transport_name=endpoint.transport,
+            host=endpoint.host,
+            port=endpoint.port,
+        )
+
+    @staticmethod
+    def _is_observed_only_physical_session(session) -> bool:
+        if session.session_scope != "physical":
+            return False
+        if not session.metadata_json:
+            return False
+
+        try:
+            metadata = json.loads(session.metadata_json)
+        except json.JSONDecodeError:
+            return False
+
+        if not isinstance(metadata, dict):
+            return False
+        return metadata.get("physical_endpoint_source") == "observed"
 
     def _validate_message_policy(
         self,

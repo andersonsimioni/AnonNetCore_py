@@ -513,7 +513,8 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 session_id=session_id,
                 content_id=download_state.content_id,
                 ddt_key=advertisement.key,
-                error=str(error),
+                error_type=type(error).__name__,
+                error=repr(error),
             )
             return
 
@@ -525,6 +526,10 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 content_id=download_state.content_id,
                 ddt_key=advertisement.key,
                 status=publish_result.get("status"),
+                reason=publish_result.get("reason"),
+                stored_count=publish_result.get("stored_count"),
+                required_stored_count=publish_result.get("required_stored_count"),
+                stored_by=publish_result.get("stored_by"),
             )
             return
 
@@ -541,6 +546,8 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
             local_virtual_node_id=session.local_identity_id,
             ddt_key=advertisement.key,
             message_id=envelope.header.get("message_id"),
+            stored_count=publish_result.get("stored_count"),
+            required_stored_count=publish_result.get("required_stored_count"),
         )
         await self._emit_api_event(
             services,

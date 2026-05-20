@@ -168,6 +168,15 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             remote_port=context.remote_port,
         )
         advertised_endpoints = _build_response_endpoints(context, services)
+        services.log_service.debug(
+            "physical_node_info",
+            "built local advertised endpoints for info response",
+            advertised_endpoints=advertised_endpoints,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            local_host=context.local_host,
+            local_port=context.local_port,
+        )
         protocol_version = str(envelope.header.get("version", 1))
         reachability_class = "direct"
         relay_capable = False
@@ -233,8 +242,25 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             or not requester_public_key
             or not requester_endpoints
         ):
+            services.log_service.debug(
+                "physical_node_info",
+                "skipped requester persistence from invalid request descriptor",
+                requester_node_id=requester_node_id if isinstance(requester_node_id, str) else None,
+                has_public_key=isinstance(requester_public_key, str) and bool(requester_public_key),
+                requester_endpoint_count=len(requester_endpoints),
+                observed_remote_host=context.remote_host,
+                observed_remote_port=context.remote_port,
+            )
             return
 
+        services.log_service.debug(
+            "physical_node_info",
+            "persisting requester advertised endpoints from request",
+            requester_node_id=requester_node_id,
+            requester_endpoints=requester_endpoints,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+        )
         services.identity_service.upsert_discovered_remote_physical_node(
             node_id=requester_node_id,
             public_key=requester_public_key,
@@ -279,6 +305,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             "persisted requester physical node from request",
             requester_node_id=requester_node_id,
             endpoint_count=len(requester_endpoints),
+            endpoints=requester_endpoints,
         )
 
     async def _handle_response(
@@ -301,6 +328,16 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
         dpnt_signature = payload.get("dpnt_signature")
 
         valid_endpoints = _select_valid_endpoints(endpoints)
+        services.log_service.debug(
+            "physical_node_info",
+            "received physical node info response descriptor",
+            remote_node_id=remote_node_id if isinstance(remote_node_id, str) else None,
+            advertised_endpoint_count=len(endpoints) if isinstance(endpoints, list) else None,
+            valid_endpoint_count=len(valid_endpoints),
+            valid_endpoints=valid_endpoints,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+        )
         if (
             not isinstance(remote_node_id, str)
             or not isinstance(remote_public_key, str)
@@ -336,6 +373,11 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
                     "advertised_status": advertised_status,
                     "advertised_endpoints": endpoints,
                     "dpnt_signature": dpnt_signature,
+                    "dpnt_reachability_class": reachability_class,
+                    "dpnt_relay_capable": bool(relay_capable),
+                    "dpnt_hole_punch_capable": bool(hole_punch_capable),
+                    "dpnt_protocol_version": protocol_version,
+                    "dpnt_status": advertised_status,
                     "dpnt_feature_flags": feature_flags if isinstance(feature_flags, list) else [],
                 },
                 separators=(",", ":"),
@@ -346,6 +388,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             "persisted remote physical node info",
             remote_node_id=remote_node_id,
             endpoint_count=len(valid_endpoints),
+            endpoints=valid_endpoints,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,

@@ -3,17 +3,26 @@ class SocialSessionStore {
     this.sessionsByVirtualNodeId = { ...initialSessions };
   }
 
-  get(remoteVirtualNodeId) {
-    return this.sessionsByVirtualNodeId[remoteVirtualNodeId] || null;
+  get(localVirtualNodeId, remoteVirtualNodeId = null) {
+    const key = this.#buildKey(localVirtualNodeId, remoteVirtualNodeId);
+    return this.sessionsByVirtualNodeId[key] || null;
   }
 
-  set(remoteVirtualNodeId, sessionId) {
-    this.sessionsByVirtualNodeId[remoteVirtualNodeId] = sessionId;
+  set(localVirtualNodeId, remoteVirtualNodeId, sessionId = null) {
+    const key = this.#buildKey(localVirtualNodeId, remoteVirtualNodeId);
+    this.sessionsByVirtualNodeId[key] = sessionId;
     return sessionId;
   }
 
   toJSON() {
     return { ...this.sessionsByVirtualNodeId };
+  }
+
+  #buildKey(localVirtualNodeId, remoteVirtualNodeId) {
+    if (!remoteVirtualNodeId) {
+      return localVirtualNodeId;
+    }
+    return `${localVirtualNodeId}::${remoteVirtualNodeId}`;
   }
 }
 

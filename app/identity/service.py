@@ -76,6 +76,7 @@ class IdentityService:
 
     def __init__(self, database: DatabaseManager | None = None) -> None:
         self.database = database or get_database()
+        self.endpoint_failure_threshold = 3
 
     def ensure_local_physical_node(self) -> LocalPhysicalNodeIdentity:
         existing_node = self.get_local_physical_node()
@@ -273,16 +274,23 @@ class IdentityService:
     def list_remote_physical_node_endpoints(
         self,
         node_id: str,
+        *,
+        only_active: bool = False,
     ) -> list[RemotePhysicalNodeEndpointResult]:
         with self.database.session_scope() as session:
             query = (
                 select(NodeEndpoint)
                 .where(NodeEndpoint.physical_node_hash_id == node_id)
-                .order_by(
-                    NodeEndpoint.priority.asc(),
-                    NodeEndpoint.last_success_at.desc(),
-                    NodeEndpoint.id.asc(),
-                )
+            )
+            if only_active:
+                query = query.where(NodeEndpoint.is_active.is_(True))
+
+            query = query.order_by(
+                NodeEndpoint.is_active.desc(),
+                NodeEndpoint.priority.asc(),
+                NodeEndpoint.failure_count.asc(),
+                NodeEndpoint.last_success_at.desc(),
+                NodeEndpoint.id.asc(),
             )
             endpoints = list(session.scalars(query).all())
 
@@ -346,12 +354,22 @@ class IdentityService:
         *,
         limit: int = 32,
     ) -> list[RemotePhysicalNodeRouteCandidate]:
+        fallback_rtt_ms = 40.0
         with self.database.session_scope() as session:
             query = (
                 select(RemotePhysicalNodeIdentity, RttInfo)
-                .join(RttInfo, RttInfo.remote_physical_node_id == RemotePhysicalNodeIdentity.id)
+                .outerjoin(RttInfo, RttInfo.remote_physical_node_id == RemotePhysicalNodeIdentity.id)
+                .join(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
                 .where(RemotePhysicalNodeIdentity.status == "active")
                 .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .where(NodeEndpoint.is_active.is_(True))
+                .where(NodeEndpoint.transport.is_not(None))
+                .where(NodeEndpoint.host.is_not(None))
+                .where(NodeEndpoint.port.is_not(None))
+                .distinct()
                 .order_by(func.random())
                 .limit(limit)
             )
@@ -361,10 +379,104 @@ class IdentityService:
             RemotePhysicalNodeRouteCandidate(
                 node_id=remote_node.id,
                 public_key=remote_node.public_key,
-                average_rtt_ms=float(rtt_info.average_rtt_ms),
+                average_rtt_ms=float(rtt_info.average_rtt_ms if rtt_info is not None else fallback_rtt_ms),
             )
             for remote_node, rtt_info in rows
         ]
+
+    def build_remote_physical_node_route_diagnostics(self) -> dict[str, object]:
+        """Resume os filtros que um PN precisa passar para virar candidato de rota."""
+
+        with self.database.session_scope() as session:
+            total_remote_nodes = session.scalar(
+                select(func.count()).select_from(RemotePhysicalNodeIdentity)
+            ) or 0
+            discovered_nodes = session.scalar(
+                select(func.count())
+                .select_from(RemotePhysicalNodeIdentity)
+                .where(RemotePhysicalNodeIdentity.status != "active")
+            ) or 0
+            active_nodes = session.scalar(
+                select(func.count())
+                .select_from(RemotePhysicalNodeIdentity)
+                .where(RemotePhysicalNodeIdentity.status == "active")
+            ) or 0
+            validated_nodes = session.scalar(
+                select(func.count())
+                .select_from(RemotePhysicalNodeIdentity)
+                .where(RemotePhysicalNodeIdentity.status == "active")
+                .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+            ) or 0
+            active_endpoint_nodes = session.scalar(
+                select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
+                .select_from(RemotePhysicalNodeIdentity)
+                .join(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
+                .where(RemotePhysicalNodeIdentity.status == "active")
+                .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .where(NodeEndpoint.is_active.is_(True))
+                .where(NodeEndpoint.transport.is_not(None))
+                .where(NodeEndpoint.host.is_not(None))
+                .where(NodeEndpoint.port.is_not(None))
+            ) or 0
+            route_ready_nodes = session.scalar(
+                select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
+                .select_from(RemotePhysicalNodeIdentity)
+                .join(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
+                .where(RemotePhysicalNodeIdentity.status == "active")
+                .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .where(NodeEndpoint.is_active.is_(True))
+                .where(NodeEndpoint.transport.is_not(None))
+                .where(NodeEndpoint.host.is_not(None))
+                .where(NodeEndpoint.port.is_not(None))
+            ) or 0
+            rtt_known_nodes = session.scalar(
+                select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
+                .select_from(RemotePhysicalNodeIdentity)
+                .join(RttInfo, RttInfo.remote_physical_node_id == RemotePhysicalNodeIdentity.id)
+                .where(RemotePhysicalNodeIdentity.status == "active")
+                .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+            ) or 0
+            endpoint_rows = list(
+                session.execute(
+                    select(
+                        NodeEndpoint.physical_node_hash_id,
+                        NodeEndpoint.transport,
+                        NodeEndpoint.host,
+                        NodeEndpoint.port,
+                        NodeEndpoint.is_active,
+                        NodeEndpoint.failure_count,
+                    )
+                    .order_by(NodeEndpoint.last_success_at.desc(), NodeEndpoint.id.desc())
+                    .limit(8)
+                ).all()
+            )
+
+        return {
+            "total_remote_nodes": int(total_remote_nodes),
+            "discovered_nodes": int(discovered_nodes),
+            "active_nodes": int(active_nodes),
+            "validated_nodes": int(validated_nodes),
+            "active_endpoint_nodes": int(active_endpoint_nodes),
+            "route_ready_nodes": int(route_ready_nodes),
+            "rtt_known_nodes": int(rtt_known_nodes),
+            "recent_endpoints": [
+                {
+                    "node_id": node_id,
+                    "transport": transport,
+                    "host": host,
+                    "port": port,
+                    "is_active": is_active,
+                    "failure_count": failure_count,
+                }
+                for node_id, transport, host, port, is_active, failure_count in endpoint_rows
+            ],
+        }
 
     def upsert_remote_physical_node(
         self,
@@ -402,11 +514,11 @@ class IdentityService:
                 session.add(remote_node)
             else:
                 remote_node.public_key = public_key
-                remote_node.display_name = display_name
-                remote_node.reachability_class = reachability_class
+                remote_node.display_name = display_name or remote_node.display_name
+                remote_node.reachability_class = reachability_class or remote_node.reachability_class
                 remote_node.relay_capable = relay_capable
                 remote_node.hole_punch_capable = hole_punch_capable
-                remote_node.protocol_version = protocol_version
+                remote_node.protocol_version = protocol_version or remote_node.protocol_version
                 remote_node.last_seen_at = now
                 remote_node.notes_json = _merge_notes_json(remote_node.notes_json, notes_json)
                 if mark_validated:
@@ -445,6 +557,7 @@ class IdentityService:
                     endpoint.priority = priority if isinstance(priority, int) else endpoint.priority
                     endpoint.is_active = True
                     endpoint.last_success_at = now
+                    endpoint.failure_count = 0
 
             session.flush()
             session.refresh(remote_node)
@@ -469,6 +582,7 @@ class IdentityService:
 
         with self.database.session_scope() as session:
             remote_node = session.get(RemotePhysicalNodeIdentity, node_id)
+            node_was_validated = False
             if remote_node is None:
                 remote_node = RemotePhysicalNodeIdentity(
                     id=node_id,
@@ -485,12 +599,13 @@ class IdentityService:
                 )
                 session.add(remote_node)
             else:
+                node_was_validated = remote_node.status == "active" and remote_node.last_validated_at is not None
                 remote_node.public_key = public_key
-                remote_node.display_name = display_name
-                remote_node.reachability_class = reachability_class
+                remote_node.display_name = display_name or remote_node.display_name
+                remote_node.reachability_class = reachability_class or remote_node.reachability_class
                 remote_node.relay_capable = relay_capable
                 remote_node.hole_punch_capable = hole_punch_capable
-                remote_node.protocol_version = protocol_version
+                remote_node.protocol_version = protocol_version or remote_node.protocol_version
                 remote_node.last_seen_at = now
                 remote_node.notes_json = _merge_notes_json(remote_node.notes_json, notes_json)
                 if remote_node.status != "active":
@@ -524,7 +639,8 @@ class IdentityService:
                     session.add(endpoint)
                 else:
                     endpoint.priority = priority if isinstance(priority, int) else endpoint.priority
-                    endpoint.is_active = False
+                    if not node_was_validated:
+                        endpoint.is_active = False
 
             session.flush()
             session.refresh(remote_node)
@@ -560,6 +676,7 @@ class IdentityService:
             if endpoint is not None:
                 endpoint.is_active = True
                 endpoint.last_success_at = now
+                endpoint.failure_count = 0
 
             session.flush()
             session.refresh(remote_node)
@@ -589,9 +706,9 @@ class IdentityService:
                 )
             )
             if endpoint is not None:
-                endpoint.is_active = False
                 endpoint.last_failure_at = now
                 endpoint.failure_count += 1
+                endpoint.is_active = endpoint.failure_count < self.endpoint_failure_threshold
 
             session.flush()
             session.refresh(remote_node)
@@ -612,7 +729,13 @@ class IdentityService:
             if state is None or state.last_request_sent_at is None:
                 return False
 
-            return state.last_request_sent_at >= threshold
+            last_request_sent_at = state.last_request_sent_at
+            if last_request_sent_at.tzinfo is None:
+                last_request_sent_at = last_request_sent_at.replace(tzinfo=timezone.utc)
+            if threshold.tzinfo is None:
+                threshold = threshold.replace(tzinfo=timezone.utc)
+
+            return last_request_sent_at >= threshold
 
     def mark_physical_node_info_exchange_request_sent(
         self,
@@ -705,13 +828,18 @@ class IdentityService:
         if remote_node is None:
             return None
 
-        endpoints = self.list_remote_physical_node_endpoints(node_id)
+        endpoints = self.list_remote_physical_node_endpoints(node_id, only_active=True)
         if not endpoints:
             return None
 
         notes = _load_json_object(remote_node.notes_json)
         dpnt_signature = notes.get("dpnt_signature")
         dpnt_feature_flags = notes.get("dpnt_feature_flags", [])
+        dpnt_reachability_class = notes.get("dpnt_reachability_class")
+        dpnt_relay_capable = notes.get("dpnt_relay_capable")
+        dpnt_hole_punch_capable = notes.get("dpnt_hole_punch_capable")
+        dpnt_protocol_version = notes.get("dpnt_protocol_version")
+        dpnt_status = notes.get("dpnt_status")
         if (
             not isinstance(dpnt_signature, str)
             or not dpnt_signature
@@ -737,13 +865,33 @@ class IdentityService:
                 for endpoint in endpoints
             ],
             transport_methods=sorted({endpoint.transport for endpoint in endpoints}),
-            reachability_class=remote_node.reachability_class or "unknown",
-            relay_capable=remote_node.relay_capable,
-            hole_punch_capable=remote_node.hole_punch_capable,
-            protocol_version=remote_node.protocol_version or "1",
+            reachability_class=(
+                dpnt_reachability_class
+                if isinstance(dpnt_reachability_class, str) and dpnt_reachability_class
+                else remote_node.reachability_class or "unknown"
+            ),
+            relay_capable=(
+                dpnt_relay_capable
+                if isinstance(dpnt_relay_capable, bool)
+                else remote_node.relay_capable
+            ),
+            hole_punch_capable=(
+                dpnt_hole_punch_capable
+                if isinstance(dpnt_hole_punch_capable, bool)
+                else remote_node.hole_punch_capable
+            ),
+            protocol_version=(
+                dpnt_protocol_version
+                if isinstance(dpnt_protocol_version, str) and dpnt_protocol_version
+                else remote_node.protocol_version or "1"
+            ),
             feature_flags=feature_flags,
             last_validated_at=local_last_validated_at,
-            status=remote_node.status,
+            status=(
+                dpnt_status
+                if isinstance(dpnt_status, str) and dpnt_status
+                else remote_node.status
+            ),
             signature=dpnt_signature,
         )
         return {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
@@ -9,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from crypto import sha512_hex
 from crypto import dilithium_sign_hex, dilithium_verify_hex
@@ -41,6 +43,7 @@ class CoreApiService:
         self._inbox_virtual_message_types: set[str] = set()
         self._virtual_message_sinks: set[VirtualMessageSink] = set()
         self._event_sinks: set[ApiEventSink] = set()
+        self._dht_publish_jobs: dict[str, dict[str, object]] = {}
 
     def get_status(self) -> dict[str, object]:
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
@@ -89,6 +92,14 @@ class CoreApiService:
                 metadata_json=self._build_metadata_json(metadata_json, metadata),
             )
         )
+        self.engine.services.log_service.info(
+            "core_api",
+            "api created local virtual node",
+            local_virtual_node_id=node.id,
+            kind=node.kind,
+            owner_physical_node_id=local_physical_node.id,
+            is_active=node.is_active,
+        )
         return self._serialize_virtual_node(node, local=True)
 
     def upsert_remote_virtual_node(
@@ -114,6 +125,14 @@ class CoreApiService:
             expires_at=self._parse_optional_datetime(expires_at),
             metadata_json=self._build_metadata_json(metadata_json, metadata),
         )
+        self.engine.services.log_service.info(
+            "core_api",
+            "api upserted remote virtual node",
+            remote_virtual_node_id=node.id,
+            kind=node.kind,
+            status=node.status,
+            public_key_hash=sha512_hex(public_key.encode("utf-8")),
+        )
         return self._serialize_virtual_node(node, local=False)
 
     async def dht_publish(
@@ -133,18 +152,188 @@ class CoreApiService:
             separators=(",", ":"),
             sort_keys=True,
         )
-        return await self.engine.services.protocol_clients.physical.dht.publish(
+        result = await self.engine.services.protocol_clients.physical.dht.publish(
+            namespace=namespace,
+            logical_key=logical_key,
+            record_json=payload_json,
+            expires_at=expires_at,
+        )
+        self.engine.services.log_service.info(
+            "core_api",
+            "api dht publish completed",
+            namespace=namespace,
+            logical_key=logical_key,
+            status=result.get("status"),
+            stored_count=result.get("stored_count"),
+            required_stored_count=result.get("required_stored_count"),
+            stored_by=result.get("stored_by"),
+        )
+        return result
+
+    def start_dht_publish_job(
+        self,
+        *,
+        namespace: str,
+        logical_key: str,
+        record_json: str | None = None,
+        record: dict[str, object] | None = None,
+        expires_at: str | None = None,
+    ) -> dict[str, object]:
+        if not record_json and record is None:
+            raise CoreApiError("record_required", "Informe record_json ou record.")
+
+        payload_json = record_json or json.dumps(
+            record,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return self._create_dht_publish_job(
             namespace=namespace,
             logical_key=logical_key,
             record_json=payload_json,
             expires_at=expires_at,
         )
 
-    async def dht_query(self, *, namespace: str, logical_key: str) -> dict[str, object]:
-        return await self.engine.services.protocol_clients.physical.dht.query(
+    def get_dht_publish_job(self, *, job_id: str) -> dict[str, object]:
+        job = self._dht_publish_jobs.get(job_id)
+        if job is None:
+            raise CoreApiError("dht_publish_job_not_found", "Job DHT nao encontrado.", status_code=404)
+        return self._serialize_dht_publish_job(job)
+
+    def _create_dht_publish_job(
+        self,
+        *,
+        namespace: str,
+        logical_key: str,
+        record_json: str,
+        expires_at: str | None = None,
+        on_stored: Callable[[dict[str, object]], Awaitable[None] | None] | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        job_id = uuid4().hex
+        now = datetime.now(timezone.utc).isoformat()
+        job: dict[str, object] = {
+            "job_id": job_id,
+            "status": "queued",
+            "namespace": namespace,
+            "logical_key": logical_key,
+            "created_at": now,
+            "started_at": None,
+            "finished_at": None,
+            "attempt": 0,
+            "max_attempts": 6,
+            "result": None,
+            "error": None,
+            "metadata": metadata or {},
+        }
+        self._dht_publish_jobs[job_id] = job
+        asyncio.create_task(
+            self._run_dht_publish_job(
+                job_id=job_id,
+                namespace=namespace,
+                logical_key=logical_key,
+                record_json=record_json,
+                expires_at=expires_at,
+                on_stored=on_stored,
+            )
+        )
+        self.engine.services.log_service.info(
+            "core_api",
+            "queued dht publish job",
+            job_id=job_id,
             namespace=namespace,
             logical_key=logical_key,
         )
+        return self._serialize_dht_publish_job(job)
+
+    async def _run_dht_publish_job(
+        self,
+        *,
+        job_id: str,
+        namespace: str,
+        logical_key: str,
+        record_json: str,
+        expires_at: str | None,
+        on_stored: Callable[[dict[str, object]], Awaitable[None] | None] | None,
+    ) -> None:
+        job = self._dht_publish_jobs[job_id]
+        max_attempts = int(job["max_attempts"])
+        job["status"] = "running"
+        job["started_at"] = datetime.now(timezone.utc).isoformat()
+        await self.emit_event("dht_publish_job_started", self._serialize_dht_publish_job(job))
+
+        for attempt in range(1, max_attempts + 1):
+            job["attempt"] = attempt
+            try:
+                result = await self.engine.services.protocol_clients.physical.dht.publish(
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    record_json=record_json,
+                    expires_at=expires_at,
+                )
+                job["result"] = result
+                job["status"] = "stored" if result.get("status") == "stored" else "retrying"
+                self.engine.services.log_service.info(
+                    "core_api",
+                    "dht publish job attempt completed",
+                    job_id=job_id,
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    status=result.get("status"),
+                    reason=result.get("reason"),
+                    stored_count=result.get("stored_count"),
+                    required_stored_count=result.get("required_stored_count"),
+                    stored_by=result.get("stored_by"),
+                )
+                await self.emit_event("dht_publish_job_attempt_completed", self._serialize_dht_publish_job(job))
+                if result.get("status") == "stored":
+                    if on_stored is not None:
+                        callback_result = on_stored(result)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
+                    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+                    await self.emit_event("dht_publish_job_finished", self._serialize_dht_publish_job(job))
+                    return
+            except Exception as error:
+                job["error"] = str(error)
+                job["status"] = "retrying"
+                self.engine.services.log_service.warning(
+                    "core_api",
+                    "dht publish job attempt failed",
+                    job_id=job_id,
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=repr(error),
+                )
+                await self.emit_event("dht_publish_job_attempt_failed", self._serialize_dht_publish_job(job))
+
+            if attempt < max_attempts:
+                await asyncio.sleep(min(2.0 * attempt, 10.0))
+
+        job["status"] = "failed"
+        job["finished_at"] = datetime.now(timezone.utc).isoformat()
+        await self.emit_event("dht_publish_job_finished", self._serialize_dht_publish_job(job))
+
+    async def dht_query(self, *, namespace: str, logical_key: str) -> dict[str, object]:
+        result = await self.engine.services.protocol_clients.physical.dht.query(
+            namespace=namespace,
+            logical_key=logical_key,
+        )
+        self.engine.services.log_service.info(
+            "core_api",
+            "api dht query completed",
+            namespace=namespace,
+            logical_key=logical_key,
+            status=result.get("status"),
+            reason=result.get("reason"),
+            has_record=bool(result.get("record_json")),
+            responsible_nodes=result.get("responsible_nodes"),
+        )
+        return result
 
     def build_dht_key(self, *, namespace: str, logical_key: str) -> dict[str, object]:
         normalized_namespace = namespace.strip().lower()
@@ -201,13 +390,42 @@ class CoreApiService:
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
     ) -> dict[str, object]:
-        session_id = await self.engine.services.protocol_clients.virtual.session.start_session_to_virtual_node(
+        self.engine.services.log_service.info(
+            "core_api",
+            "api requested virtual session start",
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
         )
+        try:
+            session_id = await self.engine.services.protocol_clients.virtual.session.start_session_to_virtual_node(
+                local_virtual_node_id=local_virtual_node_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+            )
+        except RuntimeError as error:
+            message = str(error)
+            if "Nenhuma rota DRT valida foi encontrada" in message:
+                self.engine.services.log_service.warning(
+                    "core_api",
+                    "api virtual session start failed because drt route was not found",
+                    local_virtual_node_id=local_virtual_node_id,
+                    remote_virtual_node_id=remote_virtual_node_id,
+                    error=message,
+                )
+                raise CoreApiError("virtual_route_not_found", message, status_code=404) from error
+            raise
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
             raise CoreApiError("session_not_found", "A virtual session nao ficou disponivel.")
+        self.engine.services.log_service.info(
+            "core_api",
+            "api virtual session ready",
+            session_id=session.session_id,
+            session_state=session.session_state,
+            local_virtual_node_id=session.local_identity_id,
+            remote_virtual_node_id=session.remote_identity_id,
+            bound_route_id=session.bound_route_id,
+            metadata_json=session.metadata_json,
+        )
         return self._serialize_session(session)
 
     async def send_virtual_message(
@@ -315,6 +533,7 @@ class CoreApiService:
         content_id: str,
         local_virtual_node_id: str,
         ttl_seconds: int | None = None,
+        async_publish: bool = False,
     ) -> dict[str, object]:
         ttl = ttl_seconds or self.engine.services.config.content_provider_advertisement_ttl_seconds
         advertisement = self.engine.services.content_transfer_service.build_provider_advertisement(
@@ -328,18 +547,58 @@ class CoreApiService:
                 "Nao foi possivel montar o anuncio DDT para esse conteudo/VN.",
             )
 
-        publish_result = await self.engine.services.protocol_clients.physical.dht.publish(
-            namespace=advertisement.namespace,
-            logical_key=advertisement.logical_key,
-            record_json=advertisement.record_json,
-            expires_at=advertisement.expires_at.isoformat(),
-        )
-        if publish_result.get("status") == "stored":
+        async def _mark_provider_published(_result: dict[str, object]) -> None:
             self.engine.services.content_transfer_service.mark_provider_advertisement_published(
                 content_id=content_id,
                 local_virtual_node_id=local_virtual_node_id,
                 expires_at=advertisement.expires_at,
             )
+
+        if async_publish:
+            publish_result = self._create_dht_publish_job(
+                namespace=advertisement.namespace,
+                logical_key=advertisement.logical_key,
+                record_json=advertisement.record_json,
+                expires_at=advertisement.expires_at.isoformat(),
+                on_stored=_mark_provider_published,
+                metadata={
+                    "content_id": content_id,
+                    "local_virtual_node_id": local_virtual_node_id,
+                    "kind": "content_provider",
+                },
+            )
+            self.engine.services.log_service.info(
+                "core_api_service",
+                "content provider ddt publish queued",
+                content_id=content_id,
+                local_virtual_node_id=local_virtual_node_id,
+                namespace=advertisement.namespace,
+                logical_key=advertisement.logical_key,
+                key=advertisement.key,
+                job_id=publish_result.get("job_id"),
+            )
+        else:
+            publish_result = await self.engine.services.protocol_clients.physical.dht.publish(
+                namespace=advertisement.namespace,
+                logical_key=advertisement.logical_key,
+                record_json=advertisement.record_json,
+                expires_at=advertisement.expires_at.isoformat(),
+            )
+        self.engine.services.log_service.info(
+            "core_api_service",
+            "content provider ddt publish completed",
+            content_id=content_id,
+            local_virtual_node_id=local_virtual_node_id,
+            namespace=advertisement.namespace,
+            logical_key=advertisement.logical_key,
+            key=advertisement.key,
+            status=publish_result.get("status"),
+            stored_count=publish_result.get("stored_count"),
+            required_stored_count=publish_result.get("required_stored_count"),
+            stored_by=publish_result.get("stored_by"),
+        )
+        if publish_result.get("status") == "stored":
+            await _mark_provider_published(publish_result)
 
         data = {
             "namespace": advertisement.namespace,
@@ -495,6 +754,9 @@ class CoreApiService:
             session_id=message.session_id,
             app_message_type=message.app_message_type,
             request_id=message.request_id,
+            local_virtual_node_id=message.local_virtual_node_id,
+            remote_virtual_node_id=message.remote_virtual_node_id,
+            route_path_id=message.route_path_id,
             sink_count=len(self._virtual_message_sinks),
         )
         await self._deliver_virtual_message(message_data)
@@ -594,6 +856,23 @@ class CoreApiService:
             "error_message": state.error_message,
             "partial_path": str(state.partial_path),
             "final_path": str(state.final_path),
+        }
+
+    @staticmethod
+    def _serialize_dht_publish_job(job: dict[str, object]) -> dict[str, object]:
+        return {
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "namespace": job["namespace"],
+            "logical_key": job["logical_key"],
+            "created_at": job["created_at"],
+            "started_at": job["started_at"],
+            "finished_at": job["finished_at"],
+            "attempt": job["attempt"],
+            "max_attempts": job["max_attempts"],
+            "result": job["result"],
+            "error": job["error"],
+            "metadata": job["metadata"],
         }
 
     @staticmethod

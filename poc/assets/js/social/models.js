@@ -15,7 +15,6 @@ function createProfile({
   bio = "",
   photoContentId = null,
   friendVirtualNodeIds = [],
-  friendPublicKeys = [],
 }) {
   return {
     schema: "anonnet.social.profile.v1",
@@ -26,7 +25,6 @@ function createProfile({
     bio,
     photo_content_id: photoContentId,
     friend_virtual_node_ids: normalizeUniqueStrings(friendVirtualNodeIds),
-    friend_public_keys: normalizeUniqueStrings(friendPublicKeys),
     updated_at: new Date().toISOString(),
   };
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from identity import RemotePhysicalNodeValidationCandidate
 from sessions.models import utc_now
@@ -48,7 +49,36 @@ class PhysicalNodeValidationRuntime:
     async def _run_once(self) -> None:
         candidate = self._select_candidate()
         if candidate is None:
+            diagnostics = (
+                self.engine.services.identity_service
+                .build_remote_physical_node_route_diagnostics()
+            )
+            self.engine.services.log_service.debug(
+                "physical_node_validation_runtime",
+                "no physical node validation candidate available",
+                validation_backoff_seconds=self._validation_backoff_seconds,
+                **diagnostics,
+            )
             return
+
+        endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+            candidate.node_id,
+        )
+        self.engine.services.log_service.debug(
+            "physical_node_validation_runtime",
+            "selected physical node validation candidate",
+            remote_physical_node_id=candidate.node_id,
+            endpoint_count=len(endpoints),
+            endpoints=[
+                {
+                    "transport": endpoint.transport,
+                    "host": endpoint.host,
+                    "port": endpoint.port,
+                    "priority": endpoint.priority,
+                }
+                for endpoint in endpoints[:4]
+            ],
+        )
 
         if await self._try_validate_from_active_session(candidate):
             return
@@ -95,7 +125,8 @@ class PhysicalNodeValidationRuntime:
                 "physical_node_validation_runtime",
                 "physical node validation failed",
                 remote_physical_node_id=candidate.node_id,
-                error=str(error),
+                error_type=type(error).__name__,
+                error=repr(error),
             )
             return
 
@@ -118,6 +149,16 @@ class PhysicalNodeValidationRuntime:
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.transport or not session.remote_host or session.remote_port is None:
             return False
+        if _is_observed_only_physical_endpoint(session):
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "skipped validation from transient observed endpoint",
+                remote_physical_node_id=candidate_node_id,
+                session_id=session_id,
+                observed_host=session.remote_host,
+                observed_port=session.remote_port,
+            )
+            return False
 
         validated_node = self.engine.services.identity_service.mark_remote_physical_node_validated(
             node_id=candidate_node_id,
@@ -126,6 +167,15 @@ class PhysicalNodeValidationRuntime:
             port=session.remote_port,
         )
         if validated_node is None:
+            self.engine.services.log_service.warning(
+                "physical_node_validation_runtime",
+                "validated physical node was not found in identity storage",
+                remote_physical_node_id=candidate_node_id,
+                session_id=session_id,
+                transport=session.transport,
+                host=session.remote_host,
+                port=session.remote_port,
+            )
             return False
 
         self.engine.services.log_service.info(
@@ -181,3 +231,15 @@ class PhysicalNodeValidationRuntime:
         from datetime import timedelta
 
         return timedelta(seconds=self._validation_backoff_seconds)
+
+
+def _is_observed_only_physical_endpoint(session) -> bool:
+    if not session.metadata_json:
+        return False
+
+    try:
+        metadata = json.loads(session.metadata_json)
+    except json.JSONDecodeError:
+        return False
+
+    return isinstance(metadata, dict) and metadata.get("physical_endpoint_source") == "observed"

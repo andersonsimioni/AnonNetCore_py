@@ -34,19 +34,34 @@ class VirtualSessionClient:
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
     ) -> str:
+        local_virtual_node = self.engine.services.identity_service.get_local_virtual_node_by_id(
+            local_virtual_node_id
+        )
+        if local_virtual_node is None:
+            raise ValueError("O virtual node local informado nao existe.")
+
+        remote_is_local = (
+            self.engine.services.identity_service.get_local_virtual_node_by_id(
+                remote_virtual_node_id
+            )
+            is not None
+        )
         self.engine.services.log_service.info(
             "virtual_session_client",
-            "starting virtual session via drt",
+            "starting virtual session via drt route resolution",
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
+            remote_is_local=remote_is_local,
         )
-        remote_virtual_node = self._require_remote_virtual_node(remote_virtual_node_id)
-        entry_point = await self._resolve_entry_point(remote_virtual_node.public_key)
+        remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
+            remote_virtual_node_id
+        )
+        entry_point = await self._resolve_entry_point(remote_virtual_node_id)
         await self._ensure_entry_point_physical_node(entry_point)
         return await self._start_session_over_entry_point(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
-            remote_public_key=remote_virtual_node.public_key,
+            remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
             entry_point=entry_point,
         )
 
@@ -57,10 +72,19 @@ class VirtualSessionClient:
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
     ) -> str:
-        existing_session = self.engine.services.session_manager.get_active_session_by_remote_virtual_node_id(
-            remote_virtual_node_id
+        existing_session = self._get_active_virtual_session(
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
         )
         if existing_session is not None and existing_session.bound_route_id == local_route_path_id:
+            self.engine.services.log_service.debug(
+                "virtual_session_client",
+                "reusing active virtual session for local route",
+                session_id=existing_session.session_id,
+                local_virtual_node_id=local_virtual_node_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+                bound_route_id=existing_session.bound_route_id,
+            )
             return existing_session.session_id
 
         local_virtual_node = self.engine.services.identity_service.get_local_virtual_node_by_id(
@@ -69,13 +93,15 @@ class VirtualSessionClient:
         if local_virtual_node is None:
             raise ValueError("O virtual node local informado nao existe.")
 
-        remote_virtual_node = self._require_remote_virtual_node(remote_virtual_node_id)
+        remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
+            remote_virtual_node_id
+        )
 
         keepalive_seconds = self.engine.services.config.physical_session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
-            remote_public_key=remote_virtual_node.public_key,
+            remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
             bound_route_id=local_route_path_id,
             keepalive_interval_seconds=keepalive_seconds,
         )
@@ -86,6 +112,7 @@ class VirtualSessionClient:
                 message_type="VIRTUAL_SESSION_INIT",
                 payload={
                     "initiator_virtual_node_id": local_virtual_node_id,
+                    "initiator_virtual_node_public_key": local_virtual_node.public_key,
                     "target_virtual_node_id": remote_virtual_node_id,
                     "keepalive_interval_seconds": keepalive_seconds,
                 },
@@ -105,13 +132,23 @@ class VirtualSessionClient:
         *,
         local_virtual_node_id: str,
         remote_virtual_node_id: str,
-        remote_public_key: str,
+        remote_public_key: str | None,
         entry_point: "VirtualRouteEntryPoint",
     ) -> str:
-        existing_session = self.engine.services.session_manager.get_active_session_by_remote_virtual_node_id(
-            remote_virtual_node_id
+        existing_session = self._get_active_virtual_session(
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
         )
         if existing_session is not None and existing_session.bound_route_id == entry_point.final_path_id:
+            self.engine.services.log_service.debug(
+                "virtual_session_client",
+                "reusing active virtual session for drt entry point",
+                session_id=existing_session.session_id,
+                local_virtual_node_id=local_virtual_node_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+                bound_route_id=existing_session.bound_route_id,
+                entry_point_physical_node_id=entry_point.physical_node_id,
+            )
             return existing_session.session_id
 
         local_virtual_node = self.engine.services.identity_service.get_local_virtual_node_by_id(
@@ -145,17 +182,48 @@ class VirtualSessionClient:
                 message_type="VIRTUAL_SESSION_INIT",
                 payload={
                     "initiator_virtual_node_id": local_virtual_node_id,
+                    "initiator_virtual_node_public_key": local_virtual_node.public_key,
                     "target_virtual_node_id": remote_virtual_node_id,
                     "keepalive_interval_seconds": keepalive_seconds,
                 },
                 virtual_envelope_ciphered=False,
             )
             if await self._wait_for_activation(session.session_id):
+                self.engine.services.log_service.info(
+                    "virtual_session_client",
+                    "virtual session activated via drt",
+                    session_id=session.session_id,
+                    local_virtual_node_id=local_virtual_node_id,
+                    remote_virtual_node_id=remote_virtual_node_id,
+                    bound_route_id=session.bound_route_id,
+                    entry_point_physical_node_id=entry_point.physical_node_id,
+                )
                 return session.session_id
-        except Exception:
+        except Exception as error:
+            self.engine.services.log_service.warning(
+                "virtual_session_client",
+                "virtual session init via drt failed while sending",
+                session_id=session.session_id,
+                local_virtual_node_id=local_virtual_node_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+                bound_route_id=session.bound_route_id,
+                entry_point_physical_node_id=entry_point.physical_node_id,
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
             self._close_failed_session(session.session_id)
             raise
 
+        self.engine.services.log_service.warning(
+            "virtual_session_client",
+            "virtual session init via drt timed out waiting activation",
+            session_id=session.session_id,
+            local_virtual_node_id=local_virtual_node_id,
+            remote_virtual_node_id=remote_virtual_node_id,
+            bound_route_id=session.bound_route_id,
+            entry_point_physical_node_id=entry_point.physical_node_id,
+            timeout_seconds=self._handshake_timeout_seconds,
+        )
         self._close_failed_session(session.session_id)
         raise RuntimeError("Nao foi possivel estabelecer a virtual session via DRT.")
 
@@ -284,6 +352,15 @@ class VirtualSessionClient:
         }
         entry_point_physical_node_id = self._read_session_entry_point_physical_node_id(session)
         if entry_point_physical_node_id:
+            self.engine.services.log_service.debug(
+                "virtual_session_client",
+                "sending virtual envelope through drt entry point",
+                session_id=session.session_id,
+                message_type=message_type,
+                bound_route_id=session.bound_route_id,
+                entry_point_physical_node_id=entry_point_physical_node_id,
+                virtual_envelope_ciphered=virtual_envelope_ciphered,
+            )
             await self.engine.services.protocol_clients.physical.route_execute.send_to_entry_point(
                 entry_point_physical_node_id=entry_point_physical_node_id,
                 route_path_id=session.bound_route_id,
@@ -293,6 +370,14 @@ class VirtualSessionClient:
             )
             return
 
+        self.engine.services.log_service.debug(
+            "virtual_session_client",
+            "sending virtual envelope through local route",
+            session_id=session.session_id,
+            message_type=message_type,
+            bound_route_id=session.bound_route_id,
+            virtual_envelope_ciphered=virtual_envelope_ciphered,
+        )
         await self.engine.services.protocol_clients.physical.route_execute.send_from_local_route(
             local_route_path_id=session.bound_route_id,
             virtual_session_id=session.session_id,
@@ -339,26 +424,17 @@ class VirtualSessionClient:
             raise ValueError("A virtual session informada nao existe em memoria.")
         return session
 
-    def _require_remote_virtual_node(self, remote_virtual_node_id: str):
-        remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
-            remote_virtual_node_id
-        )
-        if remote_virtual_node is None:
-            raise ValueError("O virtual node remoto informado nao existe no estado local.")
-        return remote_virtual_node
-
     async def _resolve_entry_point(
         self,
-        remote_virtual_node_public_key: str,
+        remote_virtual_node_id: str,
     ) -> "VirtualRouteEntryPoint":
-        logical_key = sha512_hex(remote_virtual_node_public_key.encode("utf-8"))
         deadline = asyncio.get_running_loop().time() + self._drt_lookup_timeout_seconds
         last_error = "not_found"
 
         while asyncio.get_running_loop().time() < deadline:
             result = await self.engine.services.protocol_clients.physical.dht.query(
                 namespace="drt",
-                logical_key=logical_key,
+                logical_key=remote_virtual_node_id,
             )
             if result.get("status") != "found":
                 last_error = str(result.get("status") or "not_found")
@@ -368,7 +444,7 @@ class VirtualSessionClient:
             try:
                 entry_point = self._select_entry_point_from_drt_result(
                     result,
-                    remote_virtual_node_public_key,
+                    remote_virtual_node_id,
                 )
             except ValueError as error:
                 last_error = str(error)
@@ -389,10 +465,24 @@ class VirtualSessionClient:
             f"dentro de {self._drt_lookup_timeout_seconds:.1f}s. Ultimo estado: {last_error}."
         )
 
+    def _get_active_virtual_session(
+        self,
+        *,
+        local_virtual_node_id: str,
+        remote_virtual_node_id: str,
+    ):
+        session_manager = self.engine.services.session_manager
+        if hasattr(session_manager, "get_active_virtual_session_by_local_and_remote_node_id"):
+            return session_manager.get_active_virtual_session_by_local_and_remote_node_id(
+                local_virtual_node_id=local_virtual_node_id,
+                remote_virtual_node_id=remote_virtual_node_id,
+            )
+        return session_manager.get_active_session_by_remote_virtual_node_id(remote_virtual_node_id)
+
     def _select_entry_point_from_drt_result(
         self,
         result: dict[str, object],
-        remote_virtual_node_public_key: str,
+        remote_virtual_node_id: str,
     ) -> "VirtualRouteEntryPoint":
         record_json = result.get("record_json")
         if not isinstance(record_json, str) or not record_json:
@@ -401,7 +491,7 @@ class VirtualSessionClient:
         record = parse_record("drt", record_json)
         if not isinstance(record, DrtRecordPayload):
             raise ValueError("drt_payload_invalid")
-        if record.pk_virtual_node != remote_virtual_node_public_key:
+        if sha512_hex(record.pk_virtual_node.encode("utf-8")) != remote_virtual_node_id:
             raise ValueError("drt_record_belongs_to_another_virtual_node")
 
         valid_entries = [

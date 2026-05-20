@@ -53,10 +53,16 @@ class LogService:
             fields=fields,
         )
         with self._write_lock:
-            print(line, flush=True)
+            try:
+                print(line, flush=True)
+            except OSError:
+                pass
             if self.log_file_path is not None:
-                with self.log_file_path.open("a", encoding="utf-8") as log_file:
-                    log_file.write(line + "\n")
+                try:
+                    with self.log_file_path.open("a", encoding="utf-8") as log_file:
+                        log_file.write(line + "\n")
+                except OSError:
+                    pass
 
     def _build_log_line(
         self,

@@ -79,8 +79,10 @@ async def main() -> None:
         )
         print(f"checkpoint 2 OK: virtual nodes created: vn_a={vn_a.id} vn_b={vn_b.id}")
 
-        await wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes)
-        await wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes)
+        await asyncio.gather(
+            wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes),
+            wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes),
+        )
         print(f"checkpoint 3 OK: network ready: required_ready_nodes={required_ready_nodes}")
 
         await wait_for_cluster_network_maturity(

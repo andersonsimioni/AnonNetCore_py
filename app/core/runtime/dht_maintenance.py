@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from dht import (
@@ -59,7 +60,8 @@ class DhtMaintenanceRuntime:
 
     async def _run_once(self) -> None:
         await self._validate_local_records()
-        await self._ensure_records_on_responsible_nodes()
+        await self._replicate_records_to_current_responsible_nodes()
+        await self._handoff_records_no_longer_responsible()
 
     async def _validate_local_records(self) -> None:
         """Valida registros DHT locais antes de disponibiliza-los para a rede."""
@@ -150,76 +152,91 @@ class DhtMaintenanceRuntime:
                 created_parent=parent.id if parent.id is not None else None,
             )
 
-    async def _ensure_records_on_responsible_nodes(self) -> None:
-        """Garante que registros DHT locais estejam presentes nos K nodes responsaveis."""
-        services = self.engine.services
-        with services.database.session_scope() as session:
-            dht_records = list(
-                session.query(DhtRecord)
-                .filter(DhtRecord.last_validated_at.is_not(None))
-                .order_by(func.random())
-                .limit(20)
-                .all()
-            )
+    async def _replicate_records_to_current_responsible_nodes(self) -> None:
+        """Replica registros em que este node ainda faz parte dos K responsaveis atuais."""
+        await self._repair_record_placement(
+            local_is_responsible=True,
+            placement_reason="current_responsible_replication",
+        )
 
-        dht_record = self._select_publishable_record(dht_records)
-        if dht_record is None:
+    async def _handoff_records_no_longer_responsible(self) -> None:
+        """Repassa registros locais quando este node saiu dos K responsaveis atuais."""
+        await self._repair_record_placement(
+            local_is_responsible=False,
+            placement_reason="handoff_no_longer_responsible",
+        )
+
+    async def _repair_record_placement(
+        self,
+        *,
+        local_is_responsible: bool,
+        placement_reason: str,
+    ) -> None:
+        """Publica um registro validado para os K responsaveis atuais da chave."""
+        services = self.engine.services
+        selected_record = self._select_publishable_record_by_responsibility(
+            local_is_responsible=local_is_responsible,
+        )
+        if selected_record is None:
             return None
 
         services.log_service.debug(
             "dht_maintenance_runtime",
-            "publishing validated dht record to responsible nodes",
-            key=dht_record.key,
-            namespace=dht_record.namespace,
-            logical_key=dht_record.logical_key,
+            "repairing dht record placement",
+            key=selected_record.key,
+            namespace=selected_record.namespace,
+            logical_key=selected_record.logical_key,
+            placement_reason=placement_reason,
+            local_is_responsible=local_is_responsible,
+            responsible_count=selected_record.responsible_count,
         )
         try:
-            publish_result = await services.protocol_clients.physical.dht.publish(
-                namespace=dht_record.namespace,
-                logical_key=dht_record.logical_key,
-                record_json=dht_record.record_json,
-                expires_at=(
-                    dht_record.expires_at.isoformat()
-                    if dht_record.expires_at is not None
-                    else None
-                ),
+            publish_result = await self._publish_record_to_current_responsible_nodes(
+                selected_record
             )
         except Exception as error:
-            self._remember_publish(dht_record)
+            self._remember_publish(selected_record)
             services.log_service.warning(
                 "dht_maintenance_runtime",
-                "failed to publish validated dht record",
-                key=dht_record.key,
-                namespace=dht_record.namespace,
-                logical_key=dht_record.logical_key,
+                "failed to repair dht record placement",
+                key=selected_record.key,
+                namespace=selected_record.namespace,
+                logical_key=selected_record.logical_key,
+                placement_reason=placement_reason,
                 error_type=type(error).__name__,
                 error=repr(error),
             )
             return
 
-        self._remember_publish(dht_record)
+        self._remember_publish(selected_record)
         publish_status = publish_result.get("status")
-        if publish_status not in {"stored", "stored_locally"}:
+        stored_count = publish_result.get("stored_count")
+        required_stored_count = publish_result.get("required_stored_count")
+        if publish_status != "stored":
             services.log_service.warning(
                 "dht_maintenance_runtime",
-                "dht record maintenance publish did not store record",
-                key=dht_record.key,
-                namespace=dht_record.namespace,
-                logical_key=dht_record.logical_key,
+                "dht record placement repair incomplete",
+                key=selected_record.key,
+                namespace=selected_record.namespace,
+                logical_key=selected_record.logical_key,
+                placement_reason=placement_reason,
                 status=publish_status,
-                visited_count=len(publish_result.get("visited_node_ids", [])),
-                responsible_node_count=len(publish_result.get("responsible_nodes", [])),
+                stored_count=stored_count,
+                required_stored_count=required_stored_count,
                 reason=publish_result.get("reason"),
             )
             return
 
         services.log_service.info(
             "dht_maintenance_runtime",
-            "finished dht record maintenance publish",
-            key=dht_record.key,
-            namespace=dht_record.namespace,
-            logical_key=dht_record.logical_key,
+            "finished dht record placement repair",
+            key=selected_record.key,
+            namespace=selected_record.namespace,
+            logical_key=selected_record.logical_key,
+            placement_reason=placement_reason,
             status=publish_status,
+            stored_count=stored_count,
+            required_stored_count=required_stored_count,
         )
 
     def _build_seed_parent_payload(self, namespace: str, fragment_payload):
@@ -293,24 +310,81 @@ class DhtMaintenanceRuntime:
             return fragment_expires_at
         return current_expires_at
 
-    def _select_publishable_record(
+    def _select_publishable_record_by_responsibility(
         self,
-        dht_records: list[DhtRecord],
-    ) -> DhtRecord | None:
-        now = asyncio.get_running_loop().time()
-        for dht_record in dht_records:
-            last_publish_at = self._last_publish_by_record_key.get(
-                self._build_publish_cache_key(dht_record)
+        *,
+        local_is_responsible: bool,
+    ) -> "DhtPlacementRecord | None":
+        services = self.engine.services
+        with services.database.session_scope() as session:
+            dht_records = list(
+                session.query(DhtRecord)
+                .filter(DhtRecord.last_validated_at.is_not(None))
+                .order_by(func.random())
+                .limit(30)
+                .all()
             )
-            if last_publish_at is None:
-                return dht_record
-            if now - last_publish_at >= self._publish_backoff_seconds:
-                return dht_record
+
+            for dht_record in dht_records:
+                placement = self._build_placement_record(dht_record)
+                if placement.local_is_responsible != local_is_responsible:
+                    continue
+                if not self._is_publishable(placement):
+                    continue
+                return placement
+
         return None
+
+    def _build_placement_record(self, dht_record: DhtRecord) -> "DhtPlacementRecord":
+        responsibility = self.engine.services.dht_service.select_k_closest_nodes(
+            dht_record.key
+        )
+        responsible_nodes = responsibility.get("nodes", [])
+        return DhtPlacementRecord(
+            key=dht_record.key,
+            namespace=dht_record.namespace,
+            logical_key=dht_record.logical_key,
+            record_json=dht_record.record_json,
+            expires_at=(
+                dht_record.expires_at.isoformat()
+                if dht_record.expires_at is not None
+                else None
+            ),
+            local_is_responsible=bool(
+                responsibility.get("local_node_is_responsible")
+            ),
+            responsible_count=len(responsible_nodes) if isinstance(responsible_nodes, list) else 0,
+        )
+
+    async def _publish_record_to_current_responsible_nodes(
+        self,
+        dht_record: "DhtPlacementRecord",
+    ) -> dict[str, object]:
+        if self.engine.services.protocol_clients is None:
+            raise RuntimeError("Protocol clients ainda nao foram inicializados.")
+
+        return await self.engine.services.protocol_clients.physical.dht.publish(
+            namespace=dht_record.namespace,
+            logical_key=dht_record.logical_key,
+            record_json=dht_record.record_json,
+            expires_at=dht_record.expires_at,
+        )
+
+    def _is_publishable(
+        self,
+        dht_record: "DhtPlacementRecord",
+    ) -> bool:
+        now = asyncio.get_running_loop().time()
+        last_publish_at = self._last_publish_by_record_key.get(
+            self._build_publish_cache_key(dht_record)
+        )
+        if last_publish_at is None:
+            return True
+        return now - last_publish_at >= self._publish_backoff_seconds
 
     def _remember_publish(
         self,
-        dht_record: DhtRecord,
+        dht_record: "DhtPlacementRecord",
     ) -> None:
         self._last_publish_by_record_key[self._build_publish_cache_key(dht_record)] = (
             asyncio.get_running_loop().time()
@@ -318,6 +392,22 @@ class DhtMaintenanceRuntime:
 
     @staticmethod
     def _build_publish_cache_key(
-        dht_record: DhtRecord,
+        dht_record: "DhtPlacementRecord",
     ) -> str:
-        return f"{dht_record.namespace}:{dht_record.logical_key}:{dht_record.key}"
+        return (
+            f"{dht_record.namespace}:"
+            f"{dht_record.logical_key}:"
+            f"{dht_record.key}:"
+            f"{dht_record.local_is_responsible}"
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class DhtPlacementRecord:
+    key: str
+    namespace: str
+    logical_key: str
+    record_json: str
+    expires_at: str | None
+    local_is_responsible: bool
+    responsible_count: int

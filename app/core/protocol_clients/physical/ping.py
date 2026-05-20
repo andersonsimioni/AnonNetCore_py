@@ -29,7 +29,8 @@ class PhysicalPingClient:
             raise ValueError("O physical node remoto ainda nao foi persistido no banco local.")
 
         endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
-            remote_physical_node_id
+            remote_physical_node_id,
+            only_active=True,
         )
         if not endpoints:
             raise ValueError("O physical node remoto nao possui endpoints conhecidos.")
@@ -65,6 +66,12 @@ class PhysicalPingClient:
                     **result,
                 }
             except Exception as error:
+                self.engine.services.identity_service.mark_remote_physical_node_validation_failure(
+                    node_id=remote_physical_node_id,
+                    transport=endpoint.transport_name,
+                    host=endpoint.host,
+                    port=endpoint.port,
+                )
                 self.engine.services.log_service.warning(
                     "physical_ping_client",
                     "ping failed on remote endpoint",
@@ -72,7 +79,8 @@ class PhysicalPingClient:
                     transport=endpoint.transport_name,
                     host=endpoint.host,
                     port=endpoint.port,
-                    error=str(error),
+                    error_type=type(error).__name__,
+                    error=repr(error),
                 )
                 last_error = error
                 continue
@@ -141,6 +149,13 @@ class PhysicalPingClient:
     ) -> None:
         future = self._pending_pongs.pop(response_to_message_id, None)
         if future is None or future.done():
+            self.engine.services.log_service.debug(
+                "physical_ping_client",
+                "received pong for unknown or completed ping",
+                response_to_message_id=response_to_message_id,
+                remote_host=pong_data.get("remote_host"),
+                remote_port=pong_data.get("remote_port"),
+            )
             return
 
         future.set_result(pong_data)

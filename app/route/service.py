@@ -23,6 +23,7 @@ class RouteService:
         to_physical_node_id: str,
         received_path_id: str,
         generated_path_id: str,
+        from_physical_session_id: str | None = None,
     ) -> RouteResolution:
         with self.database.session_scope() as session:
             resolution = RouteResolution(
@@ -34,7 +35,11 @@ class RouteService:
                 received_path_id=received_path_id,
                 generated_path_id=generated_path_id,
                 is_valid=True,
-                metadata_json=None,
+                metadata_json=_dump_metadata(
+                    {
+                        "from_physical_session_id": from_physical_session_id,
+                    }
+                ),
             )
             session.add(resolution)
             session.flush()
@@ -237,6 +242,23 @@ class RouteService:
                     RouteResolution.is_valid.is_(True),
                 )
                 .order_by(RouteResolution.id.desc())
+                .first()
+            )
+
+    def get_any_pending_initiator_resolution(self) -> RouteResolution | None:
+        pending_statuses = (
+            "pending_kem_offer",
+            "pending_final_validation",
+        )
+        with self.database.session_scope() as session:
+            return (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.status.in_(pending_statuses),
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.asc())
                 .first()
             )
 

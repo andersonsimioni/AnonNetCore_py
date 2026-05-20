@@ -15,12 +15,12 @@ class CoreConfig:
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
         default_factory=lambda: [
             BootstrapEndpoint(
-                host="150.162.149.168",
+                host="192.168.1.45",
                 port=19001,
                 source="core_config_bootstrap",
             ),
             BootstrapEndpoint(
-                host="150.162.149.168",
+                host="192.168.1.45",
                 port=19002,
                 source="core_config_bootstrap",
             ),
@@ -35,26 +35,28 @@ class CoreConfig:
     random_walk_ttl_route_candidate_limit: int = 32
     random_walk_ttl_route_error_ms: int = 1000
     random_walk_ttl_previous_hop_fallback_rtt_ms: float = 40.0
-    virtual_route_maintenance_runtime_interval_seconds: float = 10.0
+    virtual_route_maintenance_runtime_interval_seconds: float = 30.0
     virtual_route_maintenance_route_build_interval_seconds: float = 24 * 60 * 60
-    virtual_route_maintenance_pending_route_timeout_seconds: float = 30.0
-    virtual_route_maintenance_expected_round_trip_ttl_ms: int = 2000
+    virtual_route_maintenance_drt_check_interval_seconds: float = 60.0
+    virtual_route_maintenance_pending_route_timeout_seconds: float = 90.0
+    virtual_route_maintenance_expected_round_trip_ttl_ms: int = 1000
     virtual_route_maintenance_candidate_limit: int = 16
     route_pow_difficulty_bits: int = 16
     physical_session_keepalive_seconds: int = 45
     physical_session_runtime_interval_seconds: float = 2.0
-    physical_session_handshake_timeout_seconds: float = 6.0
+    physical_session_handshake_timeout_seconds: float = 15.0
     physical_session_handshake_poll_interval_seconds: float = 0.25
     physical_node_validation_runtime_interval_seconds: float = 3.0
     physical_node_validation_backoff_seconds: int = 300
+    physical_node_endpoint_failure_threshold: int = 3
     physical_node_info_exchange_interval_seconds: int = 120
     physical_node_info_exchange_runtime_interval_seconds: float = 5.0
     physical_node_info_exchange_max_records: int = 32
     dht_replication_factor: int = 3
     dht_maintenance_runtime_interval_seconds: float = 5.0
     dht_maintenance_publish_backoff_seconds: float = 600.0
-    dht_client_response_timeout_seconds: float = 6.0
-    dht_client_max_hops: int = 8
+    dht_client_response_timeout_seconds: float = 8.0
+    dht_client_max_hops: int = 60
     virtual_session_drt_lookup_timeout_seconds: float = 45.0
     virtual_session_drt_lookup_retry_seconds: float = 2.0
     api_enabled: bool = True

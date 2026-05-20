@@ -42,6 +42,7 @@ from .runtime import (
     PhysicalPingRuntime,
     PhysicalNodeValidationRuntime,
     SessionRuntime,
+    VirtualRouteMaintenanceRuntime,
     RuntimeServices,
 )
 from .services import EngineServices
@@ -73,6 +74,7 @@ __all__ = [
     "PhysicalNodeValidationRuntime",
     "PhysicalProtocolClients",
     "SessionRuntime",
+    "VirtualRouteMaintenanceRuntime",
     "PhysicalSessionClient",
     "ProtocolEnvelope",
     "ProtocolClients",

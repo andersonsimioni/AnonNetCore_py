@@ -103,10 +103,13 @@ def build_service_lines(
         "    environment:",
         f'      ANONNET_ADVERTISED_TCP_HOST: "{host_advertised_ip}"',
         f'      ANONNET_ADVERTISED_TCP_PORT: "{advertised_port}"',
+        '      ANONNET_DOCKER_HOST_GATEWAY: "host.docker.internal"',
     ]
 
     lines.extend(
         [
+        "    extra_hosts:",
+        '      - "host.docker.internal:host-gateway"',
         "    volumes:",
         f'      - "./state/{node_name}:/app/data/local"',
         "    restart: unless-stopped",

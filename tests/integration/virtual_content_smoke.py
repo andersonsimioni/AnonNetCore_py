@@ -83,8 +83,10 @@ async def main() -> None:
         content_hash = register_local_content(core_a, content_bytes)
         print(f"checkpoint 3 OK: provider content registered: content_hash={content_hash}")
 
-        await wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes)
-        await wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes)
+        await asyncio.gather(
+            wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes),
+            wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes),
+        )
         print(f"checkpoint 4 OK: network ready: required_ready_nodes={required_ready_nodes}")
 
         await wait_for_cluster_network_maturity(
