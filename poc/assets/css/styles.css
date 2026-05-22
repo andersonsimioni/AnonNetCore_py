@@ -177,6 +177,12 @@ code {
   box-shadow: none;
 }
 
+.danger-button {
+  color: #fff;
+  background: linear-gradient(135deg, var(--danger), #a92f2f);
+  box-shadow: 0 10px 24px rgba(217, 70, 70, 0.2);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -651,6 +657,55 @@ code {
 
 .friend-status.online {
   background: var(--ok);
+}
+
+.direct-messages-card {
+  align-content: start;
+}
+
+.direct-message-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.direct-message-item {
+  display: grid;
+  gap: 0.28rem;
+  border-radius: 18px;
+  padding: 0.78rem;
+  background: var(--surface-soft);
+  border: 1px solid rgba(217, 224, 236, 0.78);
+}
+
+.direct-message-item.incoming {
+  border-left: 4px solid var(--brand);
+}
+
+.direct-message-item.outgoing {
+  border-left: 4px solid var(--accent);
+}
+
+.direct-message-item strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.direct-message-item span,
+.direct-message-item small,
+.empty-state {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.direct-message-item p,
+.empty-state {
+  margin: 0;
+}
+
+.direct-message-item p {
+  color: #23324a;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .diagnostics pre {

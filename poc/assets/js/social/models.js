@@ -14,6 +14,7 @@ function createProfile({
   displayName,
   bio = "",
   photoContentId = null,
+  photoDataUrl = null,
   friendVirtualNodeIds = [],
 }) {
   return {
@@ -24,6 +25,7 @@ function createProfile({
     display_name: displayName,
     bio,
     photo_content_id: photoContentId,
+    photo_data_url: photoDataUrl,
     friend_virtual_node_ids: normalizeUniqueStrings(friendVirtualNodeIds),
     updated_at: new Date().toISOString(),
   };
@@ -46,6 +48,7 @@ function createDirectMessage({
 function createFeedPost({
   authorVirtualNodeId,
   authorName,
+  authorPhotoDataUrl = null,
   text,
 }) {
   return {
@@ -53,6 +56,7 @@ function createFeedPost({
     app_id: SOCIAL_APP_ID,
     author_virtual_node_id: authorVirtualNodeId,
     author_name: authorName,
+    author_photo_data_url: authorPhotoDataUrl,
     text,
     created_at: new Date().toISOString(),
   };

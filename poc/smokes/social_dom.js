@@ -56,6 +56,23 @@ async function main() {
   });
   const feedList = document.querySelector("#feed-list");
   assert.equal(feedList.children.length, 1);
+  const activeState = JSON.parse(localStorage.getItem("anonnet.poc.social.local_state.v2"));
+  activeState.profiles["vn-local-a"].contacts[0].display_name = "Bob Remoto";
+  activeState.profiles["vn-local-a"].contacts[0].photo_data_url = "data:image/png;base64,friend";
+  activeState.profiles["vn-local-a"].contacts[0].feed_posts = [{
+    author_virtual_node_id: "vn-remote-b",
+    author_name: "Bob Remoto",
+    text: "post remoto com foto",
+    created_at: new Date().toISOString(),
+  }];
+  localStorage.setItem("anonnet.poc.social.local_state.v2", JSON.stringify(activeState));
+  restoreLocalState();
+  render();
+  assert.equal(feedList.children.length, 2);
+  assert.equal(
+    feedList.children[0].querySelector(".post-avatar").style.backgroundImage,
+    'url("data:image/png;base64,friend")',
+  );
 
   await submit("#message-form", {
     toVirtualNodeId: "vn-remote-b",
@@ -71,6 +88,34 @@ async function main() {
     )),
     true,
   );
+
+  FakeWebSocket.lastInstance.emit("message", {
+    data: JSON.stringify({
+      type: "virtual_message_received",
+      data: {
+        local_virtual_node_id: "vn-local-a",
+        remote_virtual_node_id: "vn-remote-b",
+        payload: {
+          schema: "anonnet.social.direct_message.v1",
+          from_virtual_node_id: "vn-remote-b",
+          to_virtual_node_id: "vn-local-a",
+          text: "DM recebida pelo smoke DOM",
+          sent_at: new Date().toISOString(),
+        },
+        received_at: new Date().toISOString(),
+      },
+    }),
+  });
+  assert.equal(document.querySelector("#direct-message-summary").textContent, "2");
+  assert.equal(
+    localStorage.getItem("anonnet.poc.social.local_state.v2").includes("DM recebida pelo smoke DOM"),
+    true,
+  );
+
+  await click("#reset-site-cache");
+  assert.equal(localStorage.getItem("anonnet.poc.social.local_state.v2"), null);
+  assert.equal(document.querySelector("#active-profile-select").value, "");
+  assert.equal(document.querySelector("#friend-list").children.length, 0);
 
   nativeClearTimeout(watchdog);
   console.log("OK poc social DOM smoke passed");
@@ -117,11 +162,14 @@ function prepareDom() {
     "friend-count",
     "friend-summary",
     "post-count",
+    "direct-message-summary",
+    "direct-message-list",
     "friend-list",
     "feed-list",
     "event-log",
     "profile-photo",
     "refresh-status",
+    "reset-site-cache",
     "message-text",
   ]) {
     document.register(`#${id}`, new FakeElement(id));
@@ -151,8 +199,8 @@ function loadBrowserScript(relativePath) {
 }
 
 class FakeAnonNetClient {
-  connectEvents() {
-    return new FakeWebSocket();
+  connectEvents({ onEvent }) {
+    return new FakeWebSocket({ onEvent });
   }
 }
 
@@ -389,7 +437,26 @@ class FakeFileReader {
 }
 
 class FakeWebSocket {
-  addEventListener() {}
+  constructor({ onEvent } = {}) {
+    this.listeners = new Map();
+    this.onEvent = onEvent;
+    FakeWebSocket.lastInstance = this;
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, listener);
+  }
+
+  emit(type, event) {
+    const listener = this.listeners.get(type);
+    if (listener) {
+      listener(event);
+    }
+    if (type === "message" && typeof this.onEvent === "function") {
+      this.onEvent(JSON.parse(event.data));
+    }
+  }
+
   send() {}
 }
 
@@ -433,6 +500,7 @@ function bootstrap() {
   global.SocialService = FakeSocialService;
   global.SocialBackgroundSyncService = FakeBackgroundSyncService;
   global.WebSocket = class {};
+  global.window.confirm = () => true;
 
   prepareDom();
   loadBrowserScript("social/models.js");

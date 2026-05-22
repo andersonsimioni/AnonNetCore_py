@@ -37,6 +37,8 @@ const elements = {
   friendCount: document.querySelector("#friend-count"),
   friendSummary: document.querySelector("#friend-summary"),
   postCount: document.querySelector("#post-count"),
+  directMessageSummary: document.querySelector("#direct-message-summary"),
+  directMessageList: document.querySelector("#direct-message-list"),
   friendList: document.querySelector("#friend-list"),
   feedList: document.querySelector("#feed-list"),
   eventLog: document.querySelector("#event-log"),
@@ -49,6 +51,7 @@ let activeOperationCount = 0;
 document.addEventListener("submit", (event) => event.preventDefault(), { capture: true });
 
 document.querySelector("#refresh-status").addEventListener("click", refreshStatus);
+document.querySelector("#reset-site-cache").addEventListener("click", resetSiteCache);
 elements.createProfileButton.addEventListener("click", createLocalProfile);
 elements.profileSelect.addEventListener("change", selectActiveProfile);
 elements.profileForm.addEventListener("submit", saveProfile);
@@ -88,6 +91,23 @@ async function refreshStatus() {
   } finally {
     endUiOperation(operation);
   }
+}
+
+function resetSiteCache() {
+  if (!window.confirm("Limpar todos os dados locais deste site? Perfis, amigos, posts e DMs salvos no navegador serao removidos.")) {
+    return;
+  }
+
+  localStorage.removeItem(LOCAL_STATE_KEY);
+  localStorage.removeItem(LEGACY_LOCAL_STATE_KEY);
+  state.activeProfileId = null;
+  state.profiles = {};
+  state.events = [];
+  elements.eventLog.replaceChildren();
+  elements.statusOutput.textContent = 'Cache local do site limpo. Clique em "+ Novo perfil" para recomecar.';
+  render();
+  notifyUser("success", "Cache limpo", "Os dados locais da PoC foram removidos deste navegador.");
+  logWeb("info", "site_cache_reset");
 }
 
 async function createLocalProfile(event) {
@@ -142,8 +162,10 @@ async function saveProfile(event) {
       displayName: form.get("displayName")?.toString().trim(),
       bio: form.get("bio")?.toString().trim(),
       photoContentId: active.profile?.photo_content_id || null,
+      photoDataUrl: active.profilePhotoPreview || active.profile?.photo_data_url || null,
       friendVirtualNodeIds: active.profile?.friend_virtual_node_ids || [],
     });
+    active.profilePhotoPreview = profile.photo_data_url || active.profilePhotoPreview || null;
     active.profile = profile;
     saveLocalState();
     render();
@@ -242,6 +264,7 @@ async function sendMessage(event) {
       sent_at: new Date().toISOString(),
     });
     saveLocalState();
+    render();
     appendEvent({
       type: "direct_message_sent",
       data: {
@@ -281,6 +304,7 @@ async function publishLocalPost(event) {
   active.feedPosts.unshift(createFeedPost({
     authorVirtualNodeId: active.localVirtualNode.id,
     authorName: active.profile.display_name || "Voce",
+    authorPhotoDataUrl: active.profile.photo_data_url || active.profilePhotoPreview || null,
     text,
   }));
   saveLocalState();
@@ -356,14 +380,25 @@ function handleRealtimeEvent(event) {
   }
 
   const message = event.data?.payload || event.data;
+  if (!message || message.schema !== "anonnet.social.direct_message.v1") {
+    return;
+  }
   const targetProfile = findProfileForMessage(message) || getActiveProfile();
   if (!targetProfile) {
     return;
   }
 
-  targetProfile.directMessages.unshift(message);
+  targetProfile.directMessages.unshift({
+    ...message,
+    received_at: event.data?.received_at || new Date().toISOString(),
+  });
   saveLocalState();
   render();
+  notifyUser(
+    "success",
+    "Nova mensagem direta",
+    `${shortKey(message.from_virtual_node_id)}: ${message.text || ""}`,
+  );
 }
 
 function render() {
@@ -371,6 +406,7 @@ function render() {
   renderProfile();
   renderFriends();
   renderFeed();
+  renderDirectMessages();
 }
 
 function renderProfileSelector() {
@@ -392,11 +428,12 @@ function renderProfile() {
   const bio = profile?.bio || "Crie ou selecione um perfil social para iniciar.";
   const initials = getInitials(name);
   const friends = profile?.friend_virtual_node_ids?.length || active?.contacts.length || 0;
+  const profilePhoto = active?.profilePhotoPreview || profile?.photo_data_url || null;
 
   elements.profileName.textContent = name;
   elements.profileBio.textContent = bio;
-  elements.profileAvatar.textContent = active?.profilePhotoPreview ? "" : initials;
-  elements.composerAvatar.textContent = initials;
+  setAvatarImage(elements.profileAvatar, profilePhoto, initials);
+  setAvatarImage(elements.composerAvatar, profilePhoto, initials);
   elements.friendCount.textContent = String(friends);
   elements.friendSummary.textContent = String(friends);
   elements.postCount.textContent = String(active?.feedPosts.length || 0);
@@ -405,13 +442,6 @@ function renderProfile() {
   elements.profileForm.elements.displayName.value = profile?.display_name || "";
   elements.profileForm.elements.bio.value = profile?.bio || "";
 
-  if (active?.profilePhotoPreview) {
-    elements.profileAvatar.style.backgroundImage = `url("${active.profilePhotoPreview}")`;
-    elements.profileAvatar.style.backgroundSize = "cover";
-  } else {
-    elements.profileAvatar.style.backgroundImage = "";
-    elements.profileAvatar.style.backgroundSize = "";
-  }
 }
 
 function saveLocalState() {
@@ -494,8 +524,9 @@ function renderFriends() {
   for (const contact of active?.contacts || []) {
     const item = document.createElement("div");
     item.className = "friend-item";
+    const avatarInitials = getInitials(contact.display_name);
     item.innerHTML = `
-      <div class="friend-avatar">${getInitials(contact.display_name)}</div>
+      <div class="friend-avatar">${avatarInitials}</div>
       <div>
         <strong>${escapeHtml(contact.display_name)}</strong>
         <span>${escapeHtml(contact.virtual_node_id)}</span>
@@ -503,6 +534,7 @@ function renderFriends() {
       </div>
       <i class="friend-status ${contact.status === "sincronizado" ? "online" : ""}"></i>
     `;
+    setAvatarImage(item.querySelector(".friend-avatar"), contact.photo_data_url, avatarInitials);
     item.addEventListener("click", () => selectFriendForMessage(contact));
     elements.friendList.append(item);
   }
@@ -513,11 +545,43 @@ function renderFeed() {
   elements.feedList.replaceChildren();
   for (const post of collectFeedPosts(active)) {
     const node = elements.postTemplate.content.firstElementChild.cloneNode(true);
-    node.querySelector(".post-avatar").textContent = getInitials(post.author_name);
+    setAvatarImage(
+      node.querySelector(".post-avatar"),
+      post.author_photo_data_url,
+      getInitials(post.author_name),
+    );
     node.querySelector(".post-author").textContent = post.author_name;
     node.querySelector(".post-meta").textContent = formatTime(post.created_at);
     node.querySelector(".post-text").textContent = post.text;
     elements.feedList.append(node);
+  }
+}
+
+function renderDirectMessages() {
+  const active = getActiveProfile();
+  const messages = active?.directMessages || [];
+  elements.directMessageSummary.textContent = String(messages.length);
+  elements.directMessageList.replaceChildren();
+
+  if (!messages.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Nenhuma DM recebida ou enviada neste perfil.";
+    elements.directMessageList.append(empty);
+    return;
+  }
+
+  for (const message of messages.slice(0, 20)) {
+    const incoming = message.to_virtual_node_id === active.localVirtualNode.id;
+    const item = document.createElement("article");
+    item.className = `direct-message-item ${incoming ? "incoming" : "outgoing"}`;
+    item.innerHTML = `
+      <strong>${incoming ? "Recebida" : "Enviada"}</strong>
+      <span>${escapeHtml(resolveDirectMessagePeer(message, active))}</span>
+      <p>${escapeHtml(message.text || "")}</p>
+      <small>${escapeHtml(formatTime(message.received_at || message.sent_at))}</small>
+    `;
+    elements.directMessageList.append(item);
   }
 }
 
@@ -564,6 +628,14 @@ function buildFriendMeta(contact) {
     return `${postCount} posts sincronizados - ${formatTime(contact.last_synced_at)}`;
   }
   return "aguardando sincronizacao pela DHT";
+}
+
+function resolveDirectMessagePeer(message, active) {
+  const peerId = message.to_virtual_node_id === active.localVirtualNode.id
+    ? message.from_virtual_node_id
+    : message.to_virtual_node_id;
+  const contact = active.contacts.find((item) => item.virtual_node_id === peerId);
+  return contact?.display_name || shortKey(peerId);
 }
 
 function findProfileForMessage(message) {
@@ -748,6 +820,13 @@ function getInitials(value) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "?";
+}
+
+function setAvatarImage(element, imageDataUrl, fallbackText) {
+  element.textContent = imageDataUrl ? "" : fallbackText;
+  element.style.backgroundImage = imageDataUrl ? `url("${imageDataUrl}")` : "";
+  element.style.backgroundSize = imageDataUrl ? "cover" : "";
+  element.style.backgroundPosition = imageDataUrl ? "center" : "";
 }
 
 function formatTime(value) {

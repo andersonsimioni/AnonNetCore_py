@@ -27,6 +27,7 @@ function ensureSocialContact(profileState, friendVirtualNodeId) {
     virtual_node_id: friendVirtualNodeId,
     display_name: `Amigo ${profileState.contacts.length + 1}`,
     public_key: null,
+    photo_data_url: null,
     status: "pendente",
     feed_posts: [],
     user_state_content_id: null,
@@ -41,13 +42,20 @@ function collectSocialFeedPosts(profileState) {
     return [];
   }
 
-  const localPosts = (profileState.feedPosts || []).map((post) => ({ ...post, source: "local" }));
+  const localPhotoDataUrl = profileState.profile?.photo_data_url || profileState.profilePhotoPreview || null;
+  const localPosts = (profileState.feedPosts || []).map((post) => ({
+    ...post,
+    source: "local",
+    author_name: post.author_name || profileState.profile?.display_name || "Voce",
+    author_photo_data_url: post.author_photo_data_url || localPhotoDataUrl,
+  }));
   const friendPosts = (profileState.contacts || []).flatMap((contact) => (
     contact.feed_posts || []
   ).map((post) => ({
     ...post,
     source: "friend",
     author_name: post.author_name || contact.display_name,
+    author_photo_data_url: post.author_photo_data_url || contact.photo_data_url || null,
   })));
 
   return [...localPosts, ...friendPosts].sort((left, right) => (

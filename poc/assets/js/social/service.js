@@ -33,6 +33,7 @@ class SocialService {
     displayName,
     bio = "",
     photoContentId = null,
+    photoDataUrl = null,
     friendVirtualNodeIds = [],
     feedPosts = [],
   }) {
@@ -42,6 +43,7 @@ class SocialService {
       displayName,
       bio,
       photoContentId,
+      photoDataUrl,
       friendVirtualNodeIds,
     });
 
