@@ -17,7 +17,7 @@ class RouteBuildPair:
 
 
 class VirtualRouteMaintenanceRuntime:
-    """Mantem uma rota fisica publicada para cada virtual node local ativo."""
+    """Mantem um minimo de rotas fisicas publicadas para cada virtual node local ativo."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
@@ -26,8 +26,9 @@ class VirtualRouteMaintenanceRuntime:
         self._loop_interval_seconds = (
             self.engine.services.config.virtual_route_maintenance_runtime_interval_seconds
         )
-        self._route_build_interval_seconds = (
-            self.engine.services.config.virtual_route_maintenance_route_build_interval_seconds
+        self._route_min_online_routes = max(
+            1,
+            int(self.engine.services.config.virtual_route_maintenance_route_min_online_routes),
         )
         self._drt_check_interval_seconds = (
             self.engine.services.config.virtual_route_maintenance_drt_check_interval_seconds
@@ -39,7 +40,6 @@ class VirtualRouteMaintenanceRuntime:
         self._expected_round_trip_ttl_ms = (
             self.engine.services.config.virtual_route_maintenance_expected_round_trip_ttl_ms
         )
-        self._last_route_build_by_virtual_node_id: dict[str, float] = {}
         self._last_drt_check_by_virtual_node_id: dict[str, float] = {}
         self._pending_seen_at_by_initial_path_id: dict[str, float] = {}
 
@@ -106,8 +106,7 @@ class VirtualRouteMaintenanceRuntime:
             return
 
     async def _should_build_new_route(self, local_virtual_node_id: str) -> bool:
-        if self._has_pending_route_build(local_virtual_node_id):
-            return False
+        pending_route_count = self._expire_stale_pending_route_builds(local_virtual_node_id)
 
         active_route = (
             self.engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
@@ -115,46 +114,81 @@ class VirtualRouteMaintenanceRuntime:
             )
         )
         if active_route is None:
+            if pending_route_count >= self._route_min_online_routes:
+                self.engine.services.log_service.debug(
+                    "virtual_route_maintenance_runtime",
+                    "virtual node is waiting for pending routes before first active route",
+                    local_virtual_node_id=local_virtual_node_id,
+                    pending_route_count=pending_route_count,
+                    min_online_routes=self._route_min_online_routes,
+                )
+                return False
+
             self.engine.services.log_service.info(
                 "virtual_route_maintenance_runtime",
                 "virtual node has no active route; scheduling route build",
                 local_virtual_node_id=local_virtual_node_id,
+                pending_route_count=pending_route_count,
+                min_online_routes=self._route_min_online_routes,
             )
             return True
 
-        if await self._active_route_missing_from_drt(
+        route_health = await self._read_drt_route_health(
             local_virtual_node_id=local_virtual_node_id,
             initial_path_id=active_route.initial_path_id,
             final_path_id=active_route.final_path_id,
-        ):
-            return True
+        )
+        if route_health is None:
+            return False
+        if route_health.should_build_more:
+            missing_route_count = max(
+                0,
+                self._route_min_online_routes - route_health.online_route_count,
+            )
+            if pending_route_count >= missing_route_count:
+                self.engine.services.log_service.debug(
+                    "virtual_route_maintenance_runtime",
+                    "virtual node is waiting for pending routes to satisfy drt minimum",
+                    local_virtual_node_id=local_virtual_node_id,
+                    online_route_count=route_health.online_route_count,
+                    pending_route_count=pending_route_count,
+                    missing_route_count=missing_route_count,
+                    min_online_routes=self._route_min_online_routes,
+                )
+                return False
 
-        last_build_at = self._last_route_build_by_virtual_node_id.get(local_virtual_node_id)
-        if last_build_at is None:
-            return True
-
-        elapsed_seconds = monotonic() - last_build_at
-        if elapsed_seconds >= self._route_build_interval_seconds:
+            self.engine.services.log_service.info(
+                "virtual_route_maintenance_runtime",
+                "virtual node needs another route to satisfy drt minimum",
+                local_virtual_node_id=local_virtual_node_id,
+                online_route_count=route_health.online_route_count,
+                pending_route_count=pending_route_count,
+                missing_route_count=missing_route_count,
+                min_online_routes=self._route_min_online_routes,
+            )
             return True
 
         self.engine.services.log_service.debug(
             "virtual_route_maintenance_runtime",
-            "virtual node route build interval not reached",
+            "virtual node has enough online routes in drt",
             local_virtual_node_id=local_virtual_node_id,
-            elapsed_seconds=round(elapsed_seconds, 3),
-            route_build_interval_seconds=self._route_build_interval_seconds,
+            online_route_count=route_health.online_route_count,
+            pending_route_count=pending_route_count,
+            min_online_routes=self._route_min_online_routes,
+            active_final_path_id=active_route.final_path_id,
+            active_final_path_is_visible=route_health.active_final_path_is_visible,
         )
         return False
 
-    async def _active_route_missing_from_drt(
+    async def _read_drt_route_health(
         self,
         *,
         local_virtual_node_id: str,
         initial_path_id: str | None,
         final_path_id: str | None,
-    ) -> bool:
+    ) -> "DrtRouteHealth | None":
         if not self._should_check_drt(local_virtual_node_id):
-            return False
+            return None
 
         self._last_drt_check_by_virtual_node_id[local_virtual_node_id] = monotonic()
         result = await self.engine.services.protocol_clients.physical.dht.query(
@@ -174,6 +208,7 @@ class VirtualRouteMaintenanceRuntime:
                 drt_status=status,
                 drt_reason=result.get("reason"),
                 has_record=has_record,
+                min_online_routes=self._route_min_online_routes,
             )
             if status == "not_found":
                 self._invalidate_active_route(
@@ -182,34 +217,43 @@ class VirtualRouteMaintenanceRuntime:
                     final_path_id=final_path_id,
                     reason="active_route_missing_from_drt",
                 )
-                return True
-            return False
+                return DrtRouteHealth(
+                    online_route_count=0,
+                    active_final_path_is_visible=False,
+                    should_build_more=True,
+                )
+            return None
 
         valid_final_path_ids = self._extract_valid_drt_final_path_ids(
             local_virtual_node_id=local_virtual_node_id,
             record_json=result.get("record_json"),
         )
         final_path_is_visible = bool(final_path_id and final_path_id in valid_final_path_ids)
+        should_build_more = len(valid_final_path_ids) < self._route_min_online_routes
         self.engine.services.log_service.info(
             "virtual_route_maintenance_runtime",
-            "checked active virtual route visibility in drt",
+            "checked virtual route inventory in drt",
             local_virtual_node_id=local_virtual_node_id,
             initial_path_id=initial_path_id,
             final_path_id=final_path_id,
             final_path_is_visible=final_path_is_visible,
-            valid_entry_count=len(valid_final_path_ids),
+            online_route_count=len(valid_final_path_ids),
+            min_online_routes=self._route_min_online_routes,
+            should_build_more=should_build_more,
             valid_final_path_ids=valid_final_path_ids[:8],
         )
-        if final_path_is_visible:
-            return False
+        if should_build_more:
+            return DrtRouteHealth(
+                online_route_count=len(valid_final_path_ids),
+                active_final_path_is_visible=final_path_is_visible,
+                should_build_more=True,
+            )
 
-        self._invalidate_active_route(
-            local_virtual_node_id=local_virtual_node_id,
-            initial_path_id=initial_path_id,
-            final_path_id=final_path_id,
-            reason="active_route_final_path_not_in_drt",
+        return DrtRouteHealth(
+            online_route_count=len(valid_final_path_ids),
+            active_final_path_is_visible=final_path_is_visible,
+            should_build_more=False,
         )
-        return True
 
     def _should_check_drt(self, local_virtual_node_id: str) -> bool:
         last_checked_at = self._last_drt_check_by_virtual_node_id.get(local_virtual_node_id)
@@ -315,62 +359,60 @@ class VirtualRouteMaintenanceRuntime:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed <= datetime.now(timezone.utc)
 
-    def _has_pending_route_build(self, local_virtual_node_id: str) -> bool:
-        resolution = (
-            self.engine.services.route_service.get_pending_initiator_resolution_for_local_virtual_node(
+    def _expire_stale_pending_route_builds(self, local_virtual_node_id: str) -> int:
+        pending_resolutions = (
+            self.engine.services.route_service
+            .list_pending_initiator_resolutions_for_local_virtual_node(
                 local_virtual_node_id=local_virtual_node_id,
             )
         )
-        if resolution is None:
-            return False
+        if not pending_resolutions:
+            return 0
 
-        pending_elapsed_seconds = self._pending_elapsed_seconds(
-            local_virtual_node_id=local_virtual_node_id,
-            initial_path_id=resolution.initial_path_id,
-        )
-        if (
-            resolution.initial_path_id is not None
-            and pending_elapsed_seconds >= self._pending_route_timeout_seconds
-        ):
-            self.engine.services.route_service.invalidate_initiator_resolution(
+        active_pending_count = 0
+        for resolution in pending_resolutions:
+            pending_elapsed_seconds = self._pending_elapsed_seconds(
                 initial_path_id=resolution.initial_path_id,
-                reason="virtual_route_build_pending_timeout",
             )
-            self._pending_seen_at_by_initial_path_id.pop(resolution.initial_path_id, None)
-            self.engine.services.log_service.warning(
+            if (
+                resolution.initial_path_id is not None
+                and pending_elapsed_seconds >= self._pending_route_timeout_seconds
+            ):
+                self.engine.services.route_service.invalidate_initiator_resolution(
+                    initial_path_id=resolution.initial_path_id,
+                    reason="virtual_route_build_pending_timeout",
+                )
+                self._pending_seen_at_by_initial_path_id.pop(resolution.initial_path_id, None)
+                self.engine.services.log_service.warning(
+                    "virtual_route_maintenance_runtime",
+                    "expired pending virtual route build",
+                    local_virtual_node_id=local_virtual_node_id,
+                    initial_path_id=resolution.initial_path_id,
+                    final_path_id=resolution.final_path_id,
+                    status=resolution.status,
+                    pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
+                    pending_timeout_seconds=self._pending_route_timeout_seconds,
+                )
+                continue
+
+            active_pending_count += 1
+            self.engine.services.log_service.debug(
                 "virtual_route_maintenance_runtime",
-                "expired pending virtual route build",
+                "virtual node has pending route build",
                 local_virtual_node_id=local_virtual_node_id,
                 initial_path_id=resolution.initial_path_id,
                 final_path_id=resolution.final_path_id,
                 status=resolution.status,
                 pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
-                pending_timeout_seconds=self._pending_route_timeout_seconds,
             )
-            return False
-
-        self.engine.services.log_service.debug(
-            "virtual_route_maintenance_runtime",
-            "virtual node already has pending route build",
-            local_virtual_node_id=local_virtual_node_id,
-            initial_path_id=resolution.initial_path_id,
-            final_path_id=resolution.final_path_id,
-            status=resolution.status,
-            pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
-        )
-        return True
+        return active_pending_count
 
     def _pending_elapsed_seconds(
         self,
         *,
-        local_virtual_node_id: str,
         initial_path_id: str | None,
     ) -> float:
         now = monotonic()
-        started_at = self._last_route_build_by_virtual_node_id.get(local_virtual_node_id)
-        if started_at is not None:
-            return now - started_at
-
         if initial_path_id is None:
             return 0.0
 
@@ -427,12 +469,10 @@ class VirtualRouteMaintenanceRuntime:
             )
             return
 
-        self._last_route_build_by_virtual_node_id[local_virtual_node_id] = monotonic()
+        route_build_started_at = monotonic()
         initial_path_id = result.get("initial_path_id")
         if initial_path_id:
-            self._pending_seen_at_by_initial_path_id[initial_path_id] = (
-                self._last_route_build_by_virtual_node_id[local_virtual_node_id]
-            )
+            self._pending_seen_at_by_initial_path_id[initial_path_id] = route_build_started_at
         self.engine.services.log_service.info(
             "virtual_route_maintenance_runtime",
             "virtual route build started",
@@ -440,6 +480,14 @@ class VirtualRouteMaintenanceRuntime:
             initial_path_id=initial_path_id,
             first_hop_physical_node_id=route_pair.first_hop.node_id,
             final_physical_node_id=route_pair.final_node.node_id,
+            min_online_routes=self._route_min_online_routes,
             remaining_ttl_ms=remaining_ttl_ms,
             expected_round_trip_ttl_ms=self._expected_round_trip_ttl_ms,
         )
+
+
+@dataclass(slots=True, frozen=True)
+class DrtRouteHealth:
+    online_route_count: int
+    active_final_path_is_visible: bool
+    should_build_more: bool

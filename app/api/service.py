@@ -59,6 +59,13 @@ class CoreApiService:
             ),
         }
 
+    def get_debug_state(self) -> dict[str, object]:
+        if not self.engine.services.config.debug_api_enabled:
+            raise CoreApiError("debug_api_disabled", "API de debug desabilitada.", status_code=404)
+        if self.engine.services.debug_snapshot_service is None:
+            raise CoreApiError("debug_snapshot_unavailable", "Snapshot de debug indisponivel.", status_code=500)
+        return self.engine.services.debug_snapshot_service.build_state()
+
     def list_local_virtual_nodes(self, *, only_active: bool = False) -> list[dict[str, object]]:
         nodes = self.engine.services.identity_service.list_local_virtual_nodes(
             only_active=only_active,

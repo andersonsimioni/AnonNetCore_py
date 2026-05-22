@@ -111,11 +111,19 @@ def create_test_core(
     data_dir: Path,
     listen_port: int,
     log_dir: Path,
+    api_port: int | None = None,
+    api_websocket_port: int | None = None,
+    virtual_route_expected_round_trip_ttl_ms: int = 1000,
+    virtual_route_pending_timeout_seconds: float = 90.0,
 ):
     return create_isolated_core(
         data_dir=data_dir,
         listen_port=listen_port,
         log_dir=log_dir,
+        api_port=api_port,
+        api_websocket_port=api_websocket_port,
+        virtual_route_expected_round_trip_ttl_ms=virtual_route_expected_round_trip_ttl_ms,
+        virtual_route_pending_timeout_seconds=virtual_route_pending_timeout_seconds,
     )
 
 
@@ -343,6 +351,58 @@ async def wait_for_drt_entry(
         return None
 
     return await wait_until_value(load_drt_entry, timeout_seconds=timeout_seconds, label="DRT entry")
+
+
+async def wait_for_drt_online_route_count(
+    engine,
+    *,
+    virtual_node_public_key: str,
+    minimum_routes: int,
+    timeout_seconds: float = 180.0,
+) -> dict[str, object]:
+    logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
+
+    async def load_drt_routes():
+        result = await engine.services.protocol_clients.physical.dht.query(
+            namespace="drt",
+            logical_key=logical_key,
+        )
+        if result.get("status") != "found":
+            return None
+
+        record_json = result.get("record_json")
+        if not isinstance(record_json, str) or not record_json:
+            return None
+        try:
+            record = parse_record("drt", record_json)
+        except Exception:
+            return None
+        if not isinstance(record, DrtRecordPayload):
+            return None
+
+        online_routes = [
+            entry.final_path_id
+            for entry in record.route_entries
+            if entry.final_path_id
+        ]
+        if len(online_routes) < minimum_routes:
+            print(
+                "waiting DRT online routes: "
+                f"logical_key={logical_key} online={len(online_routes)} required={minimum_routes}"
+            )
+            return None
+        return {
+            "logical_key": logical_key,
+            "online_route_count": len(online_routes),
+            "final_path_ids": online_routes,
+            "record_json": record_json,
+        }
+
+    return await wait_until_value(
+        load_drt_routes,
+        timeout_seconds=timeout_seconds,
+        label="DRT online route count",
+    )
 
 
 async def wait_for_virtual_session_active(

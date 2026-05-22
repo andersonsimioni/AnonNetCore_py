@@ -1,9 +1,31 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from bootstrap.models import BootstrapEndpoint, DnsSeed
+from .network import detect_local_network_host
+
+
+def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
+    bootstrap_host = (
+        os.getenv("ANONNET_BOOTSTRAP_HOST")
+        or os.getenv("ANONNET_ADVERTISED_TCP_HOST")
+        or detect_local_network_host()
+    )
+    return [
+        BootstrapEndpoint(
+            host=bootstrap_host,
+            port=19001,
+            source="core_config_bootstrap",
+        ),
+        BootstrapEndpoint(
+            host=bootstrap_host,
+            port=19002,
+            source="core_config_bootstrap",
+        ),
+    ]
 
 
 @dataclass(slots=True)
@@ -13,18 +35,7 @@ class CoreConfig:
     log_dir: str | Path = "data/local/logs"
     bootstrap_dns_seeds: list[DnsSeed] = field(default_factory=list)
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
-        default_factory=lambda: [
-            BootstrapEndpoint(
-                host="192.168.1.45",
-                port=19001,
-                source="core_config_bootstrap",
-            ),
-            BootstrapEndpoint(
-                host="192.168.1.45",
-                port=19002,
-                source="core_config_bootstrap",
-            ),
-        ]
+        default_factory=build_default_bootstrap_public_endpoints
     )
     bootstrap_warmup_seconds: float = 1.0
     bootstrap_request_retries: int = 4
@@ -36,7 +47,7 @@ class CoreConfig:
     random_walk_ttl_route_error_ms: int = 1000
     random_walk_ttl_previous_hop_fallback_rtt_ms: float = 40.0
     virtual_route_maintenance_runtime_interval_seconds: float = 30.0
-    virtual_route_maintenance_route_build_interval_seconds: float = 24 * 60 * 60
+    virtual_route_maintenance_route_min_online_routes: int = 5
     virtual_route_maintenance_drt_check_interval_seconds: float = 60.0
     virtual_route_maintenance_pending_route_timeout_seconds: float = 90.0
     virtual_route_maintenance_expected_round_trip_ttl_ms: int = 1000
@@ -63,6 +74,7 @@ class CoreConfig:
     api_host: str = "127.0.0.1"
     api_port: int = 18080
     api_cors_allow_origin: str = "*"
+    debug_api_enabled: bool = True
     api_websocket_enabled: bool = True
     api_websocket_host: str = "127.0.0.1"
     api_websocket_port: int = 18081

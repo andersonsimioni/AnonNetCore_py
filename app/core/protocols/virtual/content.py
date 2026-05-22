@@ -133,6 +133,15 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
         if session_id is None:
             return self._build_invalid_result(envelope, "virtual_session_id_required")
 
+        services.log_service.info(
+            "content_transfer",
+            "starting or resuming content download",
+            session_id=session_id,
+            content_id=content_info.content_id,
+            content_hash=content_info.content_hash,
+            size_bytes=content_info.size_bytes,
+            storage_dir=str(services.content_transfer_service.storage_dir),
+        )
         download_state = services.content_transfer_service.start_or_update_download(
             session_id=session_id,
             content_id=content_info.content_id,

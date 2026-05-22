@@ -105,6 +105,7 @@ class CoreHttpApiServer:
 
         routes: dict[tuple[str, str], Callable[[HttpRequest], Awaitable[object] | object]] = {
             ("GET", "/health"): self._health,
+            ("GET", "/debug/state"): self._debug_state,
             ("GET", "/v1/status"): self._status,
             ("GET", "/v1/virtual-nodes/local"): self._list_local_virtual_nodes,
             ("GET", "/v1/virtual-nodes/remote"): self._list_remote_virtual_nodes,
@@ -152,6 +153,9 @@ class CoreHttpApiServer:
 
     def _status(self, _request: "HttpRequest") -> dict[str, object]:
         return self.api_service.get_status()
+
+    def _debug_state(self, _request: "HttpRequest") -> dict[str, object]:
+        return self.api_service.get_debug_state()
 
     def _list_local_virtual_nodes(self, request: "HttpRequest") -> list[dict[str, object]]:
         return self.api_service.list_local_virtual_nodes(

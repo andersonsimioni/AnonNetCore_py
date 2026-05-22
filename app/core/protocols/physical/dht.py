@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from dht import parse_record, serialize_record, validate_and_merge
 from storage.models import DhtRecord
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -734,8 +735,9 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         for message_id in expired:
             self._pending_forwards.pop(message_id, None)
 
-    @staticmethod
+    @classmethod
     def _upsert_local_record(
+        cls,
         *,
         services: EngineServices,
         key_hex: str,
@@ -745,17 +747,79 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at: datetime | None,
         source: str,
     ) -> None:
+        effective_record_json = record_json
+        merge_status = "new"
         with services.database.session_scope() as session:
-            dht_record = DhtRecord(
+            existing_record = (
+                session.query(DhtRecord)
+                .filter(DhtRecord.key == key_hex)
+                .filter(DhtRecord.last_validated_at.is_not(None))
+                .order_by(DhtRecord.last_validated_at.desc(), DhtRecord.updated_at.desc())
+                .first()
+            )
+            if existing_record is not None:
+                try:
+                    parent_payload = parse_record(namespace, existing_record.record_json)
+                    fragment_payload = parse_record(namespace, record_json)
+                    merged_payload = validate_and_merge(
+                        namespace,
+                        key_hex,
+                        parent_payload,
+                        fragment_payload,
+                    )
+                    effective_record_json = serialize_record(merged_payload)
+                    merge_status = "merged"
+                except Exception as error:
+                    merge_status = "replace_after_merge_failure"
+                    services.log_service.warning(
+                        "dht",
+                        "failed to merge incoming dht fragment; storing incoming record",
+                        key=key_hex,
+                        namespace=namespace,
+                        logical_key=logical_key,
+                        source=source,
+                        error_type=type(error).__name__,
+                        error=repr(error),
+                    )
+
+            now = datetime.now(timezone.utc)
+            if existing_record is None:
+                dht_record = DhtRecord(
+                    key=key_hex,
+                    namespace=namespace,
+                    logical_key=logical_key,
+                    record_json=effective_record_json,
+                    source=source,
+                    last_validated_at=now,
+                    expires_at=expires_at,
+                )
+                session.add(dht_record)
+            else:
+                existing_record.namespace = namespace
+                existing_record.logical_key = logical_key
+                existing_record.record_json = effective_record_json
+                existing_record.source = source
+                existing_record.last_validated_at = now
+                existing_record.expires_at = expires_at
+                dht_record = existing_record
+                cls._delete_older_records_for_key(session, key_hex, keep_record_id=existing_record.id)
+            services.log_service.debug(
+                "dht",
+                "upserted local dht record",
                 key=key_hex,
                 namespace=namespace,
                 logical_key=logical_key,
-                record_json=record_json,
                 source=source,
-                last_validated_at=datetime.now(timezone.utc),
-                expires_at=expires_at,
+                merge_status=merge_status,
+                record_json_size=len(effective_record_json),
             )
-            session.add(dht_record)
+
+    @staticmethod
+    def _delete_older_records_for_key(session, key_hex: str, *, keep_record_id: int) -> None:
+        session.query(DhtRecord).filter(
+            DhtRecord.key == key_hex,
+            DhtRecord.id != keep_record_id,
+        ).delete(synchronize_session=False)
 
     @staticmethod
     def _load_validated_local_record(

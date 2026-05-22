@@ -27,6 +27,18 @@ class PhysicalSessionClient:
         *,
         remote_physical_node_id: str,
     ) -> str:
+        existing_session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(
+            remote_physical_node_id
+        )
+        if existing_session is not None and not self._is_observed_only_physical_session(existing_session):
+            self.engine.services.log_service.debug(
+                "physical_session_client",
+                "reusing active physical session",
+                session_id=existing_session.session_id,
+                remote_physical_node_id=remote_physical_node_id,
+            )
+            return existing_session.session_id
+
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
         if local_node is None:
             raise ValueError("A identidade fisica local ainda nao foi inicializada.")
@@ -448,6 +460,16 @@ class PhysicalSessionClient:
                 session_id,
                 close_reason="handshake_failed",
             )
+
+    @staticmethod
+    def _is_observed_only_physical_session(session) -> bool:
+        if session.session_scope != "physical" or not session.metadata_json:
+            return False
+        try:
+            metadata = json.loads(session.metadata_json)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(metadata, dict) and metadata.get("physical_endpoint_source") == "observed"
 
     def _register_endpoint_failure(
         self,

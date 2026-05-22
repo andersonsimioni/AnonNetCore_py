@@ -125,8 +125,8 @@ class ContentTransferService:
 
         now = datetime.now(timezone.utc)
         content_hash = sha512(data).hexdigest()
-        file_path = self.storage_dir / content_hash
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        file_path = self._build_content_file_path(content_hash)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_bytes(data)
 
         with self.database.session_scope() as session:
@@ -222,11 +222,9 @@ class ContentTransferService:
         if existing_state is not None:
             return existing_state
 
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-        final_path = self.storage_dir / content_hash
-        partial_path = self.storage_dir / f"{content_hash}.part"
-        partial_path.parent.mkdir(parents=True, exist_ok=True)
-        partial_path.write_bytes(b"")
+        final_path = self._build_content_file_path(content_hash)
+        partial_path = final_path.with_name(f"{final_path.name}.part")
+        self._reset_partial_download_file(partial_path)
 
         state = ContentDownloadState(
             session_id=session_id,
@@ -417,6 +415,7 @@ class ContentTransferService:
             advertisement.is_active = True
 
     def _complete_download(self, state: ContentDownloadState) -> None:
+        state.final_path.parent.mkdir(parents=True, exist_ok=True)
         if state.partial_path.stat().st_size != state.size_bytes:
             state.status = "failed"
             state.error_message = "Tamanho final do arquivo nao bate com metadata."
@@ -462,6 +461,16 @@ class ContentTransferService:
             content_object.last_access_at = datetime.now(timezone.utc)
 
     @staticmethod
+    def _reset_partial_download_file(partial_path: Path) -> None:
+        partial_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            partial_path.write_bytes(b"")
+            return
+        except FileNotFoundError:
+            partial_path.parent.mkdir(parents=True, exist_ok=True)
+            partial_path.write_bytes(b"")
+
+    @staticmethod
     def _replace_tags(
         session,
         content_object: ContentObject,
@@ -501,6 +510,16 @@ class ContentTransferService:
     @staticmethod
     def _download_key(session_id: str, content_id: str) -> tuple[str, str]:
         return session_id, content_id
+
+    def _build_content_file_path(self, content_hash: str) -> Path:
+        """Mantem o hash completo no banco/protocolo e usa path curto no disco."""
+        normalized_hash = content_hash.strip().lower()
+        if len(normalized_hash) <= 64:
+            return self.storage_dir / normalized_hash
+
+        # Windows ainda falha em alguns ambientes com paths acima de 260 chars.
+        # A subpasta preserva boa distribuicao e o nome curto evita MAX_PATH.
+        return self.storage_dir / normalized_hash[:2] / normalized_hash[2:66]
 
     @staticmethod
     def _build_content_info(content_object: ContentObject) -> ContentInfo:

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from bootstrap import BootstrapService
 from content import ContentTransferService
+from debug import DebugSnapshotService
 from dht import DhtService
 from identity import IdentityService
 from log import LogService
@@ -41,6 +42,7 @@ class EngineServices:
     protocol_clients: ProtocolClients | None = None
     runtime_services: RuntimeServices | None = None
     api_service: CoreApiService | None = None
+    debug_snapshot_service: DebugSnapshotService | None = None
     engine: CoreEngine | None = None
     crypto_service: Any | None = None
     extra_services: dict[str, Any] = field(default_factory=dict)
@@ -69,6 +71,7 @@ class EngineServices:
         self.protocol_clients = ProtocolClients(engine)
         self.runtime_services = RuntimeServices(engine)
         self.api_service = CoreApiService(engine)
+        self.debug_snapshot_service = DebugSnapshotService(engine)
 
     def get_service(self, name: str) -> Any | None:
         return self.extra_services.get(name)

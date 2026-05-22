@@ -24,6 +24,10 @@ def create_isolated_core(
     listen_port: int,
     listen_host: str = "0.0.0.0",
     log_dir: Path | None = None,
+    api_port: int | None = None,
+    api_websocket_port: int | None = None,
+    virtual_route_expected_round_trip_ttl_ms: int = 1000,
+    virtual_route_pending_timeout_seconds: float = 90.0,
     bootstrap_public_endpoints: Iterable[BootstrapEndpoint] | None = None,
     bootstrap_dns_seeds: Iterable[DnsSeed] | None = None,
     reset_database: bool = False,
@@ -42,11 +46,24 @@ def create_isolated_core(
         log_dir=log_dir or data_dir / "logs",
     )
     config.api_enabled = False
+    if api_port is not None:
+        config.api_enabled = True
+        config.api_host = "127.0.0.1"
+        config.api_port = api_port
+    if api_websocket_port is not None:
+        config.api_websocket_enabled = True
+        config.api_websocket_host = "127.0.0.1"
+        config.api_websocket_port = api_websocket_port
+    else:
+        config.api_websocket_enabled = False
     config.content_storage_dir = data_dir / "content"
     config.virtual_route_maintenance_runtime_interval_seconds = 1.0
-    config.virtual_route_maintenance_pending_route_timeout_seconds = 90.0
-    config.virtual_route_maintenance_expected_round_trip_ttl_ms = 1000
+    config.virtual_route_maintenance_route_min_online_routes = 2
+    config.virtual_route_maintenance_drt_check_interval_seconds = 1.0
+    config.virtual_route_maintenance_pending_route_timeout_seconds = virtual_route_pending_timeout_seconds
+    config.virtual_route_maintenance_expected_round_trip_ttl_ms = virtual_route_expected_round_trip_ttl_ms
     config.virtual_route_maintenance_candidate_limit = 16
+    config.virtual_session_drt_lookup_timeout_seconds = 90.0
     if bootstrap_public_endpoints is not None:
         config.bootstrap_public_endpoints = list(bootstrap_public_endpoints)
     if bootstrap_dns_seeds is not None:

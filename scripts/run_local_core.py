@@ -1,30 +1,27 @@
 from __future__ import annotations
 
 import argparse
-import os
-import subprocess
+import asyncio
 import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CORE_ENTRYPOINT = PROJECT_ROOT / "app" / "main.py"
+APP_ROOT = PROJECT_ROOT / "app"
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from core import CoreConfig, CoreEngine
+from main import run_node
 
 
 def main() -> int:
     args = parse_args()
-    command = [
-        sys.executable,
-        str(CORE_ENTRYPOINT),
-        "--listen-port",
-        str(args.listen_port),
-    ]
     print(f"Iniciando core local na porta TCP {args.listen_port}...")
-    return subprocess.call(
-        command,
-        cwd=PROJECT_ROOT,
-        env=build_child_environment(),
-    )
+    engine = CoreEngine()
+    engine.services.config.listen_port = args.listen_port
+    asyncio.run(run_node(engine))
+    return 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,12 +33,6 @@ def parse_args() -> argparse.Namespace:
         help="Porta TCP do core local.",
     )
     return parser.parse_args()
-
-
-def build_child_environment() -> dict[str, str]:
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
-    return env
 
 
 if __name__ == "__main__":

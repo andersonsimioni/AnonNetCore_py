@@ -31,6 +31,7 @@ class RouteExecuteClient:
             virtual_session_id=virtual_session_id,
             virtual_envelope=virtual_envelope,
             virtual_envelope_ciphered=virtual_envelope_ciphered,
+            direction="vn_to_pn",
         )
         await self.engine.forward_message_to_remote_physical_node(
             remote_physical_node_id=initiator_resolution.first_hop_physical_node_id,
@@ -60,6 +61,7 @@ class RouteExecuteClient:
             virtual_session_id=virtual_session_id,
             virtual_envelope=virtual_envelope,
             virtual_envelope_ciphered=virtual_envelope_ciphered,
+            direction="vn_to_pn",
         )
         await self.engine.forward_message_to_remote_physical_node(
             remote_physical_node_id=route_target["target_remote_physical_node_id"],
@@ -95,6 +97,7 @@ class RouteExecuteClient:
                 virtual_session_id=virtual_session_id,
                 virtual_envelope=virtual_envelope,
                 virtual_envelope_ciphered=virtual_envelope_ciphered,
+                direction="pn_to_vn",
             )
             await self.engine.forward_message_to_remote_physical_node(
                 remote_physical_node_id=local_entry_point_target["target_remote_physical_node_id"],
@@ -124,6 +127,7 @@ class RouteExecuteClient:
             virtual_session_id=virtual_session_id,
             virtual_envelope=virtual_envelope,
             virtual_envelope_ciphered=virtual_envelope_ciphered,
+            direction="pn_to_vn",
         )
         await self.engine.forward_message_to_remote_physical_node(
             remote_physical_node_id=entry_point_physical_node_id,
@@ -146,9 +150,14 @@ class RouteExecuteClient:
         virtual_session_id: str | None,
         virtual_envelope: dict[str, object],
         virtual_envelope_ciphered: bool,
+        direction: str,
     ) -> dict[str, object]:
+        if direction not in {"vn_to_pn", "pn_to_vn"}:
+            raise ValueError("direction precisa ser 'vn_to_pn' ou 'pn_to_vn'.")
+
         if not virtual_envelope_ciphered:
             return {
+                "direction": direction,
                 "virtual_session_id": virtual_session_id,
                 "virtual_envelope_ciphered": False,
                 "virtual_envelope": virtual_envelope,
@@ -169,6 +178,7 @@ class RouteExecuteClient:
         encrypted_virtual_envelope = aes_encrypt_hex(plaintext_hex, session.shared_secret_hex)
         self.engine.services.session_manager.touch_session(virtual_session_id)
         return {
+            "direction": direction,
             "virtual_session_id": virtual_session_id,
             "virtual_envelope_ciphered": True,
             "virtual_envelope": encrypted_virtual_envelope.payload_hex,

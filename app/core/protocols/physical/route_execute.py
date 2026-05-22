@@ -38,6 +38,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             "route_execute",
             "resolved route data path",
             path_id=route_data.path_id,
+            direction=route_data.direction,
             virtual_session_id=route_data.virtual_session_id,
             action=resolution.action,
             next_path_id=resolution.next_path_id,
@@ -76,6 +77,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         payload_dict = payload if isinstance(payload, dict) else {}
         return RouteExecuteData(
             path_id=_read_required_string(payload_dict, "path_id"),
+            direction=_read_route_direction(payload_dict),
             virtual_session_id=_read_optional_string(payload_dict, "virtual_session_id"),
             virtual_envelope_ciphered=_read_required_bool(payload_dict, "virtual_envelope_ciphered"),
             virtual_envelope=payload_dict.get("virtual_envelope"),
@@ -212,6 +214,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 
         reply_route_data = RouteExecuteData(
             path_id=reply_context.reply_path_id,
+            direction=_opposite_route_direction(route_data.direction),
             virtual_session_id=route_data.virtual_session_id,
             virtual_envelope_ciphered=route_data.virtual_envelope_ciphered,
             virtual_envelope=self._build_reply_virtual_payload(
@@ -358,6 +361,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             metadata={
                 **context.metadata,
                 "route_path_id": route_data.path_id,
+                "route_direction": route_data.direction,
                 "route_message_type": envelope.message_type,
                 "virtual_session_id": route_data.virtual_session_id,
                 "virtual_envelope_ciphered": route_data.virtual_envelope_ciphered,
@@ -371,26 +375,6 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         services: EngineServices,
         route_data: "RouteExecuteData",
     ) -> "ResolvedRouteExecutePath":
-        forward_mapping = services.route_service.get_resolution_by_received_path_id(
-            received_path_id=route_data.path_id,
-        )
-        if forward_mapping is not None:
-            return ResolvedRouteExecutePath(
-                action="forward_vn_to_pn",
-                next_path_id=forward_mapping.generated_path_id,
-                target_remote_physical_node_id=forward_mapping.to_physical_node_id,
-            )
-
-        reverse_mapping = services.route_service.get_resolution_by_generated_path_id(
-            generated_path_id=route_data.path_id,
-        )
-        if reverse_mapping is not None:
-            return ResolvedRouteExecutePath(
-                action="forward_pn_to_vn",
-                next_path_id=reverse_mapping.received_path_id,
-                target_remote_physical_node_id=reverse_mapping.from_physical_node_id,
-            )
-
         endpoint_resolution = services.route_service.get_endpoint_resolution_by_path_id(
             route_path_id=route_data.path_id,
         )
@@ -399,6 +383,20 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                 final_path_id=route_data.path_id,
             )
         if endpoint_resolution is not None and endpoint_resolution.previous_physical_node_id:
+            if route_data.direction == "pn_to_vn":
+                remote_physical_node_id = self._read_remote_physical_node_id(envelope, services)
+                ingress_key = self._build_endpoint_ingress_key(
+                    endpoint_resolution=endpoint_resolution,
+                    route_data=route_data,
+                )
+                if remote_physical_node_id and ingress_key is not None:
+                    self._external_ingress_by_route_session[ingress_key] = remote_physical_node_id
+                return ResolvedRouteExecutePath(
+                    action="forward_entry_point_to_vn",
+                    next_path_id=endpoint_resolution.route_path_id,
+                    target_remote_physical_node_id=endpoint_resolution.previous_physical_node_id,
+                )
+
             remote_physical_node_id = self._read_remote_physical_node_id(envelope, services)
             ingress_key = self._build_endpoint_ingress_key(
                 endpoint_resolution=endpoint_resolution,
@@ -423,6 +421,27 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                     action="forward_entry_point_to_vn",
                     next_path_id=endpoint_resolution.route_path_id,
                     target_remote_physical_node_id=endpoint_resolution.previous_physical_node_id,
+                )
+
+        if route_data.direction == "vn_to_pn":
+            forward_mapping = services.route_service.get_resolution_by_received_path_id(
+                received_path_id=route_data.path_id,
+            )
+            if forward_mapping is not None:
+                return ResolvedRouteExecutePath(
+                    action="forward_vn_to_pn",
+                    next_path_id=forward_mapping.generated_path_id,
+                    target_remote_physical_node_id=forward_mapping.to_physical_node_id,
+                )
+        else:
+            reverse_mapping = services.route_service.get_resolution_by_generated_path_id(
+                generated_path_id=route_data.path_id,
+            )
+            if reverse_mapping is not None:
+                return ResolvedRouteExecutePath(
+                    action="forward_pn_to_vn",
+                    next_path_id=reverse_mapping.received_path_id,
+                    target_remote_physical_node_id=reverse_mapping.from_physical_node_id,
                 )
 
         return ResolvedRouteExecutePath(action="deliver_local")
@@ -504,6 +523,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 @dataclass(slots=True, frozen=True)
 class RouteExecuteData:
     path_id: str
+    direction: str
     virtual_session_id: str | None
     virtual_envelope_ciphered: bool
     virtual_envelope: object
@@ -515,6 +535,7 @@ class RouteExecuteData:
     ) -> dict[str, object]:
         return {
             "path_id": path_id,
+            "direction": self.direction,
             "virtual_session_id": self.virtual_session_id,
             "virtual_envelope_ciphered": self.virtual_envelope_ciphered,
             "virtual_envelope": self.virtual_envelope,
@@ -555,6 +576,23 @@ def _read_required_bool(payload: dict[str, object], field_name: str) -> bool:
     if isinstance(value, bool):
         return value
     raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser um booleano.")
+
+
+def _read_route_direction(payload: dict[str, object]) -> str:
+    value = payload.get("direction")
+    if value is None:
+        return "vn_to_pn"
+    if value in {"vn_to_pn", "pn_to_vn"}:
+        return str(value)
+    raise ValueError("O campo 'direction' precisa ser 'vn_to_pn' ou 'pn_to_vn'.")
+
+
+def _opposite_route_direction(direction: str) -> str:
+    if direction == "vn_to_pn":
+        return "pn_to_vn"
+    if direction == "pn_to_vn":
+        return "vn_to_pn"
+    raise ValueError("direction invalido.")
 
 
 def _load_metadata_dict(metadata_json: str | None) -> dict[str, object]:

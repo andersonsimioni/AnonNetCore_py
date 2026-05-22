@@ -76,14 +76,15 @@ class VirtualSessionClient:
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
         )
-        if existing_session is not None and existing_session.bound_route_id == local_route_path_id:
+        if existing_session is not None:
             self.engine.services.log_service.debug(
                 "virtual_session_client",
                 "reusing active virtual session for local route",
                 session_id=existing_session.session_id,
                 local_virtual_node_id=local_virtual_node_id,
                 remote_virtual_node_id=remote_virtual_node_id,
-                bound_route_id=existing_session.bound_route_id,
+                existing_bound_route_id=existing_session.bound_route_id,
+                requested_bound_route_id=local_route_path_id,
             )
             return existing_session.session_id
 
@@ -139,14 +140,15 @@ class VirtualSessionClient:
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
         )
-        if existing_session is not None and existing_session.bound_route_id == entry_point.final_path_id:
+        if existing_session is not None:
             self.engine.services.log_service.debug(
                 "virtual_session_client",
                 "reusing active virtual session for drt entry point",
                 session_id=existing_session.session_id,
                 local_virtual_node_id=local_virtual_node_id,
                 remote_virtual_node_id=remote_virtual_node_id,
-                bound_route_id=existing_session.bound_route_id,
+                existing_bound_route_id=existing_session.bound_route_id,
+                requested_bound_route_id=entry_point.final_path_id,
                 entry_point_physical_node_id=entry_point.physical_node_id,
             )
             return existing_session.session_id

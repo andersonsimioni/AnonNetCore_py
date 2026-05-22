@@ -121,6 +121,17 @@ class IdentityService:
             updated_at=node.updated_at,
         )
 
+    @staticmethod
+    def _get_local_physical_node_id(session) -> str | None:
+        return session.scalar(select(LocalPhysicalNodeIdentity.id).order_by(LocalPhysicalNodeIdentity.created_at))
+
+    @classmethod
+    def _exclude_local_physical_node(cls, session, query):
+        local_node_id = cls._get_local_physical_node_id(session)
+        if local_node_id is None:
+            return query
+        return query.where(RemotePhysicalNodeIdentity.id != local_node_id)
+
     def create_local_virtual_node(
         self,
         data: VirtualNodeIdentityCreateInput,
@@ -258,6 +269,7 @@ class IdentityService:
                     )
                 )
 
+            query = self._exclude_local_physical_node(session, query)
             query = query.distinct().order_by(func.random()).limit(limit)
             remote_nodes = list(session.scalars(query).all())
 
@@ -317,6 +329,7 @@ class IdentityService:
                 .order_by(func.random())
                 .limit(limit)
             )
+            query = self._exclude_local_physical_node(session, query)
             remote_nodes = list(session.scalars(query).all())
 
         return [
@@ -345,6 +358,7 @@ class IdentityService:
                 .order_by(func.random())
                 .limit(limit)
             )
+            query = self._exclude_local_physical_node(session, query)
             remote_nodes = list(session.scalars(query).all())
 
         return [RemotePhysicalNodePingCandidate(node_id=remote_node.id) for remote_node in remote_nodes]
@@ -373,6 +387,7 @@ class IdentityService:
                 .order_by(func.random())
                 .limit(limit)
             )
+            query = self._exclude_local_physical_node(session, query)
             rows = session.execute(query).all()
 
         return [
@@ -388,26 +403,24 @@ class IdentityService:
         """Resume os filtros que um PN precisa passar para virar candidato de rota."""
 
         with self.database.session_scope() as session:
-            total_remote_nodes = session.scalar(
-                select(func.count()).select_from(RemotePhysicalNodeIdentity)
-            ) or 0
-            discovered_nodes = session.scalar(
+            total_remote_nodes_query = select(func.count()).select_from(RemotePhysicalNodeIdentity)
+            discovered_nodes_query = (
                 select(func.count())
                 .select_from(RemotePhysicalNodeIdentity)
                 .where(RemotePhysicalNodeIdentity.status != "active")
-            ) or 0
-            active_nodes = session.scalar(
+            )
+            active_nodes_query = (
                 select(func.count())
                 .select_from(RemotePhysicalNodeIdentity)
                 .where(RemotePhysicalNodeIdentity.status == "active")
-            ) or 0
-            validated_nodes = session.scalar(
+            )
+            validated_nodes_query = (
                 select(func.count())
                 .select_from(RemotePhysicalNodeIdentity)
                 .where(RemotePhysicalNodeIdentity.status == "active")
                 .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
-            ) or 0
-            active_endpoint_nodes = session.scalar(
+            )
+            active_endpoint_nodes_query = (
                 select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
                 .select_from(RemotePhysicalNodeIdentity)
                 .join(
@@ -420,8 +433,8 @@ class IdentityService:
                 .where(NodeEndpoint.transport.is_not(None))
                 .where(NodeEndpoint.host.is_not(None))
                 .where(NodeEndpoint.port.is_not(None))
-            ) or 0
-            route_ready_nodes = session.scalar(
+            )
+            route_ready_nodes_query = (
                 select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
                 .select_from(RemotePhysicalNodeIdentity)
                 .join(
@@ -434,28 +447,54 @@ class IdentityService:
                 .where(NodeEndpoint.transport.is_not(None))
                 .where(NodeEndpoint.host.is_not(None))
                 .where(NodeEndpoint.port.is_not(None))
-            ) or 0
-            rtt_known_nodes = session.scalar(
+            )
+            rtt_known_nodes_query = (
                 select(func.count(func.distinct(RemotePhysicalNodeIdentity.id)))
                 .select_from(RemotePhysicalNodeIdentity)
                 .join(RttInfo, RttInfo.remote_physical_node_id == RemotePhysicalNodeIdentity.id)
                 .where(RemotePhysicalNodeIdentity.status == "active")
                 .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
-            ) or 0
-            endpoint_rows = list(
-                session.execute(
-                    select(
-                        NodeEndpoint.physical_node_hash_id,
-                        NodeEndpoint.transport,
-                        NodeEndpoint.host,
-                        NodeEndpoint.port,
-                        NodeEndpoint.is_active,
-                        NodeEndpoint.failure_count,
-                    )
-                    .order_by(NodeEndpoint.last_success_at.desc(), NodeEndpoint.id.desc())
-                    .limit(8)
-                ).all()
             )
+            endpoint_rows_query = select(
+                NodeEndpoint.physical_node_hash_id,
+                NodeEndpoint.transport,
+                NodeEndpoint.host,
+                NodeEndpoint.port,
+                NodeEndpoint.is_active,
+                NodeEndpoint.failure_count,
+            )
+
+            total_remote_nodes = session.scalar(
+                self._exclude_local_physical_node(session, total_remote_nodes_query)
+            ) or 0
+            discovered_nodes = session.scalar(
+                self._exclude_local_physical_node(session, discovered_nodes_query)
+            ) or 0
+            active_nodes = session.scalar(
+                self._exclude_local_physical_node(session, active_nodes_query)
+            ) or 0
+            validated_nodes = session.scalar(
+                self._exclude_local_physical_node(session, validated_nodes_query)
+            ) or 0
+            active_endpoint_nodes = session.scalar(
+                self._exclude_local_physical_node(session, active_endpoint_nodes_query)
+            ) or 0
+            route_ready_nodes = session.scalar(
+                self._exclude_local_physical_node(session, route_ready_nodes_query)
+            ) or 0
+            rtt_known_nodes = session.scalar(
+                self._exclude_local_physical_node(session, rtt_known_nodes_query)
+            ) or 0
+            local_node_id = self._get_local_physical_node_id(session)
+            if local_node_id is not None:
+                endpoint_rows_query = endpoint_rows_query.where(
+                    NodeEndpoint.physical_node_hash_id != local_node_id
+                )
+            endpoint_rows_query = endpoint_rows_query.order_by(
+                NodeEndpoint.last_success_at.desc(),
+                NodeEndpoint.id.desc(),
+            ).limit(8)
+            endpoint_rows = list(session.execute(endpoint_rows_query).all())
 
         return {
             "total_remote_nodes": int(total_remote_nodes),
