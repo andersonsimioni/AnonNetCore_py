@@ -88,6 +88,8 @@ def collect_debug_snapshot() -> dict[str, Any]:
         include_docker=True,
         docker_filter=DOCKER_FILTER,
         timeout_seconds=5.0,
+        cache_ttl_seconds=0.0,
+        max_workers=4,
     )
     return registry.collect()
 

@@ -8,7 +8,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
+from dataclasses import dataclass
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -25,10 +27,12 @@ def main() -> int:
         include_docker=not args.no_docker,
         docker_filter=args.docker_filter,
         timeout_seconds=args.node_timeout_seconds,
+        cache_ttl_seconds=args.node_cache_ttl_seconds,
+        max_workers=args.max_workers,
     )
     server = DebugConsoleServer(
         (args.host, args.port),
-        build_handler(registry),
+        build_handler(registry, refresh_interval_ms=int(args.refresh_interval_seconds * 1000)),
     )
     print(f"Debug console em http://{args.host}:{args.port}")
     print("Use Ctrl+C para parar.")
@@ -49,19 +53,25 @@ class DebugNodeRegistry:
         include_docker: bool,
         docker_filter: str,
         timeout_seconds: float,
+        cache_ttl_seconds: float,
+        max_workers: int,
     ) -> None:
-        self.api_urls = api_urls or [DEFAULT_CORE_DEBUG_URL]
+        self.api_urls = list(api_urls)
         self.include_docker = include_docker
         self.docker_filter = docker_filter
         self.timeout_seconds = timeout_seconds
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self.max_workers = max(1, max_workers)
+        self._cache: dict[str, CachedDebugState] = {}
+        self._cache_lock = threading.Lock()
 
     def collect(self) -> dict[str, object]:
         started_at = time.monotonic()
         targets = self._build_targets()
         nodes: list[dict[str, object]] = []
-        with ThreadPoolExecutor(max_workers=max(1, min(32, len(targets)))) as executor:
+        with ThreadPoolExecutor(max_workers=min(self.max_workers, max(1, len(targets)))) as executor:
             future_by_target = {
-                executor.submit(target.load_state, self.timeout_seconds): target
+                executor.submit(self._load_target_state, target): target
                 for target in targets
             }
             for future in as_completed(future_by_target):
@@ -74,7 +84,7 @@ class DebugNodeRegistry:
                             "source": target.label,
                             "kind": target.kind,
                             "ok": False,
-                            "error": f"{type(error).__name__}: {error}",
+                            "error": compact_error(error),
                         }
                     )
 
@@ -118,10 +128,56 @@ class DebugNodeRegistry:
             return []
         return sorted(line.strip() for line in completed.stdout.splitlines() if line.strip())
 
+    def _load_target_state(self, target: "DebugTarget") -> dict[str, object]:
+        cached = self._get_cached_state(target)
+        if cached is not None:
+            return cached
+
+        try:
+            state = target.load_state(self.timeout_seconds)
+        except Exception as error:
+            cached_error = self._get_cached_state(target, allow_stale=True)
+            if cached_error is not None:
+                cached_error["stale"] = True
+                cached_error["warning"] = compact_error(error)
+                return cached_error
+            raise
+
+        with self._cache_lock:
+            self._cache[target.cache_key] = CachedDebugState(
+                captured_monotonic=time.monotonic(),
+                state=state,
+            )
+        return state
+
+    def _get_cached_state(self, target: "DebugTarget", *, allow_stale: bool = False) -> dict[str, object] | None:
+        with self._cache_lock:
+            cached = self._cache.get(target.cache_key)
+        if cached is None:
+            return None
+        age_seconds = time.monotonic() - cached.captured_monotonic
+        if not allow_stale and age_seconds > self.cache_ttl_seconds:
+            return None
+
+        state = dict(cached.state)
+        state["cached"] = True
+        state["cache_age_seconds"] = round(age_seconds, 2)
+        return state
+
+
+@dataclass(slots=True)
+class CachedDebugState:
+    captured_monotonic: float
+    state: dict[str, object]
+
 
 class DebugTarget:
     label: str
     kind: str
+
+    @property
+    def cache_key(self) -> str:
+        return f"{self.kind}:{self.label}"
 
     def load_state(self, timeout_seconds: float) -> dict[str, object]:
         raise NotImplementedError
@@ -181,9 +237,22 @@ def load_debug_state_url(url: str, *, timeout_seconds: float) -> dict[str, objec
     try:
         with urlopen(url, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except URLError as error:
+    except (TimeoutError, URLError, OSError) as error:
         raise RuntimeError(str(error)) from error
     return unwrap_api_payload(payload)
+
+
+def compact_error(error: BaseException) -> str:
+    text = str(error).strip()
+    if not text:
+        return type(error).__name__
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return type(error).__name__
+    for line in reversed(lines):
+        if "TimeoutError" in line or "RuntimeError" in line or "ConnectionError" in line:
+            return line[-240:]
+    return lines[-1][-240:]
 
 
 def unwrap_api_payload(payload: object) -> dict[str, object]:
@@ -200,11 +269,11 @@ class DebugConsoleServer(ThreadingHTTPServer):
     daemon_threads = True
 
 
-def build_handler(registry: DebugNodeRegistry):
+def build_handler(registry: DebugNodeRegistry, *, refresh_interval_ms: int):
     class DebugConsoleHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path in {"/", "/index.html"}:
-                self._write_html(render_page())
+                self._write_html(render_page(refresh_interval_ms=refresh_interval_ms))
                 return
             if self.path == "/api/nodes":
                 self._write_json(registry.collect())
@@ -235,7 +304,7 @@ def build_handler(registry: DebugNodeRegistry):
     return DebugConsoleHandler
 
 
-def render_page() -> str:
+def render_page(*, refresh_interval_ms: int) -> str:
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -261,6 +330,7 @@ def render_page() -> str:
     <section id="problems" class="problem-list"></section>
     <section id="nodes" class="node-grid"></section>
   </main>
+  <script>const DEBUG_REFRESH_INTERVAL_MS = {refresh_interval_ms};</script>
   <script>{JS}</script>
 </body>
 </html>"""
@@ -428,6 +498,7 @@ function renderNode(node) {
       <div>
         <h2>${escapeHtml(info.name || node.source)}</h2>
         <p class="node-meta">${escapeHtml(info.physical_node_id || "-")}</p>
+        ${node.cached ? `<p class="node-meta">cache: ${escapeHtml(node.cache_age_seconds)}s${node.stale ? " | stale" : ""}${node.warning ? ` | ${escapeHtml(node.warning)}` : ""}</p>` : ""}
       </div>
       <span class="node-kind">${escapeHtml(node.kind)}</span>
     </div>
@@ -510,7 +581,7 @@ function escapeHtml(value) {
 }
 
 refresh();
-setInterval(refresh, 1000);
+setInterval(refresh, DEBUG_REFRESH_INTERVAL_MS);
 """
 
 
@@ -526,7 +597,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--no-docker", action="store_true", help="Nao descobrir containers anonnet-node-*.")
     parser.add_argument("--docker-filter", default="anonnet-node-")
-    parser.add_argument("--node-timeout-seconds", type=float, default=2.5)
+    parser.add_argument("--node-timeout-seconds", type=float, default=8.0)
+    parser.add_argument("--node-cache-ttl-seconds", type=float, default=8.0)
+    parser.add_argument("--refresh-interval-seconds", type=float, default=5.0)
+    parser.add_argument("--max-workers", type=int, default=4)
     return parser.parse_args()
 
 
