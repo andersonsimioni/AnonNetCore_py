@@ -1,45 +1,29 @@
 # Transport
 
-Camada de transporte de rede classica.
+O diretorio `app/transport` implementa o transporte fisico do MVP.
 
-## Objetivo
+## Responsabilidades
 
-- centralizar envio e recebimento de mensagens
-- abstrair os protocolos de transporte disponiveis
-- manter o sistema pronto para adicionar novos transportes
-- entregar pacotes recebidos para uma camada superior
+- abrir listener TCP;
+- aceitar conexoes;
+- enviar bytes para peers remotos;
+- aplicar framing;
+- entregar pacotes recebidos para a engine.
 
-## Estrutura
+## TCP
 
-- `models.py`
-  - modelos comuns para endpoints, pacotes e mensagens de saida
-- `interfaces.py`
-  - contrato dos adapters de transporte
-- `service.py`
-  - servico principal que registra e coordena todos os transportes
-- `frame_codec.py`
-  - framing de 4 bytes para TCP
-- `tcp_transport.py`
-  - adapter TCP inicial
+O MVP usa TCP como transporte principal.
 
-## Uso basico
+Cada mensagem e enviada como frame com prefixo de tamanho. Depois que o frame e
+lido, o payload e entregue ao core como bytes JSON.
 
-```python
-from transport import (
-    OutboundMessage,
-    TcpTransportAdapter,
-    TcpTransportConfig,
-    TransportEndpoint,
-    TransportService,
-)
+## Arquivos
 
-transport_service = TransportService()
-transport_service.register_adapter(
-    TcpTransportAdapter(
-        TcpTransportConfig(
-            listen_host="127.0.0.1",
-            listen_port=9000,
-        )
-    )
-)
-```
+- `frame_codec.py`: codificacao e decodificacao de frames TCP.
+- `tcp_transport.py`: listener e envio TCP.
+
+## Observacao
+
+O endpoint anunciado para outros peers deve ser o host/porta de listener, nao a
+porta efemera criada por uma conexao recebida. Essa regra e essencial para que
+nodes em Docker e nodes locais consigam se conectar entre si.

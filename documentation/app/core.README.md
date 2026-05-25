@@ -1,58 +1,68 @@
-# Core Engine
+# Core
 
-Esqueleto inicial para o processamento central de pacotes recebidos.
+O diretorio `app/core` concentra a engine, configuracao, modelos de envelope,
+registro de protocolos, clients de protocolo e runtimes.
 
-## Objetivo
+## Responsabilidades
 
-- receber um pacote ja entregue por qualquer camada de transporte
-- identificar o protocolo do payload
-- normalizar o pacote para um envelope comum
-- encaminhar para o processador correto
+- iniciar o ambiente de execucao;
+- configurar listener TCP, logs, API e WebSocket;
+- executar bootstrap;
+- solicitar informacoes iniciais de physical nodes;
+- iniciar runtimes;
+- receber envelopes de protocolo;
+- encaminhar cada envelope ao handler correto;
+- expor services para protocolos e API.
 
-## Componentes
+## Arquivos Principais
 
-- `models.py`
-  - `PacketContext`
-  - `ProtocolEnvelope`
-  - `PacketProcessingResult`
-- `identifiers.py`
-  - identifica o wire format recebido
-- `interfaces.py`
-  - `PacketProtocolIdentifier`
-  - `PacketProcessor`
-- `protocols/`
-  - `session.py`
-  - `dht.py`
-  - `routing.py`
-  - `content.py`
-  - `json_processor.py`
-- `engine.py`
-  - `CoreEngine`
+- `config.py`: configuracoes globais do core.
+- `engine.py`: ciclo de vida principal.
+- `models.py`: `PacketContext`, `ProtocolEnvelope` e resultados.
+- `message_registry.py`: roteamento de message types para handlers.
+- `services.py`: agregacao dos services usados pela engine.
+- `network.py`: utilitarios de rede local.
+- `protocols/physical/`: handlers da camada fisica.
+- `protocols/virtual/`: handlers da camada virtual.
+- `protocol_clients/physical/`: clients que iniciam protocolos fisicos.
+- `protocol_clients/virtual/`: clients que iniciam protocolos virtuais.
+- `runtime/`: tarefas periodicas.
+- `routing_strategies/`: estrategias de criacao de rotas.
 
-## Uso basico
+## Ciclo de Vida
 
-```python
-from core import CoreEngine, PacketContext
+1. `main.py` instancia o core.
+2. `CoreEngine.start()` configura o ambiente.
+3. O listener TCP e iniciado.
+4. A API HTTP/WebSocket e iniciada quando habilitada.
+5. Bootstrap carrega endpoints hardcoded.
+6. O core solicita `PHYSICAL_NODE_INFO` aos bootstraps.
+7. Runtimes fisicos, DHT, sessao e rotas virtuais sao iniciados.
+8. Envelopes recebidos sao processados pelo registry.
 
-engine = CoreEngine()
+## Runtimes
 
-result = await engine.process_received_packet(
-    PacketContext(
-        transport_name="tcp",
-        payload=b'{"header":{"version":1,"message_type":"PING","message_id":"1","message_sequence":1,"physical_session_id":null,"virtual_session_id":null},"payload":{}}',
-        remote_host="127.0.0.1",
-        remote_port=9001,
-    )
-)
-```
+- `PhysicalPingRuntime`: ping e RTT de physical nodes.
+- `PhysicalNodeValidationRuntime`: valida peers e endpoints.
+- `PhysicalNodeInfoExchangeRuntime`: troca peers conhecidos.
+- `SessionRuntime`: keepalive de sessoes fisicas e virtuais.
+- `DhtMaintenanceRuntime`: manutencao e republicacao de DHT.
+- `VirtualRouteMaintenanceRuntime`: garante rotas minimas para VNs locais.
 
-## Familias de protocolo
+## Protocolos
 
-- `session`
-  - criacao, confirmacao e fechamento de sessao
-- `dht`
-  - publicacao e consulta de `DPNT`, `DRT`, `DDT`, `DTT`, `DPT`
-- `routing`
-  - criacao de rota, encaminhamento e confirmacao
-- `content`
-  - download de dados, chunks, anuncios e entrega de aplicacao
+Fisicos:
+
+- ping;
+- physical node info;
+- physical node info exchange;
+- physical session;
+- DHT;
+- route build;
+- route execute.
+
+Virtuais:
+
+- virtual session;
+- virtual message;
+- virtual content.

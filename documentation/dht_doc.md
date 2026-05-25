@@ -1,183 +1,203 @@
-# DHT
+# DHT e Tabelas Distribuidas
+
+Este documento descreve a DHT implementada no MVP. A DHT e usada como base para
+descoberta de physical nodes, rotas de virtual nodes e localizacao de conteudo.
 
 ## Objetivo
 
-A DHT do projeto usa uma tabela unica de registros e distribui a responsabilidade de cada chave entre os `K` peers ativos mais proximos dela.
+A DHT fornece um armazenamento distribuido simples, replicado e enderecado por
+hash. Cada registro possui:
 
-Isso evita centralizacao e permite redundancia controlada.
+- `namespace`: tipo logico do registro.
+- `logical_key`: chave legivel dentro daquele namespace.
+- `key`: hash usado para roteamento e responsabilidade.
+- `record_json`: payload canonico.
 
-## Chave DHT
-
-Cada registro usa:
-
-```text
-key = SHA512(namespace || logical_key)
-```
-
-Onde:
-
-- `namespace`: define o tipo do registro, por exemplo `drt`, `ddt`, `dtt`
-- `logical_key`: identifica o recurso logico, por exemplo `file_hash`, `tag`, `node_id`
-
-## Responsabilidade da chave
-
-Para uma `key`, os `K` peers ativos mais proximos dela sao os responsaveis por armazenar e responder por esse registro.
-
-A proximidade deve ser calculada por distancia `XOR` entre:
-
-- `node_id`
-- `dht_key`
-
-Resumo:
+Regra:
 
 ```text
-distance = XOR(node_id, dht_key)
+key = SHA512(namespace + "|" + logical_key)
 ```
-
-Os `K` menores resultados sao os responsaveis.
-
-## Problema dos registros colossais
-
-Algumas chaves podem apontar para listas gigantes.
-
-Exemplos:
-
-- `DDT`: uma key pode apontar para milhares ou milhoes de holders de um arquivo
-- `DTT`: uma key pode apontar para milhares ou milhoes de `file_hashes` de uma tag
-
-Se tudo ficar em um unico registro, um node pode acabar armazenando volume demais para apenas uma key.
-
-## Solucao: root + shards
-
-A solucao adotada e dividir registros colossais em:
-
-- `root record`
-- `shard records`
-
-### Root record
-
-O root guarda apenas metadata leve do conjunto.
-
-Chave:
-
-```text
-root_key = SHA512(namespace || logical_key)
-```
-
-Campos esperados no valor:
-
-- `namespace`
-- `logical_key`
-- `shard_count`
-- `updated_at`
-
-### Shard record
-
-Cada shard guarda apenas uma parte da lista total.
-
-Chave:
-
-```text
-shard_key = SHA512(namespace || logical_key || shard_index)
-```
-
-Campos esperados no valor:
-
-- `namespace`
-- `logical_key`
-- `shard_index`
-- `items`
-- `item_count`
-- `updated_at`
-
-## Regra de particionamento
-
-O limite principal sera por quantidade de itens, nao por bytes.
-
-Isso funciona bem porque os campos de texto relevantes terao limite de tamanho definido pela rede.
 
 Exemplo:
 
-- `max_items_per_shard = 10000`
-
-Esse valor nao precisa ser armazenado no `root`.
-
-Ele deve existir como configuracao global da rede, igual para todos os nodes.
-
-Se um registro exceder esse limite:
-
-- o shard atual e considerado cheio
-- um novo shard e criado com `shard_index + 1`
-- o root atualiza `shard_count`
-
-## Exemplo
-
-Para `DDT`:
-
 ```text
-namespace = ddt
-logical_key = file_hash
+namespace = dpnt
+logical_key = physical_node_id
+key = SHA512("dpnt|physical_node_id")
 ```
 
-Estrutura:
+## Responsabilidade por Proximidade
+
+Cada chave e responsabilidade dos `K` physical nodes mais proximos dela.
+
+O MVP usa distancia XOR:
 
 ```text
-SHA512(ddt || file_hash) -> root
-SHA512(ddt || file_hash || 0) -> shard 0
-SHA512(ddt || file_hash || 1) -> shard 1
-SHA512(ddt || file_hash || 2) -> shard 2
+distance = XOR(physical_node_id, dht_key)
 ```
 
-Para `DTT`:
+Os `K` menores valores sao os responsaveis. O valor padrao de `K` vem de:
 
 ```text
-namespace = dtt
-logical_key = tag
+CoreConfig.dht_replication_factor
 ```
 
-Estrutura:
+Atualmente o padrao e `3`.
+
+## Namespaces
+
+### `dpnt`
+
+Distributed Physical Nodes Table.
+
+Serve para localizar physical nodes por ID. O valor contem chave publica,
+endpoints anunciados, capacidades, status e assinatura.
+
+Logical key:
 
 ```text
-SHA512(dtt || tag) -> root
-SHA512(dtt || tag || 0) -> shard 0
-SHA512(dtt || tag || 1) -> shard 1
+physical_node_id
 ```
 
-## Escrita
+### `drt`
 
-Fluxo esperado:
+Distributed Route Table.
 
-1. Ler o `root`
-2. Verificar o ultimo shard
-3. Se ainda houver espaco, adicionar o item nele
-4. Se estiver cheio, criar um novo shard
-5. Atualizar o `root` com o novo `shard_count`
+Serve para localizar entry points fisicos que aceitam entregar trafego para um
+virtual node.
 
-## Leitura
+Logical key:
 
-Fluxo esperado:
+```text
+virtual_node_id
+```
 
-1. Ler o `root`
-2. Descobrir `shard_count`
-3. Ler os shards de `0` ate `shard_count - 1`
-4. Unir os itens em memoria
+### `ddt`
 
-## Vantagens
+Distributed Data Table.
 
-- evita hotspot gigante em uma unica key
-- limita o tamanho de cada registro
-- distribui melhor a responsabilidade entre peers
-- funciona bem com `DDT` e `DTT`
-- mantem a DHT simples de entender
+Serve para localizar VNs que possuem um conteudo.
 
-## Resumo
+Logical key:
 
-A DHT do projeto deve usar:
+```text
+content_id
+```
 
-- uma `key` base para identificar o recurso logico
-- `K` peers mais proximos como responsaveis
-- um `root record` pequeno
-- varios `shards` para listas grandes
-- limite por quantidade de itens por shard
+### `dpt`
 
-Essa abordagem permite escalar registros muito grandes sem transformar uma unica key em um ponto de sobrecarga.
+Distributed Pointer Table.
+
+Serve para publicar um ponteiro mutavel assinado por um VN. Na PoC social, a
+DPT aponta para o arquivo de estado mais recente do perfil.
+
+Logical key da PoC:
+
+```text
+anonnet.social|virtual_node_id
+```
+
+### `dtt`
+
+Distributed Tag Table.
+
+Modelo previsto para associar tags a recursos. O parser e o merge existem no
+codigo, mas a PoC social atual nao depende desse namespace.
+
+## Publicacao
+
+Fluxo de publicacao:
+
+1. O cliente calcula `key = SHA512(namespace + "|" + logical_key)`.
+2. O cliente seleciona candidatos conhecidos proximos da chave.
+3. A primeira requisicao pode ser enviada para um peer aleatorio entre
+   candidatos para reduzir correlacao direta.
+4. O handler `DHT_PUBLISH` encaminha hop-by-hop para peers mais proximos.
+5. Cada responsavel valida e salva o registro localmente.
+6. A resposta informa `stored_by`.
+7. O publish so e considerado armazenado quando os `K` responsaveis necessarios
+   confirmam armazenamento.
+
+O payload de publish nao carrega origin node, visited nodes ou hop count. Isso
+evita expor quem iniciou a operacao para todos os hops.
+
+## Consulta
+
+Fluxo de consulta:
+
+1. O cliente calcula a chave DHT.
+2. Envia `DHT_QUERY` para um peer inicial.
+3. O peer consulta registro local e encaminha para candidatos mais proximos.
+4. Resultados encontrados retornam como `DHT_RESULT`.
+5. O cliente recebe os registros e valida o payload conforme o namespace.
+
+Assim como no publish, a query e encaminhada sem carregar o origin node. O
+primeiro peer solicitado fica responsavel por coordenar a busca encadeada.
+
+## Merge e Deduplicacao
+
+A tabela local `dht_record` e unica. Quando um registro de mesma `key` chega, o
+core tenta mesclar o fragmento com o registro existente.
+
+Regras gerais:
+
+- DPNT: aceita descritor valido do physical node correspondente.
+- DRT: agrega entradas de rota do mesmo VN.
+- DDT: agrega holders do mesmo conteudo.
+- DPT: aceita ponteiro valido assinado pelo VN dono, preferindo o estado mais
+  recente.
+- DTT: agrega entradas de tag.
+
+O merge tambem evita duplicidade de informacoes repetidas, como holders DDT e
+route entries DRT.
+
+## Manutencao
+
+O `DhtMaintenanceRuntime` roda periodicamente para:
+
+- validar registros locais;
+- identificar os `K` responsaveis atuais de cada chave;
+- republicar registros quando o node local ainda deve contribuir;
+- mover responsabilidade quando novos peers passam a ser mais proximos;
+- evitar republicacao excessiva usando backoff.
+
+Configuracoes principais:
+
+```text
+CoreConfig.dht_maintenance_runtime_interval_seconds
+CoreConfig.dht_maintenance_publish_backoff_seconds
+CoreConfig.dht_replication_factor
+```
+
+## Publicacao de Physical Nodes na DPNT
+
+Physical nodes nao sao publicados como confiaveis imediatamente. O fluxo
+esperado e:
+
+1. peer e descoberto por bootstrap ou exchange;
+2. endpoint anunciado e salvo;
+3. `PhysicalNodeValidationRuntime` tenta validar conexao direta;
+4. quando validado, o core monta um registro DPNT;
+5. o registro DPNT e publicado na DHT.
+
+Isso separa descoberta local de publicacao distribuida.
+
+## Publicacao de Rotas na DRT
+
+Rotas sao publicadas pelo processo de route build. A DRT so deve receber uma
+rota quando:
+
+- o VN aceitou o `final_path_id`;
+- o PN final aceitou ser entry point;
+- assinaturas foram validadas;
+- RTT da rota foi medido e assinado;
+- o registro DRT foi montado pelo `RouteService`.
+
+## Limites Atuais
+
+- O modelo e adequado ao MVP e a testes em LAN/Docker.
+- Nao ha protecao completa contra peers maliciosos coordenados.
+- Nao ha sistema de reputacao.
+- Nao ha shard fisico implementado para listas gigantes. A ideia de root/shards
+  continua sendo um caminho futuro para DDT/DTT em escala maior.

@@ -1,104 +1,68 @@
-# Crypto
+# AnonNetCore Python MVP - Documentacao
 
-Projeto Python simples com os algoritmos:
+Esta pasta documenta o MVP funcional do AnonNetCore em Python. O objetivo dos
+documentos e servir como base tecnica para o TCC e como guia de manutencao do
+codigo.
 
-- `SHA-512`
-- `Dilithium` via `ML-DSA-65` do OpenSSL 3.6
-- `Kyber` via `ML-KEM-768` do OpenSSL 3.6
-- `AES-256-CBC`
+## Documentos principais
 
-## Estrutura
+- [Visao tecnica geral](documentation.md): objetivo, arquitetura, camadas,
+  modulos, fluxo de execucao e definicao do MVP.
+- [Entidades e persistencia](entities.md): entidades locais, tabelas SQLite,
+  estado em memoria e registros distribuidos.
+- [DHT e tabelas distribuidas](dht_doc.md): modelo de chave, namespaces,
+  responsabilidade por proximidade XOR, replicacao e manutencao.
+- [Rotas e route execute](route.md): construcao de rotas, publicacao na DRT,
+  encapsulamento fisico/virtual e encaminhamento hop-by-hop.
+- [Falhas e limites](faults.md): riscos conhecidos e comportamento esperado em
+  falhas.
+- [API local](api.md): endpoints HTTP, WebSocket e uso por apps externas.
+- [PoC social](poc.md): rede social de demonstracao, DPT/DDT, perfis, feed e
+  mensagens diretas.
+- [Testes](tests/README.md): smokes, testes de integracao e comandos.
 
-```text
-storage/
-  db.py
-  models/
-crypto/
-  __init__.py
-  _openssl.py
-  aes.py
-  dilithium.py
-  exceptions.py
-  kyber.py
-  sha512.py
-  utils.py
+## Estado atual do MVP
+
+O MVP demonstra:
+
+- rede de physical nodes via TCP;
+- bootstrap por endpoints hardcoded na configuracao do core;
+- troca e validacao de informacoes de physical nodes;
+- sessoes fisicas com KEM, assinatura e keepalive;
+- DHT generica com namespaces `dpnt`, `drt`, `ddt`, `dpt` e parser para `dtt`;
+- publicacao replicada nos K physical nodes mais proximos da chave;
+- manutencao periodica de registros DHT validados;
+- criacao automatica de rotas para virtual nodes locais;
+- sessoes virtuais end-to-end usando rotas publicadas na DRT;
+- mensagens virtuais entregues por `VIRTUAL_SESSION_DATA`;
+- transferencia de conteudo por byte ranges no layer virtual;
+- API HTTP e WebSocket para aplicacoes externas;
+- PoC social em HTML/JS local sem servidor web obrigatorio;
+- Debug Console para observar nodes locais e containers Docker.
+
+## Como executar a demo
+
+Na raiz do projeto:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-## Uso rapido
+Sem abrir o navegador automaticamente:
 
-```python
-from crypto import (
-    aes_decrypt_text,
-    aes_encrypt_text,
-    dilithium_sign_hex,
-    dilithium_verify_hex,
-    generate_dilithium_key_pair,
-    generate_kyber_key_pair,
-    kyber_decapsulate_hex,
-    kyber_encapsulate_hex,
-    sha512_hex,
-)
-from crypto.aes import generate_key_hex
-
-digest_hex = sha512_hex("mensagem")
-
-key_hex = generate_key_hex()
-aes_result = aes_encrypt_hex("636f6e746575646f20736967696c6f736f", key_hex)
-plain_hex = aes_decrypt_hex(aes_result.payload_hex, key_hex)
-
-dilithium_keys = generate_dilithium_key_pair()
-signature_hex = dilithium_sign_hex("6d656e736167656d20617373696e616461", dilithium_keys.private_key_pem)
-is_valid = dilithium_verify_hex(
-    "6d656e736167656d20617373696e616461",
-    signature_hex,
-    dilithium_keys.public_key_pem,
-)
-
-kyber_keys = generate_kyber_key_pair()
-kem_result = kyber_encapsulate_hex(kyber_keys.public_key_pem)
-shared_secret_hex = kyber_decapsulate_hex(
-    kem_result.ciphertext_hex,
-    kyber_keys.private_key_pem,
-)
+```powershell
+.\.venv\Scripts\python.exe scripts\run_poc.py 10 --no-open
 ```
 
-## Banco local
+Com Debug Console:
 
-O projeto agora possui persistencia local em SQLite usando `SQLAlchemy`, com os modelos compartilhados entre banco e aplicacao:
-
-```python
-from sqlalchemy import select
-
-from storage import get_database
-from storage.models import LocalPhysicalNodeIdentity
-
-database = get_database()
-database.create_schema()
-
-with database.session_scope() as session:
-    session.add(
-        LocalPhysicalNodeIdentity(
-            id="node-1",
-            public_key="public-key",
-            private_key_encrypted="private-key",
-            key_algorithm="ml-dsa-65",
-            status="active",
-        )
-    )
-
-with database.session_scope() as session:
-    rows = session.scalars(select(LocalPhysicalNodeIdentity)).all()
+```powershell
+.\.venv\Scripts\python.exe scripts\run_poc_debug.py 10
 ```
 
-- arquivo central: `storage/db.py`
-- modelos ORM: `storage/models/`
-- banco padrao: `data/local/anonnetcore.db`
+## Observacao para o TCC
 
-## Observacoes
-
-- AES retorna `payload_hex` no formato `IV + ciphertext`.
-- A API publica de cifra e assinatura usa `str` HEX para dados de entrada e saida.
-- A decifragem AES recebe `payload_hex` em HEX e retorna o plaintext em HEX.
-- Assinaturas e resultados do KEM tambem sao retornados em HEX.
-- O projeto depende de `OpenSSL 3.6+` no sistema para `ML-DSA` e `ML-KEM`.
-- O acesso ao banco usa `SQLAlchemy`.
+Este projeto e um MVP arquitetural. Ele prova o funcionamento do desenho de
+rede, mas ainda nao e uma implementacao de producao. Aspectos como protecao
+contra abuso, escalabilidade real em Internet publica, hardening criptografico,
+controle de recursos e auditoria formal ainda sao trabalhos futuros.
