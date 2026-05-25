@@ -11,11 +11,20 @@ __pycache__/
 htmlcov/
 
 .tmp_local_node_test/
+.tmp_content_transfer_test/
 .crypto_tmp/
+.chrome-poc-*/
+
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.dmp
 
 data/local/
 
 cluster/docker-compose.generated.yml
+cluster/logs/
 cluster/state/
 
 .DS_Store
