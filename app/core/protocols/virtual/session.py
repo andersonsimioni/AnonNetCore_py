@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-from uuid import uuid4
-
 from crypto import (
     dilithium_sign_hex,
     dilithium_verify_hex,
@@ -15,6 +12,13 @@ from crypto import (
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import (
+    as_payload_dict as _as_payload_dict,
+    build_response_header,
+    canonical_payload_hex as _canonical_payload_hex,
+    read_positive_keepalive_interval as _read_keepalive_interval,
+    read_virtual_session_id as _read_virtual_session_id,
+)
 
 
 class VirtualSessionProtocolHandler(ProtocolMessageHandler):
@@ -448,21 +452,6 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         except Exception:
             return False
 
-    def _build_invalid_result(
-        self,
-        envelope: ProtocolEnvelope,
-        reason: str,
-    ) -> PacketProcessingResult:
-        return PacketProcessingResult(
-            protocol_name=envelope.protocol_name,
-            handled=False,
-            message_type=envelope.message_type,
-            metadata={
-                "protocol_family": self.protocol_family,
-                "reason": reason,
-            },
-        )
-
     def _build_not_implemented_result(
         self,
         envelope: ProtocolEnvelope,
@@ -510,38 +499,5 @@ def _build_response_header(
     request_header: dict[str, object],
     message_type: str,
 ) -> dict[str, object]:
-    return {
-        "version": request_header.get("version", 1),
-        "message_type": message_type,
-        "message_id": str(uuid4()),
-        "message_sequence": request_header.get("message_sequence"),
-        "physical_session_id": request_header.get("physical_session_id"),
-        "virtual_session_id": request_header.get("virtual_session_id"),
-        "response_to_message_id": request_header.get("message_id"),
-    }
+    return build_response_header(request_header, message_type)
 
-
-def _canonical_payload_hex(payload: dict[str, object]) -> str:
-    raw_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return raw_bytes.hex()
-
-
-def _as_payload_dict(envelope: ProtocolEnvelope) -> dict[str, object]:
-    return envelope.payload if isinstance(envelope.payload, dict) else {}
-
-
-def _read_virtual_session_id(envelope: ProtocolEnvelope) -> str | None:
-    session_id = envelope.header.get("virtual_session_id")
-    if isinstance(session_id, str) and session_id:
-        return session_id
-    return None
-
-
-def _read_keepalive_interval(
-    payload: dict[str, object],
-    default_value: int,
-) -> int:
-    value = payload.get("keepalive_interval_seconds")
-    if isinstance(value, int) and value > 0:
-        return value
-    return default_value

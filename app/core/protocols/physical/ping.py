@@ -6,6 +6,8 @@ from uuid import uuid4
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import as_payload_dict as _as_payload_dict
+from ..helpers import read_string_or_none as _read_required_string
 
 
 class PingProtocolHandler(ProtocolMessageHandler):
@@ -162,28 +164,3 @@ class PingProtocolHandler(ProtocolMessageHandler):
             },
         )
 
-    def _build_invalid_result(
-        self,
-        envelope: ProtocolEnvelope,
-        reason: str,
-    ) -> PacketProcessingResult:
-        return PacketProcessingResult(
-            protocol_name=envelope.protocol_name,
-            handled=False,
-            message_type=envelope.message_type,
-            metadata={
-                "protocol_family": self.protocol_family,
-                "reason": reason,
-            },
-        )
-
-
-def _as_payload_dict(envelope: ProtocolEnvelope) -> dict[str, object]:
-    return envelope.payload if isinstance(envelope.payload, dict) else {}
-
-
-def _read_required_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if isinstance(value, str) and value:
-        return value
-    return None

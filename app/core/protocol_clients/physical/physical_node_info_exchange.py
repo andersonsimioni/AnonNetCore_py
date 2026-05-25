@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import json
-
+from sessions import build_remote_endpoint_from_session, is_observed_only_physical_endpoint
 from transport import OutboundMessage
 
+from ...components import EngineBoundComponent
 from ...protocols import PhysicalNodeInfoExchangeProtocolHandler
 
 
-class PhysicalNodeInfoExchangeClient:
+class PhysicalNodeInfoExchangeClient(EngineBoundComponent):
     """Dispara trocas de informacao sobre physical nodes conhecidos."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
 
     async def request_known_physical_nodes(
         self,
@@ -24,7 +21,7 @@ class PhysicalNodeInfoExchangeClient:
             raise ValueError("A physical session informada nao existe em memoria.")
         if session.session_state != "active":
             raise ValueError("A physical session informada ainda nao esta ativa.")
-        if _is_observed_only_physical_endpoint(session):
+        if is_observed_only_physical_endpoint(session):
             raise ValueError("A physical session usa endpoint observado e nao deve iniciar exchange.")
 
         endpoint = self._build_remote_endpoint(session)
@@ -58,25 +55,4 @@ class PhysicalNodeInfoExchangeClient:
 
     @staticmethod
     def _build_remote_endpoint(session):
-        from transport import TransportEndpoint
-
-        if not session.transport or not session.remote_host or session.remote_port is None:
-            raise ValueError("A physical session nao possui endpoint remoto associado.")
-
-        return TransportEndpoint(
-            transport_name=session.transport,
-            host=session.remote_host,
-            port=session.remote_port,
-        )
-
-
-def _is_observed_only_physical_endpoint(session) -> bool:
-    if not session.metadata_json:
-        return False
-
-    try:
-        metadata = json.loads(session.metadata_json)
-    except json.JSONDecodeError:
-        return False
-
-    return isinstance(metadata, dict) and metadata.get("physical_endpoint_source") == "observed"
+        return build_remote_endpoint_from_session(session)

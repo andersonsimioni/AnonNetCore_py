@@ -3,12 +3,11 @@ from __future__ import annotations
 from time import monotonic
 from uuid import uuid4
 
+from ...components import EngineBoundComponent
 
-class RouteBuildClient:
+
+class RouteBuildClient(EngineBoundComponent):
     """Orquestra a construcao e a validacao inicial de rotas."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
 
     async def start_random_walk_ttl_route(
         self,

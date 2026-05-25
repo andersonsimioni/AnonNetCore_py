@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from datetime import datetime, timezone
 from hashlib import sha512
 
+from common import canonical_payload_hex as _canonical_payload_hex
 from crypto import dilithium_verify_hex
 from .records import (
     DdtHolderRecord,
@@ -473,8 +473,3 @@ def _is_fragment_newer(parent_timestamp: str, fragment_timestamp: str) -> bool:
         return True
 
     return fragment_datetime > parent_datetime
-
-
-def _canonical_payload_hex(payload: dict[str, object]) -> str:
-    raw_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return raw_bytes.hex()

@@ -15,6 +15,21 @@ class ProtocolMessageHandler(ABC):
     def can_handle(self, message_type: str | None) -> bool:
         return message_type is not None and message_type in self.supported_message_types
 
+    def _build_invalid_result(
+        self,
+        envelope: ProtocolEnvelope,
+        reason: str,
+    ) -> PacketProcessingResult:
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=False,
+            message_type=envelope.message_type,
+            metadata={
+                "protocol_family": self.protocol_family,
+                "reason": reason,
+            },
+        )
+
     @abstractmethod
     async def handle(
         self,

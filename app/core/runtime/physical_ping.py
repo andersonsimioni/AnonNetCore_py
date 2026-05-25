@@ -1,44 +1,20 @@
 from __future__ import annotations
 
-import asyncio
-
 from identity import RemotePhysicalNodePingCandidate
 
+from .base import PeriodicRuntime
 
-class PhysicalPingRuntime:
+
+class PhysicalPingRuntime(PeriodicRuntime):
     """Executa PING periodico em physical nodes ativos e persiste estatisticas de RTT."""
 
     def __init__(self, engine) -> None:
-        self.engine = engine
-        self._task: asyncio.Task[None] | None = None
-        self._stop_event = asyncio.Event()
-        self._loop_interval_seconds = self.engine.services.config.physical_ping_runtime_interval_seconds
+        super().__init__(
+            engine,
+            loop_interval_seconds=engine.services.config.physical_ping_runtime_interval_seconds,
+            task_name="physical-ping-runtime",
+        )
         self._candidate_limit = self.engine.services.config.physical_ping_runtime_candidate_limit
-
-    async def start(self) -> None:
-        if self._task is not None and not self._task.done():
-            return
-
-        self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(self._run_loop(), name="physical-ping-runtime")
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-
-        self._stop_event.set()
-        try:
-            await self._task
-        finally:
-            self._task = None
-
-    async def _run_loop(self) -> None:
-        while not self._stop_event.is_set():
-            await self._run_once()
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._loop_interval_seconds)
-            except TimeoutError:
-                continue
 
     async def _run_once(self) -> None:
         candidate = self._select_candidate()

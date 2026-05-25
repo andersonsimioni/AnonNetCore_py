@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from common import canonical_payload_hex
 from crypto import sha512_hex
 from crypto import dilithium_sign_hex, dilithium_verify_hex
 from core.protocols.virtual.content import VirtualContentProtocolHandler
@@ -364,7 +365,7 @@ class CoreApiService:
         if virtual_node is None:
             raise CoreApiError("local_virtual_node_not_found", "Virtual node local nao encontrado.")
 
-        payload_hex = self._canonical_payload_hex(payload)
+        payload_hex = canonical_payload_hex(payload)
         return {
             "local_virtual_node_id": local_virtual_node_id,
             "signature_hex": dilithium_sign_hex(payload_hex, virtual_node.private_key_encrypted),
@@ -380,7 +381,7 @@ class CoreApiService:
         if not public_key or not signature_hex:
             raise CoreApiError("signature_input_required", "public_key e signature_hex sao obrigatorios.")
 
-        payload_hex = self._canonical_payload_hex(payload)
+        payload_hex = canonical_payload_hex(payload)
         try:
             is_valid = dilithium_verify_hex(payload_hex, signature_hex, public_key)
         except Exception:
@@ -806,14 +807,6 @@ class CoreApiService:
                 }
             )
         return data
-
-    @staticmethod
-    def _canonical_payload_hex(payload: dict[str, object]) -> str:
-        return json.dumps(
-            payload,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8").hex()
 
     @staticmethod
     def _serialize_session(session) -> dict[str, object]:

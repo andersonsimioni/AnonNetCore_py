@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -17,46 +16,22 @@ from dht import (
 from sqlalchemy import func
 from storage.models import DhtRecord
 
+from .base import PeriodicRuntime
 
-class DhtMaintenanceRuntime:
+
+class DhtMaintenanceRuntime(PeriodicRuntime):
     """Mantem registros DHT locais validados e presentes nos K responsaveis."""
 
     def __init__(self, engine) -> None:
-        self.engine = engine
-        self._task: asyncio.Task[None] | None = None
-        self._stop_event = asyncio.Event()
-        self._loop_interval_seconds = (
-            self.engine.services.config.dht_maintenance_runtime_interval_seconds
+        super().__init__(
+            engine,
+            loop_interval_seconds=engine.services.config.dht_maintenance_runtime_interval_seconds,
+            task_name="dht-maintenance-runtime",
         )
         self._publish_backoff_seconds = (
             self.engine.services.config.dht_maintenance_publish_backoff_seconds
         )
         self._last_publish_by_record_key: dict[str, float] = {}
-
-    async def start(self) -> None:
-        if self._task is not None and not self._task.done():
-            return
-
-        self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(self._run_loop(), name="dht-maintenance-runtime")
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-
-        self._stop_event.set()
-        try:
-            await self._task
-        finally:
-            self._task = None
-
-    async def _run_loop(self) -> None:
-        while not self._stop_event.is_set():
-            await self._run_once()
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._loop_interval_seconds)
-            except TimeoutError:
-                continue
 
     async def _run_once(self) -> None:
         await self._validate_local_records()

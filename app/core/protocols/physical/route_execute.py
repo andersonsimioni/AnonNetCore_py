@@ -8,6 +8,9 @@ from crypto import aes_decrypt_hex, aes_encrypt_hex
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import optional_string as _read_optional_string
+from ..helpers import require_bool as _read_required_bool
+from ..helpers import require_string as _read_required_string
 
 
 class RouteExecuteProtocolHandler(ProtocolMessageHandler):
@@ -553,29 +556,6 @@ class ResolvedRouteExecutePath:
 class LocalRouteReplyContext:
     target_remote_physical_node_id: str
     reply_path_id: str
-
-
-def _read_required_string(payload: dict[str, object], field_name: str) -> str:
-    value = payload.get(field_name)
-    if isinstance(value, str) and value:
-        return value
-    raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser uma string nao vazia.")
-
-
-def _read_optional_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if value is None:
-        return None
-    if isinstance(value, str) and value:
-        return value
-    raise ValueError(f"O campo '{field_name}' precisa ser uma string nao vazia quando informado.")
-
-
-def _read_required_bool(payload: dict[str, object], field_name: str) -> bool:
-    value = payload.get(field_name)
-    if isinstance(value, bool):
-        return value
-    raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser um booleano.")
 
 
 def _read_route_direction(payload: dict[str, object]) -> str:

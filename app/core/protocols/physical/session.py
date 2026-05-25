@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
 
 from crypto import (
     dilithium_sign_hex,
@@ -16,6 +15,14 @@ from sessions import SessionStateUpdateInput
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import (
+    as_payload_dict as _as_payload_dict,
+    build_response_header,
+    canonical_payload_hex as _canonical_payload_hex,
+    compact_json_bytes,
+    read_physical_session_id,
+    read_positive_keepalive_interval as _read_keepalive_interval,
+)
 
 
 class SessionProtocolHandler(ProtocolMessageHandler):
@@ -779,21 +786,6 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         return fallback_transport, fallback_host, fallback_port, "observed"
 
-    def _build_invalid_result(
-        self,
-        envelope: ProtocolEnvelope,
-        reason: str,
-    ) -> PacketProcessingResult:
-        return PacketProcessingResult(
-            protocol_name=envelope.protocol_name,
-            handled=False,
-            message_type=envelope.message_type,
-            metadata={
-                "protocol_family": self.protocol_family,
-                "reason": reason,
-            },
-        )
-
     def _build_not_implemented_result(
         self,
         envelope: ProtocolEnvelope,
@@ -818,49 +810,22 @@ def _build_packet_bytes(
     header: dict[str, object],
     payload: dict[str, object],
 ) -> bytes:
-    packet = {"header": header, "payload": payload}
-    return json.dumps(packet, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return compact_json_bytes({"header": header, "payload": payload})
 
 
 def _build_response_header(
     request_header: dict[str, object],
     message_type: str,
 ) -> dict[str, object]:
-    return {
-        "version": request_header.get("version", 1),
-        "message_type": message_type,
-        "message_id": str(uuid4()),
-        "message_sequence": request_header.get("message_sequence"),
-        "physical_session_id": request_header.get("physical_session_id"),
-        "virtual_session_id": request_header.get("virtual_session_id"),
-    }
-
-
-def _canonical_payload_hex(payload: dict[str, object]) -> str:
-    raw_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return raw_bytes.hex()
-
-
-def _as_payload_dict(envelope: ProtocolEnvelope) -> dict[str, object]:
-    return envelope.payload if isinstance(envelope.payload, dict) else {}
+    return build_response_header(
+        request_header,
+        message_type,
+        include_response_to=False,
+    )
 
 
 def _read_session_id(envelope: ProtocolEnvelope) -> str | None:
-    session_id = envelope.header.get("physical_session_id")
-    if isinstance(session_id, str) and session_id:
-        return session_id
-
-    return None
-
-
-def _read_keepalive_interval(
-    payload: dict[str, object],
-    default_value: int,
-) -> int:
-    value = payload.get("keepalive_interval_seconds")
-    if isinstance(value, int) and value > 0:
-        return value
-    return default_value
+    return read_physical_session_id(envelope)
 
 
 def _build_endpoint_metadata_update(endpoint_source: str) -> SessionStateUpdateInput:

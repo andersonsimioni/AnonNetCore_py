@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from time import monotonic
 
+from common import is_expired_iso_datetime
 from dht.records import DrtRecordPayload, parse_record
 from crypto import sha512_hex
 from identity import RemotePhysicalNodeRouteCandidate
+
+from .base import PeriodicRuntime
 
 
 @dataclass(slots=True, frozen=True)
@@ -16,15 +17,14 @@ class RouteBuildPair:
     final_node: RemotePhysicalNodeRouteCandidate
 
 
-class VirtualRouteMaintenanceRuntime:
+class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
     """Mantem um minimo de rotas fisicas publicadas para cada virtual node local ativo."""
 
     def __init__(self, engine) -> None:
-        self.engine = engine
-        self._task: asyncio.Task[None] | None = None
-        self._stop_event = asyncio.Event()
-        self._loop_interval_seconds = (
-            self.engine.services.config.virtual_route_maintenance_runtime_interval_seconds
+        super().__init__(
+            engine,
+            loop_interval_seconds=engine.services.config.virtual_route_maintenance_runtime_interval_seconds,
+            task_name="virtual-route-maintenance-runtime",
         )
         self._route_min_online_routes = max(
             1,
@@ -42,34 +42,6 @@ class VirtualRouteMaintenanceRuntime:
         )
         self._last_drt_check_by_virtual_node_id: dict[str, float] = {}
         self._pending_seen_at_by_initial_path_id: dict[str, float] = {}
-
-    async def start(self) -> None:
-        if self._task is not None and not self._task.done():
-            return
-
-        self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(
-            self._run_loop(),
-            name="virtual-route-maintenance-runtime",
-        )
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-
-        self._stop_event.set()
-        try:
-            await self._task
-        finally:
-            self._task = None
-
-    async def _run_loop(self) -> None:
-        while not self._stop_event.is_set():
-            await self._run_once()
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._loop_interval_seconds)
-            except TimeoutError:
-                continue
 
     async def _run_once(self) -> None:
         local_virtual_nodes = self.engine.services.identity_service.list_local_virtual_nodes(
@@ -314,7 +286,7 @@ class VirtualRouteMaintenanceRuntime:
         return [
             entry.final_path_id
             for entry in record.route_entries
-            if entry.final_path_id and not self._is_expired(entry.expires_at)
+            if entry.final_path_id and not is_expired_iso_datetime(entry.expires_at)
         ]
 
     def _invalidate_active_route(
@@ -348,16 +320,6 @@ class VirtualRouteMaintenanceRuntime:
             reason=reason,
             invalidated=invalidated is not None,
         )
-
-    @staticmethod
-    def _is_expired(expires_at: str) -> bool:
-        try:
-            parsed = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        except ValueError:
-            return True
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed <= datetime.now(timezone.utc)
 
     def _expire_stale_pending_route_builds(self, local_virtual_node_id: str) -> int:
         pending_resolutions = (

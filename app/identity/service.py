@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 
+from common import utc_now
 from crypto import generate_dilithium_key_pair, sha512_hex
 from dht import DpntRecordPayload, serialize_record
 from storage import DatabaseManager, get_database
@@ -27,10 +28,6 @@ from .models import (
     RemotePhysicalNodeValidationCandidate,
     VirtualNodeIdentityCreateInput,
 )
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _merge_notes_json(

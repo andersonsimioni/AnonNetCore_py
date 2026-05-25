@@ -3,14 +3,12 @@ from __future__ import annotations
 from bootstrap import BootstrapEndpoint
 from transport import OutboundMessage, TransportEndpoint
 
+from ...components import EngineBoundComponent
 from ...protocols import PhysicalNodeInfoProtocolHandler
 
 
-class PhysicalNodeInfoClient:
+class PhysicalNodeInfoClient(EngineBoundComponent):
     """Inicia fluxos ativos do protocolo de physical node info."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
 
     async def send_request_to_endpoint(
         self,

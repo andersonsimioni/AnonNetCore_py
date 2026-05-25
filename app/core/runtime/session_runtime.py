@@ -1,45 +1,20 @@
 from __future__ import annotations
 
-import asyncio
-import json
 from datetime import timedelta
 
+from sessions import is_observed_only_physical_endpoint
+from .base import PeriodicRuntime
 
-class SessionRuntime:
+
+class SessionRuntime(PeriodicRuntime):
     """Executa manutencao periodica para sessoes fisicas e virtuais."""
 
     def __init__(self, engine) -> None:
-        self.engine = engine
-        self._task: asyncio.Task[None] | None = None
-        self._stop_event = asyncio.Event()
-        self._loop_interval_seconds = (
-            self.engine.services.config.physical_session_runtime_interval_seconds
+        super().__init__(
+            engine,
+            loop_interval_seconds=engine.services.config.physical_session_runtime_interval_seconds,
+            task_name="session-runtime",
         )
-
-    async def start(self) -> None:
-        if self._task is not None and not self._task.done():
-            return
-
-        self._stop_event = asyncio.Event()
-        self._task = asyncio.create_task(self._run_loop(), name="session-runtime")
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-
-        self._stop_event.set()
-        try:
-            await self._task
-        finally:
-            self._task = None
-
-    async def _run_loop(self) -> None:
-        while not self._stop_event.is_set():
-            await self._run_once()
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._loop_interval_seconds)
-            except TimeoutError:
-                continue
 
     async def _run_once(self) -> None:
         for session in self.engine.services.session_manager.list_active_sessions():
@@ -139,7 +114,7 @@ class SessionRuntime:
     @staticmethod
     def _can_send_session_message(session) -> bool:
         if session.session_scope == "physical":
-            if _is_observed_only_physical_endpoint(session):
+            if is_observed_only_physical_endpoint(session):
                 return False
             return bool(session.transport and session.remote_host and session.remote_port is not None)
 
@@ -153,18 +128,3 @@ def self_now():
     from sessions.models import utc_now
 
     return utc_now()
-
-
-def _is_observed_only_physical_endpoint(session) -> bool:
-    if not session.metadata_json:
-        return False
-
-    try:
-        metadata = json.loads(session.metadata_json)
-    except json.JSONDecodeError:
-        return False
-
-    if not isinstance(metadata, dict):
-        return False
-
-    return metadata.get("physical_endpoint_source") == "observed"

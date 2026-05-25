@@ -5,6 +5,14 @@ from uuid import uuid4
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import (
+    as_payload_dict as _as_payload_dict,
+    optional_string as _read_optional_string,
+    require_non_negative_int as _read_non_negative_int,
+    require_positive_int as _read_positive_int,
+    require_string as _read_required_string,
+    read_virtual_session_id as _read_virtual_session_id,
+)
 
 
 class VirtualContentProtocolHandler(ProtocolMessageHandler):
@@ -819,43 +827,3 @@ def _parse_range_response_payload(payload: dict[str, object]) -> ContentRangePay
         data_base64=data_base64,
     )
 
-
-def _as_payload_dict(envelope: ProtocolEnvelope) -> dict[str, object]:
-    return envelope.payload if isinstance(envelope.payload, dict) else {}
-
-
-def _read_virtual_session_id(envelope: ProtocolEnvelope) -> str | None:
-    session_id = envelope.header.get("virtual_session_id")
-    if isinstance(session_id, str) and session_id:
-        return session_id
-    return None
-
-
-def _read_optional_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if value is None:
-        return None
-    if isinstance(value, str) and value:
-        return value
-    raise ValueError(f"{field_name} precisa ser uma string nao vazia quando informado.")
-
-
-def _read_required_string(payload: dict[str, object], field_name: str) -> str:
-    value = payload.get(field_name)
-    if isinstance(value, str) and value:
-        return value
-    raise ValueError(f"{field_name} e obrigatorio e precisa ser uma string nao vazia.")
-
-
-def _read_non_negative_int(payload: dict[str, object], field_name: str) -> int:
-    value = payload.get(field_name)
-    if isinstance(value, int) and value >= 0:
-        return value
-    raise ValueError(f"{field_name} precisa ser um inteiro maior ou igual a zero.")
-
-
-def _read_positive_int(payload: dict[str, object], field_name: str) -> int:
-    value = payload.get(field_name)
-    if isinstance(value, int) and value > 0:
-        return value
-    raise ValueError(f"{field_name} precisa ser um inteiro maior que zero.")

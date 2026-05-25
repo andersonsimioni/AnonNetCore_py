@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+from common import utc_now
 
 
 @dataclass(slots=True)

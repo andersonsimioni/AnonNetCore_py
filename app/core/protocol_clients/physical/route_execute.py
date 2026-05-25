@@ -4,12 +4,11 @@ import json
 
 from crypto import aes_encrypt_hex
 
+from ...components import EngineBoundComponent
 
-class RouteExecuteClient:
+
+class RouteExecuteClient(EngineBoundComponent):
     """Envia payloads por uma rota ja construida."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
 
     async def send_from_initiator(
         self,

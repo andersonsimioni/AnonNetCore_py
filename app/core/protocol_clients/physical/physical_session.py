@@ -3,11 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 
-from crypto import dilithium_verify_hex, sha512_hex
+from crypto import sha512_hex
 from dht import DpntRecordPayload, parse_record
+from sessions import build_remote_endpoint_from_session, is_observed_only_physical_session
 from transport import OutboundMessage, TransportEndpoint
 
 from ...protocols import SessionProtocolHandler
+from ..helpers import (
+    close_failed_handshake_session,
+    verify_dilithium_payload_signature,
+)
 
 
 class PhysicalSessionClient:
@@ -30,7 +35,7 @@ class PhysicalSessionClient:
         existing_session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(
             remote_physical_node_id
         )
-        if existing_session is not None and not self._is_observed_only_physical_session(existing_session):
+        if existing_session is not None and not is_observed_only_physical_session(existing_session):
             self.engine.services.log_service.debug(
                 "physical_session_client",
                 "reusing active physical session",
@@ -105,7 +110,7 @@ class PhysicalSessionClient:
                 remote_physical_node_id=remote_physical_node_id,
                 endpoint=endpoint,
             )
-            self._close_failed_session(session_id)
+            close_failed_handshake_session(self.engine, session_id)
 
         raise RuntimeError("Nao foi possivel estabelecer physical session com nenhum endpoint conhecido.")
 
@@ -246,7 +251,7 @@ class PhysicalSessionClient:
             "feature_flags": record.feature_flags,
             "status": record.status,
         }
-        return self._verify_signature(payload, record.signature, record.pk_physical_node)
+        return verify_dilithium_payload_signature(payload, record.signature, record.pk_physical_node)
 
     @staticmethod
     def _normalize_dpnt_endpoints(endpoints: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -272,21 +277,6 @@ class PhysicalSessionClient:
                 }
             )
         return valid_endpoints
-
-    @staticmethod
-    def _verify_signature(
-        payload: dict[str, object],
-        signature_hex: str,
-        public_key_pem: str,
-    ) -> bool:
-        try:
-            return dilithium_verify_hex(
-                _canonical_payload_hex(payload),
-                signature_hex,
-                public_key_pem,
-            )
-        except Exception:
-            return False
 
     async def send_keepalive(
         self,
@@ -404,7 +394,7 @@ class PhysicalSessionClient:
                 remote_physical_node_id=remote_physical_node_id,
                 endpoint=endpoint,
             )
-            self._close_failed_session(session.session_id)
+            close_failed_handshake_session(self.engine, session.session_id)
             return None
 
         self.engine.services.log_service.info(
@@ -450,27 +440,6 @@ class PhysicalSessionClient:
         )
         return False
 
-    def _close_failed_session(self, session_id: str) -> None:
-        session = self.engine.services.session_manager.get_session_by_session_id(session_id)
-        if session is None:
-            return
-
-        if session.session_state != "active":
-            self.engine.services.session_manager.close_session(
-                session_id,
-                close_reason="handshake_failed",
-            )
-
-    @staticmethod
-    def _is_observed_only_physical_session(session) -> bool:
-        if session.session_scope != "physical" or not session.metadata_json:
-            return False
-        try:
-            metadata = json.loads(session.metadata_json)
-        except json.JSONDecodeError:
-            return False
-        return isinstance(metadata, dict) and metadata.get("physical_endpoint_source") == "observed"
-
     def _register_endpoint_failure(
         self,
         *,
@@ -507,19 +476,4 @@ class PhysicalSessionClient:
 
     @staticmethod
     def _build_remote_endpoint(session) -> TransportEndpoint:
-        if not session.transport or not session.remote_host or session.remote_port is None:
-            raise ValueError("A physical session nao possui endpoint remoto associado.")
-
-        return TransportEndpoint(
-            transport_name=session.transport,
-            host=session.remote_host,
-            port=session.remote_port,
-        )
-
-
-def _canonical_payload_hex(payload: dict[str, object]) -> str:
-    return json.dumps(
-        payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8").hex()
+        return build_remote_endpoint_from_session(session)

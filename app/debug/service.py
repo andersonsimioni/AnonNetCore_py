@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
+from core.components import EngineBoundComponent
 from storage.models import (
     ContentAdvertisement,
     ContentObject,
@@ -19,11 +20,8 @@ from storage.models import (
 )
 
 
-class DebugSnapshotService:
+class DebugSnapshotService(EngineBoundComponent):
     """Monta uma visao de leitura sobre o estado local do core."""
-
-    def __init__(self, engine) -> None:
-        self.engine = engine
 
     def build_state(self) -> dict[str, object]:
         local_node = self.engine.services.identity_service.get_local_physical_node_result()

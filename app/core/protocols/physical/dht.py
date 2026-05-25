@@ -12,6 +12,9 @@ from storage.models import DhtRecord
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import as_payload_dict as _as_payload_dict
+from ..helpers import read_string_or_none as _read_required_string
+from ..helpers import read_string_or_none as _read_optional_string
 
 
 class DhtProtocolHandler(ProtocolMessageHandler):
@@ -836,21 +839,6 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 .first()
             )
 
-    def _build_invalid_result(
-        self,
-        envelope: ProtocolEnvelope,
-        reason: str,
-    ) -> PacketProcessingResult:
-        return PacketProcessingResult(
-            protocol_name=envelope.protocol_name,
-            handled=False,
-            message_type=envelope.message_type,
-            metadata={
-                "protocol_family": self.protocol_family,
-                "reason": reason,
-            },
-        )
-
     def _build_not_implemented_result(
         self,
         envelope: ProtocolEnvelope,
@@ -868,24 +856,6 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 "next_step": "implement_dht_query_and_result_flow",
             },
         )
-
-
-def _as_payload_dict(envelope: ProtocolEnvelope) -> dict[str, object]:
-    return envelope.payload if isinstance(envelope.payload, dict) else {}
-
-
-def _read_required_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if isinstance(value, str) and value:
-        return value
-    return None
-
-
-def _read_optional_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if isinstance(value, str) and value:
-        return value
-    return None
 
 
 def _read_optional_datetime(payload: dict[str, object], field_name: str) -> datetime | None:

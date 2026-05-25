@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from common import utc_now
 
 try:
     from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
@@ -9,10 +11,6 @@ except ModuleNotFoundError as error:
     raise ModuleNotFoundError(
         "SQLAlchemy nao esta instalado. Instale a dependencia para usar o ORM local."
     ) from error
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):

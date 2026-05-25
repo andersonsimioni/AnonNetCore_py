@@ -1380,7 +1380,7 @@ class RandomWalkTtlRouteCreateOk:
 
 
 @dataclass(slots=True, frozen=True)
-class RandomWalkTtlRouteCreatePing:
+class _RandomWalkTtlPingPongPayloadMixin:
     path_id: str
     ping_id: str
 
@@ -1393,16 +1393,13 @@ class RandomWalkTtlRouteCreatePing:
 
 
 @dataclass(slots=True, frozen=True)
-class RandomWalkTtlRouteCreatePong:
-    path_id: str
-    ping_id: str
+class RandomWalkTtlRouteCreatePing(_RandomWalkTtlPingPongPayloadMixin):
+    pass
 
-    def to_payload(self, *, strategy_name: str, path_id: str) -> dict[str, object]:
-        return {
-            "route_strategy": strategy_name,
-            "path_id": path_id,
-            "ping_id": self.ping_id,
-        }
+
+@dataclass(slots=True, frozen=True)
+class RandomWalkTtlRouteCreatePong(_RandomWalkTtlPingPongPayloadMixin):
+    pass
 
 
 @dataclass(slots=True, frozen=True)

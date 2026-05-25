@@ -1,4 +1,10 @@
 from .manager import SessionManager
+from .helpers import (
+    build_remote_endpoint_from_session,
+    is_observed_only_physical_endpoint,
+    is_observed_only_physical_session,
+    load_session_metadata,
+)
 from .messages import (
     VirtualSessionMessage,
     VirtualSessionMessageHandler,
@@ -11,6 +17,10 @@ __all__ = [
     "SessionCreateInput",
     "SessionManager",
     "SessionStateUpdateInput",
+    "build_remote_endpoint_from_session",
+    "is_observed_only_physical_endpoint",
+    "is_observed_only_physical_session",
+    "load_session_metadata",
     "VirtualSessionMessage",
     "VirtualSessionMessageHandler",
     "VirtualSessionMessageReply",

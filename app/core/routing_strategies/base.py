@@ -3,8 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from ..models import PacketProcessingResult
+
 if TYPE_CHECKING:
-    from ..models import PacketContext, PacketProcessingResult, ProtocolEnvelope
+    from ..models import PacketContext, ProtocolEnvelope
     from ..services import EngineServices
 
 
@@ -13,12 +15,27 @@ class RouteStrategy(ABC):
 
     strategy_name: str
 
-    @abstractmethod
     def build_initial_route_create(
         self,
         **route_fields: object,
     ) -> dict[str, object]:
         """Monta o payload inicial de ROUTE_CREATE."""
+        return {
+            "route_strategy": self.strategy_name,
+            **route_fields,
+        }
+
+    def _not_implemented(self, envelope: "ProtocolEnvelope", next_step: str) -> PacketProcessingResult:
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=True,
+            message_type=envelope.message_type,
+            metadata={
+                "protocol_family": "route_build",
+                "route_strategy": self.strategy_name,
+                "next_step": next_step,
+            },
+        )
 
     @abstractmethod
     async def handle_route_create(

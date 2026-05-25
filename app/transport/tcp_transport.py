@@ -3,15 +3,12 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
+from common import utc_now
 from .frame_codec import LengthPrefixedFrameCodec
 from .interfaces import InboundPacketHandler, TransportAdapter
 from .models import OutboundMessage, TransportEndpoint, TransportPacket, TransportState
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclass(slots=True)

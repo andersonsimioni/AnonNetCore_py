@@ -6,8 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from crypto import dilithium_verify_hex, sha512_hex
+from crypto import sha512_hex
 from dht import DpntRecordPayload, DrtRecordPayload, DrtRouteEntryRecord, parse_record
+from ..helpers import (
+    close_failed_handshake_session,
+    is_expired_iso_datetime,
+    verify_dilithium_payload_signature,
+)
 
 
 class VirtualSessionClient:
@@ -122,10 +127,10 @@ class VirtualSessionClient:
             if await self._wait_for_activation(session.session_id):
                 return session.session_id
         except Exception:
-            self._close_failed_session(session.session_id)
+            close_failed_handshake_session(self.engine, session.session_id)
             raise
 
-        self._close_failed_session(session.session_id)
+        close_failed_handshake_session(self.engine, session.session_id)
         raise RuntimeError("Nao foi possivel estabelecer a virtual session pela rota informada.")
 
     async def _start_session_over_entry_point(
@@ -213,7 +218,7 @@ class VirtualSessionClient:
                 error_type=type(error).__name__,
                 error=repr(error),
             )
-            self._close_failed_session(session.session_id)
+            close_failed_handshake_session(self.engine, session.session_id)
             raise
 
         self.engine.services.log_service.warning(
@@ -226,7 +231,7 @@ class VirtualSessionClient:
             entry_point_physical_node_id=entry_point.physical_node_id,
             timeout_seconds=self._handshake_timeout_seconds,
         )
-        self._close_failed_session(session.session_id)
+        close_failed_handshake_session(self.engine, session.session_id)
         raise RuntimeError("Nao foi possivel estabelecer a virtual session via DRT.")
 
     async def send_keepalive(
@@ -402,17 +407,6 @@ class VirtualSessionClient:
             await asyncio.sleep(self._handshake_poll_interval_seconds)
 
         return False
-
-    def _close_failed_session(self, session_id: str) -> None:
-        session = self.engine.services.session_manager.get_session_by_session_id(session_id)
-        if session is None:
-            return
-
-        if session.session_state != "active":
-            self.engine.services.session_manager.close_session(
-                session_id,
-                close_reason="handshake_failed",
-            )
 
     def _require_active_session(self, session_id: str):
         session = self._require_session(session_id)
@@ -599,7 +593,7 @@ class VirtualSessionClient:
         route_entry: DrtRouteEntryRecord,
         virtual_node_public_key: str,
     ) -> bool:
-        if self._is_expired(route_entry.expires_at):
+        if is_expired_iso_datetime(route_entry.expires_at):
             return False
 
         physical_node_id = sha512_hex(route_entry.pk_physical_node.encode("utf-8"))
@@ -621,22 +615,22 @@ class VirtualSessionClient:
 
         return (
             route_entry.virtual_node_signature == route_entry.entry_point_virtual_node_signature
-            and self._verify_signature(
+            and verify_dilithium_payload_signature(
                 virtual_payload,
                 route_entry.virtual_node_signature,
                 virtual_node_public_key,
             )
-            and self._verify_signature(
+            and verify_dilithium_payload_signature(
                 physical_payload,
                 route_entry.physical_node_signature,
                 route_entry.pk_physical_node,
             )
-            and self._verify_signature(
+            and verify_dilithium_payload_signature(
                 physical_payload,
                 route_entry.entry_point_physical_node_signature,
                 route_entry.pk_physical_node,
             )
-            and self._verify_signature(
+            and verify_dilithium_payload_signature(
                 rtt_payload,
                 route_entry.rtt_physical_node_signature,
                 route_entry.pk_physical_node,
@@ -661,7 +655,7 @@ class VirtualSessionClient:
             "feature_flags": record.feature_flags,
             "status": record.status,
         }
-        return self._verify_signature(payload, record.signature, record.pk_physical_node)
+        return verify_dilithium_payload_signature(payload, record.signature, record.pk_physical_node)
 
     def _read_session_entry_point_physical_node_id(self, session) -> str | None:
         if not session.metadata_json:
@@ -680,33 +674,6 @@ class VirtualSessionClient:
             return entry_point_physical_node_id
         return None
 
-    @staticmethod
-    def _verify_signature(
-        payload: dict[str, object],
-        signature_hex: str,
-        public_key_pem: str,
-    ) -> bool:
-        try:
-            return dilithium_verify_hex(
-                _canonical_payload_hex(payload),
-                signature_hex,
-                public_key_pem,
-            )
-        except Exception:
-            return False
-
-    @staticmethod
-    def _is_expired(expires_at: str) -> bool:
-        try:
-            parsed = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-        except ValueError:
-            return True
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed <= datetime.now(timezone.utc)
-
-
 @dataclass(slots=True, frozen=True)
 class VirtualRouteEntryPoint:
     physical_node_id: str
@@ -714,14 +681,6 @@ class VirtualRouteEntryPoint:
     final_path_id: str
     rtt: int
     expires_at: str
-
-
-def _canonical_payload_hex(payload: dict[str, object]) -> str:
-    return json.dumps(
-        payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8").hex()
 
 
 def _expires_at_sort_key(expires_at: str) -> float:

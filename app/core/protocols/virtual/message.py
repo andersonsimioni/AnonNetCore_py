@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 from sessions import VirtualSessionMessage
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
 from ..base import ProtocolMessageHandler
+from ..helpers import build_response_header, read_virtual_session_id as _read_virtual_session_id
 
 
 class VirtualMessageProtocolHandler(ProtocolMessageHandler):
@@ -94,39 +93,8 @@ class VirtualMessageProtocolHandler(ProtocolMessageHandler):
             metadata=metadata,
         )
 
-    def _build_invalid_result(
-        self,
-        envelope: ProtocolEnvelope,
-        reason: str,
-    ) -> PacketProcessingResult:
-        return PacketProcessingResult(
-            protocol_name=envelope.protocol_name,
-            handled=False,
-            message_type=envelope.message_type,
-            metadata={
-                "protocol_family": self.protocol_family,
-                "reason": reason,
-            },
-        )
-
-
 def _build_response_header(request_header: dict[str, object]) -> dict[str, object]:
-    return {
-        "version": request_header.get("version", 1),
-        "message_type": "VIRTUAL_SESSION_DATA",
-        "message_id": str(uuid4()),
-        "message_sequence": request_header.get("message_sequence"),
-        "physical_session_id": request_header.get("physical_session_id"),
-        "virtual_session_id": request_header.get("virtual_session_id"),
-        "response_to_message_id": request_header.get("message_id"),
-    }
-
-
-def _read_virtual_session_id(envelope: ProtocolEnvelope) -> str | None:
-    session_id = envelope.header.get("virtual_session_id")
-    if isinstance(session_id, str) and session_id:
-        return session_id
-    return None
+    return build_response_header(request_header, "VIRTUAL_SESSION_DATA")
 
 
 def _read_optional_string(value: object) -> str | None:
