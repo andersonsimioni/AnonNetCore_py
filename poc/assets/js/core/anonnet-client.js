@@ -215,7 +215,7 @@ class AnonNetClient {
     } catch (error) {
       const requestError = new Error(
         error.name === "AbortError"
-          ? `Tempo limite excedido ao chamar ${method} ${path}.`
+          ? `Request timed out while calling ${method} ${path}.`
           : error.message,
       );
       requestError.code = error.name === "AbortError" ? "api_request_timeout" : "api_request_failed";

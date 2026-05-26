@@ -115,6 +115,7 @@ def create_test_core(
     api_websocket_port: int | None = None,
     virtual_route_expected_round_trip_ttl_ms: int = 1000,
     virtual_route_pending_timeout_seconds: float = 90.0,
+    virtual_route_min_online_routes: int = 2,
 ):
     return create_isolated_core(
         data_dir=data_dir,
@@ -124,6 +125,7 @@ def create_test_core(
         api_websocket_port=api_websocket_port,
         virtual_route_expected_round_trip_ttl_ms=virtual_route_expected_round_trip_ttl_ms,
         virtual_route_pending_timeout_seconds=virtual_route_pending_timeout_seconds,
+        virtual_route_min_online_routes=virtual_route_min_online_routes,
     )
 
 
@@ -403,6 +405,51 @@ async def wait_for_drt_online_route_count(
         timeout_seconds=timeout_seconds,
         label="DRT online route count",
     )
+
+
+async def wait_for_stable_drt_online_route_count(
+    engine,
+    *,
+    virtual_node_public_key: str,
+    minimum_routes: int,
+    stable_reads: int = 3,
+    timeout_seconds: float = 180.0,
+) -> dict[str, object]:
+    """Wait until DRT routes are visible in consecutive reads.
+
+    A single DHT read can race with propagation. Consecutive reads make the
+    smoke start the virtual session only after the route inventory is stable.
+    """
+
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    consecutive_reads = 0
+    last_result: dict[str, object] | None = None
+
+    while asyncio.get_running_loop().time() < deadline:
+        remaining_seconds = max(0.1, deadline - asyncio.get_running_loop().time())
+        try:
+            last_result = await wait_for_drt_online_route_count(
+                engine,
+                virtual_node_public_key=virtual_node_public_key,
+                minimum_routes=minimum_routes,
+                timeout_seconds=min(10.0, remaining_seconds),
+            )
+        except TimeoutError:
+            consecutive_reads = 0
+            continue
+
+        consecutive_reads += 1
+        print(
+            "waiting stable DRT online routes: "
+            f"stable_reads={consecutive_reads}/{stable_reads} "
+            f"online={last_result['online_route_count']} required={minimum_routes}"
+        )
+        if consecutive_reads >= stable_reads:
+            return last_result
+
+        await asyncio.sleep(1.0)
+
+    raise TimeoutError("Timed out waiting for stable DRT online route count.")
 
 
 async def wait_for_virtual_session_active(

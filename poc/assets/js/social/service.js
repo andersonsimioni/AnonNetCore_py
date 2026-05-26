@@ -323,7 +323,7 @@ class SocialService {
     });
     if (job.status !== "stored" || !job.result) {
       const error = new Error(
-        `Nao foi possivel publicar o registro ${label} na DHT. Job: ${job.status}.`,
+        `Could not publish the ${label} record to the DHT. Job: ${job.status}.`,
       );
       error.code = `${label.toLowerCase()}_publish_failed`;
       error.publishResult = job.result || {
@@ -358,7 +358,7 @@ class SocialService {
       hasRecord: Boolean(queryResult.record_json),
     });
     if (queryResult.status !== "found" || !queryResult.record_json) {
-      const error = new Error("DPT nao encontrada para este perfil. O background sync vai tentar publicar o estado local.");
+      const error = new Error("DPT not found for this profile. Background sync will try to publish the local state.");
       error.code = "dpt_not_found";
       error.queryResult = queryResult;
       throw error;
@@ -387,7 +387,7 @@ class SocialService {
       signatureHex: record.signature,
     });
     if (!verification.valid) {
-      throw new Error(`Assinatura DPT invalida para VN ${virtualNodeId}.`);
+      throw new Error(`Invalid DPT signature for VN ${virtualNodeId}.`);
     }
     logSocialInfo("dpt_signature_validated", {
       virtualNodeId,
@@ -410,12 +410,12 @@ class SocialService {
     userStateContent = null,
   }) {
     if (!localVirtualNode?.id || !localVirtualNode.public_key) {
-      throw new Error("VN local invalido para verificar sincronizacao do perfil.");
+      throw new Error("Invalid local VN for checking profile sync.");
     }
     if (!profile) {
       return {
         status: "not_ready",
-        message: "Salve o perfil antes de verificar sincronizacao.",
+        message: "Save the profile before checking sync.",
       };
     }
 
@@ -436,7 +436,7 @@ class SocialService {
       });
       return {
         status: "out_of_sync",
-        message: "A DPT deste perfil ainda nao existe na DHT.",
+        message: "This profile's DPT does not exist in the DHT yet.",
       };
     }
     const localContentId = userStateContent?.content_id || null;
@@ -449,7 +449,7 @@ class SocialService {
       });
       return {
         status: "out_of_sync",
-        message: "Nao ha conteudo local publicado para comparar.",
+        message: "There is no published local content to compare.",
         pointer,
       };
     }
@@ -463,7 +463,7 @@ class SocialService {
       });
       return {
         status: "out_of_sync",
-        message: "A DHT aponta para outro estado do perfil.",
+        message: "The DHT points to a different profile state.",
         pointer,
         localContentId,
         remoteContentId: pointer.record.target_ref,
@@ -489,7 +489,7 @@ class SocialService {
       });
       return {
         status: "out_of_sync",
-        message: "O conteudo publicado nao bate com o estado local atual.",
+        message: "The published content does not match the current local state.",
         pointer,
         localContentId,
       };
@@ -502,7 +502,7 @@ class SocialService {
     });
     return {
       status: "synced",
-      message: "Perfil local bate com o ponteiro DPT e o conteudo publicado.",
+      message: "The local profile matches the DPT pointer and published content.",
       pointer,
       localContentId,
     };
@@ -510,7 +510,7 @@ class SocialService {
 
   async loadPublishedLocalUserState({ localVirtualNode }) {
     if (!localVirtualNode?.id || !localVirtualNode.public_key) {
-      throw new Error("VN local invalido para sincronizar perfil pela DHT.");
+      throw new Error("Invalid local VN for syncing profile through the DHT.");
     }
 
     const pointer = await this.resolveProfilePointer({
@@ -653,7 +653,7 @@ class SocialService {
       hasRecord: Boolean(queryResult.record_json),
     });
     if (queryResult.status !== "found" || !queryResult.record_json) {
-      const error = new Error("DDT nao encontrada para o conteudo publicado pelo perfil.");
+      const error = new Error("DDT not found for the content published by the profile.");
       error.code = "ddt_not_found";
       error.queryResult = queryResult;
       throw error;
@@ -714,7 +714,7 @@ class SocialService {
       return holder;
     }
 
-    throw new Error("Nenhum holder remoto valido foi encontrado na DDT para baixar este conteudo.");
+    throw new Error("No valid remote holder was found in the DDT to download this content.");
   }
 
   async downloadPublishedUserStateContent({ sessionId, contentId }) {
@@ -941,7 +941,7 @@ function assertDhtPublishCompleted(result, label) {
   }
 
   const error = new Error(
-    `Nao foi possivel publicar o registro ${label} na DHT. Status: ${status || "desconhecido"}.`,
+    `Could not publish the ${label} record to the DHT. Status: ${status || "unknown"}.`,
   );
   error.code = `${label.toLowerCase()}_publish_failed`;
   error.publishResult = result;
@@ -1075,7 +1075,7 @@ async function assertVirtualNodeIdMatchesPublicKey({ virtualNodeId, publicKey })
     return;
   }
 
-  throw new Error("DPT invalida: a public key do dono nao corresponde ao VN ID solicitado.");
+  throw new Error("Invalid DPT: the owner's public key does not match the requested VN ID.");
 }
 
 async function sha512Hex(value) {
@@ -1090,7 +1090,7 @@ async function sha512Hex(value) {
     return require("crypto").createHash("sha512").update(value, "utf8").digest("hex");
   }
 
-  throw new Error("SHA512 indisponivel neste ambiente.");
+  throw new Error("SHA512 is unavailable in this environment.");
 }
 
 function createUserStateSnapshot({ profile, feedPosts = [] }) {

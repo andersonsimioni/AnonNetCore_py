@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,12 +13,12 @@
         <span>AnonNet</span>
       </div>
       <label class="search-box">
-        <span>Buscar</span>
-        <input type="search" placeholder="amigos, posts, VNs">
+        <span>Search</span>
+        <input type="search" placeholder="friends, posts, VNs">
       </label>
       <div class="topbar-actions">
-        <button id="refresh-status" class="ghost-button" type="button">Status do core</button>
-        <button id="reset-site-cache" class="danger-button" type="button">Limpar site</button>
+        <button id="refresh-status" class="ghost-button" type="button">Core status</button>
+        <button id="reset-site-cache" class="danger-button" type="button">Clear site</button>
         <span id="connection-pill" class="status-pill">offline</span>
       </div>
     </header>
@@ -27,8 +27,8 @@
     <div id="app-loading" class="app-loading" hidden>
       <div class="loading-card">
         <span class="loading-spinner"></span>
-        <strong id="app-loading-title">Processando...</strong>
-        <p id="app-loading-message">Aguarde enquanto o core executa a acao.</p>
+        <strong id="app-loading-title">Processing...</strong>
+        <p id="app-loading-message">Please wait while the core runs the action.</p>
       </div>
     </div>
     <main class="social-shell">
@@ -36,44 +36,44 @@
         <section class="profile-card">
           <div class="cover"></div>
           <div class="avatar" id="profile-avatar">?</div>
-          <h1 id="profile-name">Seu perfil</h1>
-          <p id="profile-bio">Crie um VN social e salve seu perfil para iniciar.</p>
+          <h1 id="profile-name">Your profile</h1>
+          <p id="profile-bio">Create a social VN and save your profile to start.</p>
           <div class="profile-stats">
-            <span><strong id="friend-count">0</strong> amigos</span>
+            <span><strong id="friend-count">0</strong> friends</span>
             <span><strong id="post-count">0</strong> posts</span>
           </div>
         </section>
 
         <section id="local-vn-form" class="card compact-card">
           <div>
-            <h2>Identidade</h2>
+            <h2>Identity</h2>
             <p>1 VN local representa 1 perfil social.</p>
           </div>
           <label class="profile-switcher">
-            Perfil ativo
+            Active profile
             <select id="active-profile-select">
-              <option value="">Nenhum perfil</option>
+              <option value="">No profile</option>
             </select>
           </label>
-          <button id="create-profile-button" type="button">+ Novo perfil</button>
-          <code id="local-vn-output">Nenhum VN criado</code>
+          <button id="create-profile-button" type="button">+ New profile</button>
+          <code id="local-vn-output">No VN created</code>
         </section>
 
         <form id="profile-form" class="card stack-form">
-          <h2>Editar perfil</h2>
+          <h2>Edit profile</h2>
           <label>
-            Nome
+            Name
             <input name="displayName" autocomplete="name" required>
           </label>
           <label>
             Bio
-            <textarea name="bio" rows="3" placeholder="Conte algo curto sobre voce"></textarea>
+            <textarea name="bio" rows="3" placeholder="Write a short bio"></textarea>
           </label>
           <label>
-            Foto
+            Photo
             <input id="profile-photo" name="photo" type="file" accept="image/*">
           </label>
-          <button type="submit">Salvar perfil</button>
+          <button type="submit">Save profile</button>
         </form>
       </aside>
 
@@ -81,27 +81,27 @@
         <section class="hero-feed">
           <div>
             <p class="eyebrow">micro social network</p>
-            <h2>Feed dos seus amigos, sem servidor central.</h2>
+            <h2>Your friends' feed, without a central server.</h2>
           </div>
           <p>
-            Esta PoC usa o core para identidade, DHT, sessoes virtuais,
-            mensagens diretas e download de conteudo.
+            This PoC uses the core for identity, DHT, virtual sessions,
+            direct messages, and content downloads.
           </p>
         </section>
 
         <form id="post-form" class="composer">
           <div class="mini-avatar" id="composer-avatar">?</div>
-          <textarea name="postText" rows="3" placeholder="O que voce quer publicar?"></textarea>
+          <textarea name="postText" rows="3" placeholder="What do you want to publish?"></textarea>
           <div class="composer-actions">
-            <span>Publicacao local da PoC</span>
-            <button type="submit">Publicar</button>
+            <span>Local PoC post</span>
+            <button type="submit">Publish</button>
           </div>
         </form>
 
         <section class="feed-tabs">
           <button class="tab-button active" type="button">Feed</button>
-          <button class="tab-button" type="button">Amigos</button>
-          <button class="tab-button" type="button">Mensagens</button>
+          <button class="tab-button" type="button">Friends</button>
+          <button class="tab-button" type="button">Messages</button>
         </section>
 
         <section id="feed-list" class="feed-list" aria-live="polite"></section>
@@ -110,40 +110,40 @@
       <aside class="right-rail">
         <section class="card">
           <div class="section-heading">
-            <h2>Amigos</h2>
+            <h2>Friends</h2>
             <span id="friend-summary">0</span>
           </div>
           <form id="friend-form" class="stack-form subtle-form">
             <label>
               Friend VN ID
-              <input name="friendVirtualNodeId" autocomplete="off" placeholder="sha512 do VN">
+              <input name="friendVirtualNodeId" autocomplete="off" placeholder="VN sha512 id">
             </label>
-            <button type="submit">Adicionar amigo</button>
+            <button type="submit">Add friend</button>
           </form>
           <div id="friend-list" class="friend-list"></div>
         </section>
 
         <section class="card">
           <div class="section-heading">
-            <h2>Mensagem direta</h2>
-            <span>sessao automatica</span>
+            <h2>Direct message</h2>
+            <span>automatic session</span>
           </div>
           <form id="message-form" class="stack-form">
             <label>
-              Destinatario VN ID
+              Recipient VN ID
               <input name="toVirtualNodeId" autocomplete="off">
             </label>
             <label>
-              Texto
+              Text
               <textarea id="message-text" name="text" rows="4"></textarea>
             </label>
-            <button type="submit">Enviar DM</button>
+            <button type="submit">Send DM</button>
           </form>
         </section>
 
         <section class="card direct-messages-card">
           <div class="section-heading">
-            <h2>Mensagens</h2>
+            <h2>Messages</h2>
             <span id="direct-message-summary">0</span>
           </div>
           <div id="direct-message-list" class="direct-message-list"></div>
@@ -154,13 +154,13 @@
             <h2>Core</h2>
             <span>manual</span>
           </div>
-          <pre id="core-status">Clique em "Status do core".</pre>
+          <pre id="core-status">Click "Core status".</pre>
         </section>
 
         <section class="card">
           <div class="section-heading">
-            <h2>Eventos</h2>
-            <span>tempo real</span>
+            <h2>Events</h2>
+            <span>real time</span>
           </div>
           <ol id="event-log" class="event-log"></ol>
         </section>
@@ -180,9 +180,9 @@
           </header>
           <p class="post-text"></p>
           <footer>
-            <button type="button">Curtir</button>
-            <button type="button">Comentar</button>
-            <button type="button">Enviar DM</button>
+            <button type="button">Like</button>
+            <button type="button">Comment</button>
+            <button type="button">Send DM</button>
           </footer>
         </div>
       </article>

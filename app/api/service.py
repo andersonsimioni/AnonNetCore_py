@@ -25,7 +25,7 @@ ApiEventSink = Callable[[dict[str, object]], Awaitable[None] | None]
 
 
 class CoreApiError(Exception):
-    """Erro esperado da API publica do core."""
+    """Expected public core API error."""
 
     def __init__(self, code: str, message: str, *, status_code: int = 400) -> None:
         super().__init__(message)
@@ -35,7 +35,7 @@ class CoreApiError(Exception):
 
 
 class CoreApiService:
-    """Fachada publica para apps externas usarem o core sem conhecer internals."""
+    """Public facade for external apps to use the core without knowing internals."""
 
     def __init__(self, engine, *, inbox_limit: int = 1000) -> None:
         self.engine = engine
@@ -62,9 +62,9 @@ class CoreApiService:
 
     def get_debug_state(self) -> dict[str, object]:
         if not self.engine.services.config.debug_api_enabled:
-            raise CoreApiError("debug_api_disabled", "API de debug desabilitada.", status_code=404)
+            raise CoreApiError("debug_api_disabled", "Debug API is disabled.", status_code=404)
         if self.engine.services.debug_snapshot_service is None:
-            raise CoreApiError("debug_snapshot_unavailable", "Snapshot de debug indisponivel.", status_code=500)
+            raise CoreApiError("debug_snapshot_unavailable", "Debug snapshot is unavailable.", status_code=500)
         return self.engine.services.debug_snapshot_service.build_state()
 
     def list_local_virtual_nodes(self, *, only_active: bool = False) -> list[dict[str, object]]:

@@ -235,10 +235,10 @@ class SocialBackgroundSyncService {
 
       profileState.contacts.push({
         virtual_node_id: friendId,
-        display_name: `Amigo ${profileState.contacts.length + 1}`,
+        display_name: `Friend ${profileState.contacts.length + 1}`,
         public_key: null,
         photo_data_url: null,
-        status: "pendente",
+        status: "pending",
         feed_posts: [],
         user_state_content_id: null,
         last_synced_at: null,
@@ -265,7 +265,7 @@ class SocialBackgroundSyncService {
     contact.display_name = remoteProfile.display_name || contact.display_name;
     contact.public_key = remoteProfile.public_key || contact.public_key;
     contact.photo_data_url = remoteProfile.photo_data_url || null;
-    contact.status = "sincronizado";
+    contact.status = "synced";
     contact.bio = remoteProfile.bio || "";
     contact.feed_posts = Array.isArray(result.userState.feed_posts)
       ? result.userState.feed_posts.map((post) => ({

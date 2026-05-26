@@ -28,3 +28,15 @@ cluster/logs/
 cluster/state/
 
 .DS_Store
+
+# Thesis generated files
+thesis/build/
+thesis/*.aux
+thesis/*.bbl
+thesis/*.blg
+thesis/*.fdb_latexmk
+thesis/*.fls
+thesis/*.log
+thesis/*.out
+thesis/*.synctex.gz
+thesis/*.toc

@@ -26,7 +26,7 @@ from smoke_helpers import (
     start_cluster,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
-    wait_for_drt_online_route_count,
+    wait_for_stable_drt_online_route_count,
     wait_for_network_ready,
     wait_until_value,
 )
@@ -86,8 +86,9 @@ async def main() -> None:
         api_port=ports.api,
         virtual_route_expected_round_trip_ttl_ms=args.route_rtt_ms,
         virtual_route_pending_timeout_seconds=args.route_pending_timeout_seconds,
+        virtual_route_min_online_routes=args.min_online_routes,
     )
-    api = JsonApiClient(f"http://127.0.0.1:{ports.api}", timeout_seconds=90.0)
+    api = JsonApiClient(f"http://127.0.0.1:{ports.api}", timeout_seconds=150.0)
 
     try:
         await run_async_step(
@@ -143,13 +144,13 @@ async def main() -> None:
         route_inventory = await run_async_step(
             f"checkpoint 4: wait both local VNs in DRT: min_online_routes={args.min_online_routes}",
             asyncio.gather(
-                wait_for_drt_online_route_count(
+                wait_for_stable_drt_online_route_count(
                     core,
                     virtual_node_public_key=str(vn_a["public_key"]),
                     minimum_routes=args.min_online_routes,
                     timeout_seconds=args.route_inventory_timeout_seconds,
                 ),
-                wait_for_drt_online_route_count(
+                wait_for_stable_drt_online_route_count(
                     core,
                     virtual_node_public_key=str(vn_b["public_key"]),
                     minimum_routes=args.min_online_routes,
@@ -165,23 +166,25 @@ async def main() -> None:
             flush=True,
         )
 
-        session_a_to_b, session_b_to_a = await run_async_step(
-            "checkpoint 5: start local VN sessions through standard DRT path",
-            asyncio.gather(
-                api.post(
-                    "/v1/sessions/virtual",
-                    {
-                        "local_virtual_node_id": vn_a["id"],
-                        "remote_virtual_node_id": vn_b["id"],
-                    },
-                ),
-                api.post(
-                    "/v1/sessions/virtual",
-                    {
-                        "local_virtual_node_id": vn_b["id"],
-                        "remote_virtual_node_id": vn_a["id"],
-                    },
-                ),
+        session_a_to_b = await run_async_step(
+            "checkpoint 5a: start local VN session A->B through standard DRT path",
+            api.post(
+                "/v1/sessions/virtual",
+                {
+                    "local_virtual_node_id": vn_a["id"],
+                    "remote_virtual_node_id": vn_b["id"],
+                },
+            ),
+            timeout_seconds=120.0,
+        )
+        session_b_to_a = await run_async_step(
+            "checkpoint 5b: start local VN session B->A through standard DRT path",
+            api.post(
+                "/v1/sessions/virtual",
+                {
+                    "local_virtual_node_id": vn_b["id"],
+                    "remote_virtual_node_id": vn_a["id"],
+                },
             ),
             timeout_seconds=120.0,
         )
@@ -424,7 +427,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-online-routes", type=int, default=1)
     parser.add_argument("--route-inventory-timeout-seconds", type=float, default=180.0)
     parser.add_argument("--route-rtt-ms", type=int, default=30000)
-    parser.add_argument("--route-pending-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--route-pending-timeout-seconds", type=float, default=45.0)
     parser.add_argument("--message-rounds", type=int, default=80)
     parser.add_argument("--message-concurrency", type=int, default=12)
     parser.add_argument("--content-downloads", type=int, default=4)

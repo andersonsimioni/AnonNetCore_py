@@ -34,12 +34,12 @@ def main() -> int:
         (args.host, args.port),
         build_handler(registry, refresh_interval_ms=int(args.refresh_interval_seconds * 1000)),
     )
-    print(f"Debug console em http://{args.host}:{args.port}")
-    print("Use Ctrl+C para parar.")
+    print(f"Debug console at http://{args.host}:{args.port}")
+    print("Use Ctrl+C to stop.")
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
-        print("\nParando debug console...")
+        print("\nStopping debug console...")
     finally:
         server.server_close()
     return 0
@@ -306,7 +306,7 @@ def build_handler(registry: DebugNodeRegistry, *, refresh_interval_ms: int):
 
 def render_page(*, refresh_interval_ms: int) -> str:
     return f"""<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -319,10 +319,10 @@ def render_page(*, refresh_interval_ms: int) -> str:
       <div>
         <p class="eyebrow">AnonNetCore</p>
         <h1>Debug Console</h1>
-        <p class="subtitle">Visao central em tempo real dos nodes locais e containers.</p>
+        <p class="subtitle">Central real-time view of local nodes and containers.</p>
       </div>
       <div class="status-panel">
-        <strong id="health">Carregando...</strong>
+        <strong id="health">Loading...</strong>
         <span id="updatedAt">-</span>
       </div>
     </header>
@@ -428,7 +428,7 @@ async function refresh() {
     const payload = await response.json();
     render(payload);
   } catch (error) {
-    healthEl.textContent = "Console com erro";
+    healthEl.textContent = "Console error";
     updatedAtEl.textContent = String(error);
   }
 }
@@ -442,10 +442,10 @@ function render(payload) {
   summaryEl.innerHTML = [
     tile("Nodes", nodes.length),
     tile("Online", healthy),
-    tile("Peers unicos", totals.uniquePeers),
-    tile("Sessoes ativas", `${totals.activeSessions}/${totals.totalSessions}`),
-    tile("Rotas ativas", totals.activeRoutes),
-    tile("DHT keys unicas", totals.uniqueDhtRecords),
+    tile("Unique peers", totals.uniquePeers),
+    tile("Active sessions", `${totals.activeSessions}/${totals.totalSessions}`),
+    tile("Active routes", totals.activeRoutes),
+    tile("Unique DHT keys", totals.uniqueDhtRecords),
   ].join("");
   problemsEl.innerHTML = renderProblems(nodes);
   nodesEl.innerHTML = nodes.map(renderNode).join("");
@@ -503,17 +503,17 @@ function renderNode(node) {
       <span class="node-kind">${escapeHtml(node.kind)}</span>
     </div>
     <div class="metrics">
-      ${metric("Porta", info.listen_port ?? "-")}
+      ${metric("Port", info.listen_port ?? "-")}
       ${metric("Peers", peers.route_ready_nodes ?? 0)}
-      ${metric("Sessoes", `${sessions.active ?? 0}/${sessions.total ?? 0}`)}
-      ${metric("Rotas", routes.active ?? 0)}
+      ${metric("Sessions", `${sessions.active ?? 0}/${sessions.total ?? 0}`)}
+      ${metric("Routes", routes.active ?? 0)}
       ${metric("DHT keys", `${dhtUnique}/${dhtRows}`)}
       ${metric("VNs", (state.virtual_nodes?.local || []).length)}
       ${metric("Downloads", (state.content?.downloads || []).length)}
-      ${metric("Problemas", (state.problems || []).length)}
+      ${metric("Problems", (state.problems || []).length)}
     </div>
     ${renderRuntimeSection(state.runtimes || {})}
-    ${renderList("DHT por namespace", Object.entries(dht.unique_counts_by_namespace || {}).map(([k,v]) => [k, `${v} keys | ${dht.counts_by_namespace?.[k] ?? 0} rows`]))}
+    ${renderList("DHT by namespace", Object.entries(dht.unique_counts_by_namespace || {}).map(([k,v]) => [k, `${v} keys | ${dht.counts_by_namespace?.[k] ?? 0} rows`]))}
     ${renderRouteSection(routes.items || [])}
     ${renderSessionSection(sessions.items || [])}
   </article>`;
@@ -530,7 +530,7 @@ function renderProblems(nodes) {
       items.push(`<article><strong>${escapeHtml(node.source)} | ${escapeHtml(problem.area)}</strong><p>${escapeHtml(problem.message)}</p></article>`);
     }
   }
-  return items.length ? items.join("") : `<article><strong>Sem problemas destacados</strong><p class="empty">Nenhum alerta no snapshot atual.</p></article>`;
+  return items.length ? items.join("") : `<article><strong>No highlighted problems</strong><p class="empty">No alerts in the current snapshot.</p></article>`;
 }
 
 function renderRuntimeSection(runtimes) {
@@ -542,14 +542,14 @@ function renderRuntimeSection(runtimes) {
 }
 
 function renderRouteSection(routes) {
-  return renderList("Rotas", routes.map((route) => [
+  return renderList("Routes", routes.map((route) => [
     route.local_role,
     `${route.status} | ${route.final_path_id || route.initial_path_id || route.route_path_id || "-"}`
   ]));
 }
 
 function renderSessionSection(sessions) {
-  return renderList("Sessoes", sessions.map((session) => [
+  return renderList("Sessions", sessions.map((session) => [
     session.scope,
     `${session.state} | ${session.remote_identity_id || "-"}`
   ]));
@@ -557,7 +557,7 @@ function renderSessionSection(sessions) {
 
 function renderList(title, rows) {
   if (!rows.length) {
-    return `<div class="section"><h3>${escapeHtml(title)}</h3><p class="empty">Vazio</p></div>`;
+    return `<div class="section"><h3>${escapeHtml(title)}</h3><p class="empty">Empty</p></div>`;
   }
   return `<div class="section"><h3>${escapeHtml(title)}</h3><div class="list">${
     rows.map(([left, right]) => `<div class="row"><b>${escapeHtml(left)}</b><span>${escapeHtml(right)}</span></div>`).join("")
@@ -586,16 +586,16 @@ setInterval(refresh, DEBUG_REFRESH_INTERVAL_MS);
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Dashboard local para depurar nodes AnonNetCore.")
+    parser = argparse.ArgumentParser(description="Local dashboard for debugging AnonNetCore nodes.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=19888)
     parser.add_argument(
         "--api",
         action="append",
         default=[],
-        help="URL /debug/state de um core local. Pode repetir.",
+        help="URL /debug/state for a local core. Can be repeated.",
     )
-    parser.add_argument("--no-docker", action="store_true", help="Nao descobrir containers anonnet-node-*.")
+    parser.add_argument("--no-docker", action="store_true", help="Do not discover anonnet-node-* containers.")
     parser.add_argument("--docker-filter", default="anonnet-node-")
     parser.add_argument("--node-timeout-seconds", type=float, default=8.0)
     parser.add_argument("--node-cache-ttl-seconds", type=float, default=8.0)

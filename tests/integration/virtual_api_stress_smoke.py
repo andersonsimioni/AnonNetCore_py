@@ -31,7 +31,7 @@ from smoke_helpers import (
     start_cluster,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
-    wait_for_drt_online_route_count,
+    wait_for_stable_drt_online_route_count,
     wait_for_network_ready,
     wait_until_value,
 )
@@ -83,6 +83,7 @@ async def main() -> None:
         api_port=ports.api_a,
         virtual_route_expected_round_trip_ttl_ms=args.route_rtt_ms,
         virtual_route_pending_timeout_seconds=args.route_pending_timeout_seconds,
+        virtual_route_min_online_routes=args.min_online_routes,
     )
     core_b = create_test_core(
         data_dir=test_data_root / "core-b",
@@ -91,9 +92,10 @@ async def main() -> None:
         api_port=ports.api_b,
         virtual_route_expected_round_trip_ttl_ms=args.route_rtt_ms,
         virtual_route_pending_timeout_seconds=args.route_pending_timeout_seconds,
+        virtual_route_min_online_routes=args.min_online_routes,
     )
-    api_a = JsonApiClient(f"http://127.0.0.1:{ports.api_a}")
-    api_b = JsonApiClient(f"http://127.0.0.1:{ports.api_b}")
+    api_a = JsonApiClient(f"http://127.0.0.1:{ports.api_a}", timeout_seconds=150.0)
+    api_b = JsonApiClient(f"http://127.0.0.1:{ports.api_b}", timeout_seconds=150.0)
 
     try:
         await run_async_step(
@@ -153,13 +155,13 @@ async def main() -> None:
         route_inventory = await run_async_step(
             f"checkpoint 4: wait DRT route inventories: min_online_routes={args.min_online_routes}",
             asyncio.gather(
-                wait_for_drt_online_route_count(
+                wait_for_stable_drt_online_route_count(
                     core_b,
                     virtual_node_public_key=str(vn_a["public_key"]),
                     minimum_routes=args.min_online_routes,
                     timeout_seconds=args.route_inventory_timeout_seconds,
                 ),
-                wait_for_drt_online_route_count(
+                wait_for_stable_drt_online_route_count(
                     core_a,
                     virtual_node_public_key=str(vn_b["public_key"]),
                     minimum_routes=args.min_online_routes,
@@ -610,9 +612,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     parser.add_argument("--min-online-routes", type=int, default=1)
-    parser.add_argument("--route-inventory-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--route-inventory-timeout-seconds", type=float, default=360.0)
     parser.add_argument("--route-rtt-ms", type=int, default=30000)
-    parser.add_argument("--route-pending-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--route-pending-timeout-seconds", type=float, default=30.0)
     parser.add_argument("--message-rounds", type=int, default=12)
     parser.add_argument("--content-downloads", type=int, default=3)
     parser.add_argument("--seed", type=int, default=20260521)

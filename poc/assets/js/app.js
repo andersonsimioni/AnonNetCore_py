@@ -76,14 +76,14 @@ backgroundSync.start();
 async function refreshStatus() {
   const operation = startUiOperation({
     name: "refresh_status",
-    title: "Consultando core",
-    message: "Lendo o estado atual do core local.",
+    title: "Checking core",
+    message: "Reading the current local core state.",
   });
   try {
     const status = await client.getStatus();
     elements.statusOutput.textContent = JSON.stringify(status, null, 2);
     markCoreStatus("online");
-    notifyUser("success", "Core online", "Status do core atualizado.");
+    notifyUser("success", "Core online", "Core status updated.");
   } catch (error) {
     elements.statusOutput.textContent = error.message;
     markCoreStatus("offline");
@@ -94,7 +94,7 @@ async function refreshStatus() {
 }
 
 function resetSiteCache() {
-  if (!window.confirm("Limpar todos os dados locais deste site? Perfis, amigos, posts e DMs salvos no navegador serao removidos.")) {
+  if (!window.confirm("Clear all local data for this site? Profiles, friends, posts, and DMs saved in this browser will be removed.")) {
     return;
   }
 
@@ -104,9 +104,9 @@ function resetSiteCache() {
   state.profiles = {};
   state.events = [];
   elements.eventLog.replaceChildren();
-  elements.statusOutput.textContent = 'Cache local do site limpo. Clique em "+ Novo perfil" para recomecar.';
+  elements.statusOutput.textContent = 'Local site cache cleared. Click "+ New profile" to start over.';
   render();
-  notifyUser("success", "Cache limpo", "Os dados locais da PoC foram removidos deste navegador.");
+  notifyUser("success", "Cache cleared", "Local PoC data was removed from this browser.");
   logWeb("info", "site_cache_reset");
 }
 
@@ -114,8 +114,8 @@ async function createLocalProfile(event) {
   event.preventDefault();
   const operation = startUiOperation({
     name: "create_local_profile",
-    title: "Criando perfil",
-    message: "Criando um virtual node social local.",
+    title: "Creating profile",
+    message: "Creating a local social virtual node.",
   });
   try {
     const virtualNode = await socialService.createLocalProfileNode();
@@ -125,7 +125,7 @@ async function createLocalProfile(event) {
     saveLocalState();
     appendEvent({ type: "local_profile_created", data: { id: virtualNode.id } });
     render();
-    notifyUser("success", "Perfil criado", "O VN social local foi criado e selecionado.");
+    notifyUser("success", "Profile created", "The local social VN was created and selected.");
   } catch (error) {
     appendError(error);
   } finally {
@@ -145,15 +145,15 @@ async function saveProfile(event) {
   event.preventDefault();
   const active = getActiveProfile();
   if (!active) {
-    appendEvent({ type: "poc_error", data: { message: "Crie ou selecione um perfil primeiro." } });
+    appendEvent({ type: "poc_error", data: { message: "Create or select a profile first." } });
     return;
   }
 
   const form = new FormData(event.currentTarget);
   const operation = startUiOperation({
     name: "save_profile",
-    title: "Salvando perfil",
-    message: "Salvando estado local. A rede sera sincronizada em background.",
+    title: "Saving profile",
+    message: "Saving local state. The network will sync in the background.",
   });
   try {
     const profile = createProfile({
@@ -178,7 +178,7 @@ async function saveProfile(event) {
     });
 
     runBackgroundSync("profile_saved");
-    notifyUser("success", "Perfil salvo", "O background sync vai publicar o estado na rede.");
+    notifyUser("success", "Profile saved", "Background sync will publish the state to the network.");
   } catch (error) {
     saveLocalState();
     renderProfile();
@@ -192,7 +192,7 @@ function addFriend(event) {
   event.preventDefault();
   const active = getActiveProfile();
   if (!active?.profile) {
-    appendEvent({ type: "poc_error", data: { message: "Salve o perfil ativo primeiro." } });
+    appendEvent({ type: "poc_error", data: { message: "Save the active profile first." } });
     return;
   }
 
@@ -204,8 +204,8 @@ function addFriend(event) {
 
   const operation = startUiOperation({
     name: "add_friend",
-    title: "Adicionando amigo",
-    message: "Atualizando seu perfil e republicando o estado social.",
+    title: "Adding friend",
+    message: "Updating your profile and republishing the social state.",
   });
   active.profile = socialService.addFriendToProfile({
     profile: active.profile,
@@ -219,7 +219,7 @@ function addFriend(event) {
   });
   event.currentTarget.reset();
   render();
-  notifyUser("success", "Amigo adicionado", "O background sync vai atualizar a DPT/DDT e o feed.");
+  notifyUser("success", "Friend added", "Background sync will update the DPT/DDT and the feed.");
   runBackgroundSync("friend_added")
     .finally(() => endUiOperation(operation));
 }
@@ -229,7 +229,7 @@ async function sendMessage(event) {
   const messageForm = event.currentTarget;
   const active = getActiveProfile();
   if (!active) {
-    appendEvent({ type: "poc_error", data: { message: "Crie ou selecione um perfil primeiro." } });
+    appendEvent({ type: "poc_error", data: { message: "Create or select a profile first." } });
     return;
   }
 
@@ -242,8 +242,8 @@ async function sendMessage(event) {
 
   const operation = startUiOperation({
     name: "send_direct_message",
-    title: "Enviando mensagem",
-    message: "Abrindo ou reutilizando sessao virtual para enviar a DM.",
+    title: "Sending message",
+    message: "Opening or reusing a virtual session to send the DM.",
   });
   try {
     appendEvent({
@@ -274,7 +274,7 @@ async function sendMessage(event) {
       },
     });
     messageForm.reset();
-    notifyUser("success", "Mensagem enviada", "A mensagem direta foi entregue ao core.");
+    notifyUser("success", "Message sent", "The direct message was delivered to the core.");
   } catch (error) {
     appendError(error);
   } finally {
@@ -286,7 +286,7 @@ async function publishLocalPost(event) {
   event.preventDefault();
   const active = getActiveProfile();
   if (!active?.profile) {
-    appendEvent({ type: "poc_error", data: { message: "Crie um perfil e salve os dados primeiro." } });
+    appendEvent({ type: "poc_error", data: { message: "Create a profile and save the data first." } });
     return;
   }
 
@@ -298,12 +298,12 @@ async function publishLocalPost(event) {
 
   const operation = startUiOperation({
     name: "publish_local_post",
-    title: "Publicando post",
-    message: "Salvando o post local. A rede sera sincronizada em background.",
+    title: "Publishing post",
+    message: "Saving the local post. The network will sync in the background.",
   });
   active.feedPosts.unshift(createFeedPost({
     authorVirtualNodeId: active.localVirtualNode.id,
-    authorName: active.profile.display_name || "Voce",
+    authorName: active.profile.display_name || "You",
     authorPhotoDataUrl: active.profile.photo_data_url || active.profilePhotoPreview || null,
     text,
   }));
@@ -320,7 +320,7 @@ async function publishLocalPost(event) {
     });
     runBackgroundSync("post_created");
     render();
-    notifyUser("success", "Post salvo", "O background sync vai atualizar seu estado publicado.");
+    notifyUser("success", "Post saved", "Background sync will update your published state.");
   } catch (error) {
     saveLocalState();
     renderProfile();
@@ -396,7 +396,7 @@ function handleRealtimeEvent(event) {
   render();
   notifyUser(
     "success",
-    "Nova mensagem direta",
+    "New direct message",
     `${shortKey(message.from_virtual_node_id)}: ${message.text || ""}`,
   );
 }
@@ -411,7 +411,7 @@ function render() {
 
 function renderProfileSelector() {
   elements.profileSelect.replaceChildren();
-  elements.profileSelect.append(new Option("Nenhum perfil", ""));
+  elements.profileSelect.append(new Option("No profile", ""));
 
   for (const profileState of Object.values(state.profiles)) {
     const label = buildProfileLabel(profileState);
@@ -424,8 +424,8 @@ function renderProfileSelector() {
 function renderProfile() {
   const active = getActiveProfile();
   const profile = active?.profile;
-  const name = profile?.display_name || "Seu perfil";
-  const bio = profile?.bio || "Crie ou selecione um perfil social para iniciar.";
+  const name = profile?.display_name || "Your profile";
+  const bio = profile?.bio || "Create or select a social profile to start.";
   const initials = getInitials(name);
   const friends = profile?.friend_virtual_node_ids?.length || active?.contacts.length || 0;
   const profilePhoto = active?.profilePhotoPreview || profile?.photo_data_url || null;
@@ -437,7 +437,7 @@ function renderProfile() {
   elements.friendCount.textContent = String(friends);
   elements.friendSummary.textContent = String(friends);
   elements.postCount.textContent = String(active?.feedPosts.length || 0);
-  elements.localVnOutput.textContent = active?.localVirtualNode.id || "Nenhum perfil criado";
+  elements.localVnOutput.textContent = active?.localVirtualNode.id || "No profile created";
 
   elements.profileForm.elements.displayName.value = profile?.display_name || "";
   elements.profileForm.elements.bio.value = profile?.bio || "";
@@ -532,7 +532,7 @@ function renderFriends() {
         <span>${escapeHtml(contact.virtual_node_id)}</span>
         <small>${escapeHtml(buildFriendMeta(contact))}</small>
       </div>
-      <i class="friend-status ${contact.status === "sincronizado" ? "online" : ""}"></i>
+      <i class="friend-status ${contact.status === "synced" ? "online" : ""}"></i>
     `;
     setAvatarImage(item.querySelector(".friend-avatar"), contact.photo_data_url, avatarInitials);
     item.addEventListener("click", () => selectFriendForMessage(contact));
@@ -566,7 +566,7 @@ function renderDirectMessages() {
   if (!messages.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "Nenhuma DM recebida ou enviada neste perfil.";
+    empty.textContent = "No DMs received or sent for this profile.";
     elements.directMessageList.append(empty);
     return;
   }
@@ -576,7 +576,7 @@ function renderDirectMessages() {
     const item = document.createElement("article");
     item.className = `direct-message-item ${incoming ? "incoming" : "outgoing"}`;
     item.innerHTML = `
-      <strong>${incoming ? "Recebida" : "Enviada"}</strong>
+      <strong>${incoming ? "Received" : "Sent"}</strong>
       <span>${escapeHtml(resolveDirectMessagePeer(message, active))}</span>
       <p>${escapeHtml(message.text || "")}</p>
       <small>${escapeHtml(formatTime(message.received_at || message.sent_at))}</small>
@@ -625,9 +625,9 @@ function collectFeedPosts(active) {
 function buildFriendMeta(contact) {
   const postCount = contact.feed_posts?.length || 0;
   if (contact.last_synced_at) {
-    return `${postCount} posts sincronizados - ${formatTime(contact.last_synced_at)}`;
+    return `${postCount} synced posts - ${formatTime(contact.last_synced_at)}`;
   }
-  return "aguardando sincronizacao pela DHT";
+  return "waiting for DHT sync";
 }
 
 function resolveDirectMessagePeer(message, active) {
@@ -651,7 +651,7 @@ function buildProfileLabel(profileState) {
   if (name) {
     return name;
   }
-  return `Perfil ${shortKey(profileState.localVirtualNode.id)}`;
+  return `Profile ${shortKey(profileState.localVirtualNode.id)}`;
 }
 
 function appendEvent(event) {
@@ -670,7 +670,7 @@ function appendEvent(event) {
 }
 
 function appendError(error) {
-  const message = error.message || "Erro desconhecido.";
+  const message = error.message || "Unknown error.";
   logWeb("error", "poc_error", {
     code: error.code,
     message,
@@ -678,7 +678,7 @@ function appendError(error) {
     publishResult: error.publishResult,
     payload: error.payload,
   });
-  notifyUser("error", "Acao nao concluida", message);
+  notifyUser("error", "Action not completed", message);
   appendEvent({
     type: "poc_error",
     data: {
@@ -771,7 +771,7 @@ function compactEventValue(value, depth = 0) {
   }
   const hiddenKeyCount = Object.keys(value).length - entries.length;
   if (hiddenKeyCount > 0) {
-    compact.more = `${hiddenKeyCount} campos ocultos`;
+    compact.more = `${hiddenKeyCount} hidden fields`;
   }
   return compact;
 }
@@ -832,9 +832,9 @@ function setAvatarImage(element, imageDataUrl, fallbackText) {
 function formatTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "agora";
+    return "now";
   }
-  return new Intl.DateTimeFormat("pt-BR", {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",

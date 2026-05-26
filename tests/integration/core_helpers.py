@@ -28,6 +28,7 @@ def create_isolated_core(
     api_websocket_port: int | None = None,
     virtual_route_expected_round_trip_ttl_ms: int = 1000,
     virtual_route_pending_timeout_seconds: float = 90.0,
+    virtual_route_min_online_routes: int = 2,
     bootstrap_public_endpoints: Iterable[BootstrapEndpoint] | None = None,
     bootstrap_dns_seeds: Iterable[DnsSeed] | None = None,
     reset_database: bool = False,
@@ -58,7 +59,7 @@ def create_isolated_core(
         config.api_websocket_enabled = False
     config.content_storage_dir = data_dir / "content"
     config.virtual_route_maintenance_runtime_interval_seconds = 1.0
-    config.virtual_route_maintenance_route_min_online_routes = 2
+    config.virtual_route_maintenance_route_min_online_routes = max(1, virtual_route_min_online_routes)
     config.virtual_route_maintenance_drt_check_interval_seconds = 1.0
     config.virtual_route_maintenance_pending_route_timeout_seconds = virtual_route_pending_timeout_seconds
     config.virtual_route_maintenance_expected_round_trip_ttl_ms = virtual_route_expected_round_trip_ttl_ms
