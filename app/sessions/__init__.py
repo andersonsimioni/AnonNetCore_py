@@ -11,6 +11,7 @@ from .messages import (
     VirtualSessionMessageReply,
 )
 from .models import NetworkSession, SessionCreateInput, SessionStateUpdateInput
+from .reliable import ReliableInboundMessage, ReliableOutboundMessage, ReliableReceiveResult
 
 __all__ = [
     "NetworkSession",
@@ -24,4 +25,7 @@ __all__ = [
     "VirtualSessionMessage",
     "VirtualSessionMessageHandler",
     "VirtualSessionMessageReply",
+    "ReliableInboundMessage",
+    "ReliableOutboundMessage",
+    "ReliableReceiveResult",
 ]

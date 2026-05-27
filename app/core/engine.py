@@ -470,7 +470,11 @@ class CoreEngine:
             return message
 
         plaintext_hex = self._encode_payload_hex(payload)
-        encrypted_payload = aes_encrypt_hex(plaintext_hex, session.shared_secret_hex)
+        encrypted_payload = aes_encrypt_hex(
+            plaintext_hex,
+            session.shared_secret_hex,
+            aad=self._build_physical_payload_aad(header),
+        )
         protected_packet = {
             "header": {
                 **header,
@@ -838,7 +842,11 @@ class CoreEngine:
             raise ValueError("O payload cifrado nao contem ciphertext_hex valido.")
 
         plaintext_json = bytes.fromhex(
-            aes_decrypt_hex(ciphertext_hex, session.shared_secret_hex)
+            aes_decrypt_hex(
+                ciphertext_hex,
+                session.shared_secret_hex,
+                aad=self._build_physical_payload_aad(header),
+            )
         ).decode("utf-8")
         restored_payload = json.loads(plaintext_json)
         self.services.session_manager.touch_session(session_id)
@@ -847,6 +855,22 @@ class CoreEngine:
     @staticmethod
     def _encode_payload_hex(payload: dict[str, object]) -> str:
         return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8").hex()
+
+    @staticmethod
+    def _build_physical_payload_aad(header: dict[str, object]) -> bytes:
+        protected_header = {
+            key: value
+            for key, value in header.items()
+            if key != "payload_encrypted"
+        }
+        return json.dumps(
+            {
+                "scope": "physical_payload",
+                "header": protected_header,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
 
     @staticmethod
     def _build_json_packet_bytes(

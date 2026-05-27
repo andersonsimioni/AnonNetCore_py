@@ -40,7 +40,12 @@ def generate_nonce_hex() -> str:
     return os.urandom(AES_GCM_SIV_NONCE_SIZE).hex()
 
 
-def encrypt_bytes(data: bytes, key_hex: str, iv_hex: str | None = None) -> AESCipherHexResult:
+def encrypt_bytes(
+    data: bytes,
+    key_hex: str,
+    iv_hex: str | None = None,
+    aad: BytesLike | None = None,
+) -> AESCipherHexResult:
     validate_hex_length(key_hex, AES_KEY_SIZE, field_name="key_hex")
     nonce_hex = iv_hex or _generate_unused_nonce_hex(key_hex)
     validate_hex_length(nonce_hex, AES_GCM_SIV_NONCE_SIZE, field_name="nonce_hex")
@@ -49,7 +54,8 @@ def encrypt_bytes(data: bytes, key_hex: str, iv_hex: str | None = None) -> AESCi
     key = hex_to_bytes(key_hex)
     nonce = hex_to_bytes(nonce_hex)
 
-    ciphertext = AESGCMSIV(key).encrypt(nonce, data, None)
+    associated_data = ensure_bytes(aad) if aad is not None else None
+    ciphertext = AESGCMSIV(key).encrypt(nonce, data, associated_data)
     ciphertext_hex = bytes_to_hex(ciphertext)
 
     return AESCipherHexResult(
@@ -59,15 +65,25 @@ def encrypt_bytes(data: bytes, key_hex: str, iv_hex: str | None = None) -> AESCi
     )
 
 
-def encrypt_text(text: BytesLike, key_hex: str, iv_hex: str | None = None) -> AESCipherHexResult:
-    return encrypt_bytes(ensure_bytes(text), key_hex=key_hex, iv_hex=iv_hex)
+def encrypt_text(
+    text: BytesLike,
+    key_hex: str,
+    iv_hex: str | None = None,
+    aad: BytesLike | None = None,
+) -> AESCipherHexResult:
+    return encrypt_bytes(ensure_bytes(text), key_hex=key_hex, iv_hex=iv_hex, aad=aad)
 
 
-def encrypt_hex(plaintext_hex: str, key_hex: str, iv_hex: str | None = None) -> AESCipherHexResult:
-    return encrypt_bytes(hex_to_bytes(plaintext_hex), key_hex=key_hex, iv_hex=iv_hex)
+def encrypt_hex(
+    plaintext_hex: str,
+    key_hex: str,
+    iv_hex: str | None = None,
+    aad: BytesLike | None = None,
+) -> AESCipherHexResult:
+    return encrypt_bytes(hex_to_bytes(plaintext_hex), key_hex=key_hex, iv_hex=iv_hex, aad=aad)
 
 
-def decrypt_bytes(payload_hex: str, key_hex: str) -> bytes:
+def decrypt_bytes(payload_hex: str, key_hex: str, aad: BytesLike | None = None) -> bytes:
     validate_hex_length(key_hex, AES_KEY_SIZE, field_name="key_hex")
     nonce_hex_length = AES_GCM_SIV_NONCE_SIZE * 2
     minimum_payload_hex_length = (AES_GCM_SIV_NONCE_SIZE + AES_GCM_SIV_TAG_SIZE) * 2
@@ -85,15 +101,22 @@ def decrypt_bytes(payload_hex: str, key_hex: str) -> bytes:
     nonce = hex_to_bytes(nonce_hex)
     ciphertext = hex_to_bytes(ciphertext_hex)
 
-    return AESGCMSIV(key).decrypt(nonce, ciphertext, None)
+    associated_data = ensure_bytes(aad) if aad is not None else None
+    return AESGCMSIV(key).decrypt(nonce, ciphertext, associated_data)
 
 
-def decrypt_text(payload_hex: str, key_hex: str, *, encoding: str = "utf-8") -> str:
-    return decrypt_bytes(payload_hex, key_hex).decode(encoding)
+def decrypt_text(
+    payload_hex: str,
+    key_hex: str,
+    *,
+    encoding: str = "utf-8",
+    aad: BytesLike | None = None,
+) -> str:
+    return decrypt_bytes(payload_hex, key_hex, aad=aad).decode(encoding)
 
 
-def decrypt_hex(payload_hex: str, key_hex: str) -> str:
-    return bytes_to_hex(decrypt_bytes(payload_hex, key_hex))
+def decrypt_hex(payload_hex: str, key_hex: str, aad: BytesLike | None = None) -> str:
+    return bytes_to_hex(decrypt_bytes(payload_hex, key_hex, aad=aad))
 
 
 def _generate_unused_nonce_hex(key_hex: str) -> str:

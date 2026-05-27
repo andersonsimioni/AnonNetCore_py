@@ -271,27 +271,62 @@ class VirtualSessionClient:
 
         session = self._require_active_session(session_id)
         message_request_id = request_id or str(uuid4())
-        await self._send_virtual_envelope(
-            session=session,
-            message_type="VIRTUAL_SESSION_DATA",
-            payload={
+        reliable_message = self.engine.services.session_manager.prepare_reliable_outbound(
+            session_id=session.session_id,
+            inner_message_type="VIRTUAL_SESSION_DATA",
+            inner_payload={
                 "app_message_type": app_message_type,
                 "request_id": message_request_id,
                 "payload": payload or {},
             },
-            virtual_envelope_ciphered=True,
+            retry_after_seconds=self.engine.services.config.virtual_session_reliable_retry_fallback_seconds,
+            max_attempts=self.engine.services.config.session_reliable_max_attempts,
         )
+        await self._send_reliable_outbound_message(reliable_message)
         self.engine.services.log_service.info(
             "virtual_session_client",
-            "sent virtual session data",
+            "sent reliable virtual session data",
             session_id=session.session_id,
             app_message_type=app_message_type,
             request_id=message_request_id,
+            reliable_message_id=reliable_message.reliable_message_id,
+            sequence_number=reliable_message.sequence_number,
             local_virtual_node_id=session.local_identity_id,
             remote_virtual_node_id=session.remote_identity_id,
             bound_route_id=session.bound_route_id,
         )
         return message_request_id
+
+    async def resend_reliable_message(
+        self,
+        reliable_message,
+    ) -> None:
+        await self._send_reliable_outbound_message(reliable_message)
+
+    async def _send_reliable_outbound_message(self, reliable_message) -> None:
+        session = self._require_active_session(reliable_message.session_id)
+        await self._send_virtual_envelope(
+            session=session,
+            message_type="VIRTUAL_SESSION_RELIABLE_DATA",
+            payload=reliable_message.to_reliable_payload(),
+            virtual_envelope_ciphered=True,
+        )
+        marked = self.engine.services.session_manager.mark_reliable_outbound_sent(
+            session_id=reliable_message.session_id,
+            sequence_number=reliable_message.sequence_number,
+        )
+        self.engine.services.log_service.debug(
+            "virtual_session_client",
+            "sent virtual reliable envelope",
+            session_id=session.session_id,
+            reliable_message_id=reliable_message.reliable_message_id,
+            sequence_number=reliable_message.sequence_number,
+            attempts=marked.attempts if marked else reliable_message.attempts,
+            inner_message_type=reliable_message.inner_message_type,
+            pending_count=self.engine.services.session_manager.count_pending_reliable_outbound(
+                session.session_id
+            ),
+        )
 
     async def send_protocol_message(
         self,

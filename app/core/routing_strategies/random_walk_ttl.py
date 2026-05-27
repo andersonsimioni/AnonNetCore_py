@@ -422,6 +422,9 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 sort_keys=True,
             ),
             encapsulation.shared_secret_hex,
+            aad=_build_route_encrypted_payload_aad(
+                message_type="ROUTE_CREATE_VALIDATE_AND_PUBLISH",
+            ),
         )
         validation_request = RandomWalkTtlRouteCreateValidateAndPublish(
             path_id=route_path_id,
@@ -459,6 +462,9 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         decrypted_payload_json = aes_decrypt_text(
             validation_request.encrypted_payload_hex,
             shared_secret_hex,
+            aad=_build_route_encrypted_payload_aad(
+                message_type="ROUTE_CREATE_VALIDATE_AND_PUBLISH",
+            ),
         )
         try:
             decrypted_payload = json.loads(decrypted_payload_json)
@@ -570,6 +576,9 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         decrypted_payload_json = aes_decrypt_text(
             route_create_ok.encrypted_payload_hex,
             initiator_state.shared_secret_hex,
+            aad=_build_route_encrypted_payload_aad(
+                message_type="ROUTE_CREATE_OK",
+            ),
         )
         try:
             decrypted_payload = json.loads(decrypted_payload_json)
@@ -925,6 +934,9 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 sort_keys=True,
             ),
             route_endpoint_state.shared_secret_hex,
+            aad=_build_route_encrypted_payload_aad(
+                message_type="ROUTE_CREATE_OK",
+            ),
         )
         route_create_ok = RandomWalkTtlRouteCreateOk(
             path_id=route_create_pong.path_id,
@@ -1731,3 +1743,14 @@ def _read_optional_metadata_string(metadata_json: str | None, key: str) -> str |
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _build_route_encrypted_payload_aad(*, message_type: str) -> bytes:
+    return json.dumps(
+        {
+            "scope": "route_build_encrypted_payload",
+            "message_type": message_type,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")

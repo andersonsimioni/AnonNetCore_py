@@ -107,6 +107,18 @@ class MessageRegistry:
                     requires_physical_session=True,
                 ),
                 MessageDefinition(
+                    message_type="PHYSICAL_SESSION_RELIABLE_DATA",
+                    handler=physical_session,
+                    layer="physical",
+                    requires_physical_session=True,
+                ),
+                MessageDefinition(
+                    message_type="PHYSICAL_SESSION_RELIABLE_ACK",
+                    handler=physical_session,
+                    layer="physical",
+                    requires_physical_session=True,
+                ),
+                MessageDefinition(
                     message_type="PHYSICAL_SESSION_CLOSE",
                     handler=physical_session,
                     layer="physical",
@@ -165,6 +177,20 @@ class MessageRegistry:
                     handler=virtual_session,
                     layer="virtual",
                     requires_physical_session=True,
+                ),
+                MessageDefinition(
+                    message_type="VIRTUAL_SESSION_RELIABLE_DATA",
+                    handler=virtual_session,
+                    layer="virtual",
+                    requires_physical_session=True,
+                    requires_virtual_session=True,
+                ),
+                MessageDefinition(
+                    message_type="VIRTUAL_SESSION_RELIABLE_ACK",
+                    handler=virtual_session,
+                    layer="virtual",
+                    requires_physical_session=True,
+                    requires_virtual_session=True,
                 ),
                 MessageDefinition(
                     message_type="VIRTUAL_SESSION_DATA",

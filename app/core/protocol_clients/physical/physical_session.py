@@ -340,6 +340,86 @@ class PhysicalSessionClient:
             close_reason=close_reason,
         )
 
+    async def send_reliable_protocol_message(
+        self,
+        *,
+        session_id: str,
+        inner_message_type: str,
+        inner_payload: dict[str, object],
+    ) -> str:
+        if not inner_message_type:
+            raise ValueError("inner_message_type nao pode ser vazio.")
+        if not isinstance(inner_payload, dict):
+            raise ValueError("inner_payload precisa ser um objeto.")
+
+        session = self.engine.services.session_manager.get_session_by_session_id(session_id)
+        if session is None or session.session_scope != "physical":
+            raise ValueError("A physical session informada nao existe em memoria.")
+        if session.session_state != "active":
+            raise ValueError("A physical session informada nao esta ativa.")
+
+        reliable_message = self.engine.services.session_manager.prepare_reliable_outbound(
+            session_id=session.session_id,
+            inner_message_type=inner_message_type,
+            inner_payload=inner_payload,
+            retry_after_seconds=self.engine.services.config.physical_session_reliable_retry_after_seconds,
+            max_attempts=self.engine.services.config.session_reliable_max_attempts,
+        )
+        await self.resend_reliable_message(reliable_message)
+        self.engine.services.log_service.info(
+            "physical_session_client",
+            "sent reliable physical protocol message",
+            session_id=session.session_id,
+            reliable_message_id=reliable_message.reliable_message_id,
+            sequence_number=reliable_message.sequence_number,
+            inner_message_type=inner_message_type,
+            remote_physical_node_id=session.remote_identity_id,
+        )
+        return reliable_message.reliable_message_id
+
+    async def resend_reliable_message(self, reliable_message) -> None:
+        session = self.engine.services.session_manager.get_session_by_session_id(
+            reliable_message.session_id
+        )
+        if session is None or session.session_scope != "physical":
+            raise ValueError("A physical session informada nao existe em memoria.")
+        if session.session_state != "active":
+            raise ValueError("A physical session informada nao esta ativa.")
+
+        endpoint = self._build_remote_endpoint(session)
+        header = self.engine.build_message_header(
+            message_type="PHYSICAL_SESSION_RELIABLE_DATA",
+            physical_session_id=session.session_id,
+        )
+        payload = _build_packet_bytes(
+            header=header,
+            payload=reliable_message.to_reliable_payload(),
+        )
+        await self.engine.send_packet(
+            OutboundMessage(
+                transport_name=endpoint.transport_name,
+                payload=payload,
+                remote_endpoint=endpoint,
+            )
+        )
+        marked = self.engine.services.session_manager.mark_reliable_outbound_sent(
+            session_id=reliable_message.session_id,
+            sequence_number=reliable_message.sequence_number,
+        )
+        self.engine.services.log_service.debug(
+            "physical_session_client",
+            "sent physical reliable envelope",
+            session_id=session.session_id,
+            reliable_message_id=reliable_message.reliable_message_id,
+            sequence_number=reliable_message.sequence_number,
+            attempts=marked.attempts if marked else reliable_message.attempts,
+            inner_message_type=reliable_message.inner_message_type,
+            remote_physical_node_id=session.remote_identity_id,
+            pending_count=self.engine.services.session_manager.count_pending_reliable_outbound(
+                session.session_id
+            ),
+        )
+
     async def _start_session_with_endpoint(
         self,
         *,
@@ -477,3 +557,15 @@ class PhysicalSessionClient:
     @staticmethod
     def _build_remote_endpoint(session) -> TransportEndpoint:
         return build_remote_endpoint_from_session(session)
+
+
+def _build_packet_bytes(
+    *,
+    header: dict[str, object],
+    payload: dict[str, object],
+) -> bytes:
+    return json.dumps(
+        {"header": header, "payload": payload},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")

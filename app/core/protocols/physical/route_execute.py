@@ -215,14 +215,17 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         if reply_context is None:
             raise ValueError("nao foi possivel resolver o caminho reverso da resposta virtual.")
 
+        reply_direction = _opposite_route_direction(route_data.direction)
         reply_route_data = RouteExecuteData(
             path_id=reply_context.reply_path_id,
-            direction=_opposite_route_direction(route_data.direction),
+            direction=reply_direction,
             virtual_session_id=route_data.virtual_session_id,
             virtual_envelope_ciphered=route_data.virtual_envelope_ciphered,
             virtual_envelope=self._build_reply_virtual_payload(
                 services=services,
-                route_data=route_data,
+                direction=reply_direction,
+                virtual_session_id=route_data.virtual_session_id,
+                virtual_envelope_ciphered=route_data.virtual_envelope_ciphered,
                 virtual_response_envelope=virtual_response_envelope,
             ),
         )
@@ -247,16 +250,18 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         self,
         *,
         services: EngineServices,
-        route_data: "RouteExecuteData",
+        direction: str,
+        virtual_session_id: str | None,
+        virtual_envelope_ciphered: bool,
         virtual_response_envelope: dict[str, object],
     ) -> object:
-        if not route_data.virtual_envelope_ciphered:
+        if not virtual_envelope_ciphered:
             return virtual_response_envelope
 
-        if not route_data.virtual_session_id:
+        if not virtual_session_id:
             raise ValueError("virtual_session_id e obrigatorio para responder com virtual cifrado.")
 
-        session = services.session_manager.get_session_by_session_id(route_data.virtual_session_id)
+        session = services.session_manager.get_session_by_session_id(virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
             raise ValueError("virtual session nao encontrada ou inativa para cifrar a resposta.")
 
@@ -265,8 +270,16 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8").hex()
-        encrypted_virtual_envelope = aes_encrypt_hex(plaintext_hex, session.shared_secret_hex)
-        services.session_manager.touch_session(route_data.virtual_session_id)
+        encrypted_virtual_envelope = aes_encrypt_hex(
+            plaintext_hex,
+            session.shared_secret_hex,
+            aad=_build_virtual_envelope_aad(
+                direction=direction,
+                virtual_session_id=virtual_session_id,
+                virtual_envelope_ciphered=True,
+            ),
+        )
+        services.session_manager.touch_session(virtual_session_id)
         return encrypted_virtual_envelope.payload_hex
 
     def _resolve_local_virtual_envelope(
@@ -290,7 +303,15 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             raise ValueError("virtual session nao encontrada ou inativa para decifrar o envelope.")
 
         plaintext_json = bytes.fromhex(
-            aes_decrypt_hex(route_data.virtual_envelope, session.shared_secret_hex)
+            aes_decrypt_hex(
+                route_data.virtual_envelope,
+                session.shared_secret_hex,
+                aad=_build_virtual_envelope_aad(
+                    direction=route_data.direction,
+                    virtual_session_id=route_data.virtual_session_id,
+                    virtual_envelope_ciphered=True,
+                ),
+            )
         ).decode("utf-8")
         virtual_envelope = json.loads(plaintext_json)
         if not isinstance(virtual_envelope, dict):
@@ -585,3 +606,21 @@ def _load_metadata_dict(metadata_json: str | None) -> dict[str, object]:
         return {}
 
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _build_virtual_envelope_aad(
+    *,
+    direction: str,
+    virtual_session_id: str | None,
+    virtual_envelope_ciphered: bool,
+) -> bytes:
+    return json.dumps(
+        {
+            "scope": "route_data_virtual_envelope",
+            "direction": direction,
+            "virtual_session_id": virtual_session_id,
+            "virtual_envelope_ciphered": virtual_envelope_ciphered,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")

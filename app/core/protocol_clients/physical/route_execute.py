@@ -174,7 +174,15 @@ class RouteExecuteClient(EngineBoundComponent):
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8").hex()
-        encrypted_virtual_envelope = aes_encrypt_hex(plaintext_hex, session.shared_secret_hex)
+        encrypted_virtual_envelope = aes_encrypt_hex(
+            plaintext_hex,
+            session.shared_secret_hex,
+            aad=_build_virtual_envelope_aad(
+                direction=direction,
+                virtual_session_id=virtual_session_id,
+                virtual_envelope_ciphered=True,
+            ),
+        )
         self.engine.services.session_manager.touch_session(virtual_session_id)
         return {
             "direction": direction,
@@ -229,3 +237,21 @@ class RouteExecuteClient(EngineBoundComponent):
             "path_id": endpoint_resolution.route_path_id,
             "target_remote_physical_node_id": endpoint_resolution.previous_physical_node_id,
         }
+
+
+def _build_virtual_envelope_aad(
+    *,
+    direction: str,
+    virtual_session_id: str | None,
+    virtual_envelope_ciphered: bool,
+) -> bytes:
+    return json.dumps(
+        {
+            "scope": "route_data_virtual_envelope",
+            "direction": direction,
+            "virtual_session_id": virtual_session_id,
+            "virtual_envelope_ciphered": virtual_envelope_ciphered,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")

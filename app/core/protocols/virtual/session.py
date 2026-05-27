@@ -30,6 +30,8 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         "VIRTUAL_SESSION_READY",
         "VIRTUAL_SESSION_KEEPALIVE",
         "VIRTUAL_SESSION_KEEPALIVE_ACK",
+        "VIRTUAL_SESSION_RELIABLE_DATA",
+        "VIRTUAL_SESSION_RELIABLE_ACK",
         "VIRTUAL_SESSION_CLOSE",
     }
 
@@ -56,6 +58,12 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
 
         if envelope.message_type == "VIRTUAL_SESSION_KEEPALIVE_ACK":
             return await self._handle_virtual_session_keepalive_ack(envelope, context, services)
+
+        if envelope.message_type == "VIRTUAL_SESSION_RELIABLE_DATA":
+            return await self._handle_virtual_session_reliable_data(envelope, context, services)
+
+        if envelope.message_type == "VIRTUAL_SESSION_RELIABLE_ACK":
+            return await self._handle_virtual_session_reliable_ack(envelope, context, services)
 
         if envelope.message_type == "VIRTUAL_SESSION_CLOSE":
             return await self._handle_virtual_session_close(envelope, context, services)
@@ -320,6 +328,255 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             },
         )
 
+    async def _handle_virtual_session_reliable_data(
+        self,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        payload = _as_payload_dict(envelope)
+        session_id = _read_virtual_session_id(envelope)
+        if not session_id:
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "received reliable data without virtual session id",
+            )
+            return self._build_invalid_result(envelope, "invalid_virtual_reliable_session_id")
+
+        session = services.session_manager.touch_session(session_id)
+        if session is None or session.session_scope != "virtual":
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "received reliable data for unknown virtual session",
+                session_id=session_id,
+            )
+            return self._build_invalid_result(envelope, "virtual_session_not_found")
+
+        try:
+            receive_result = services.session_manager.receive_reliable_inbound(
+                session_id=session_id,
+                payload=payload,
+            )
+        except ValueError as error:
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "received invalid reliable data payload",
+                session_id=session_id,
+                reason=str(error),
+            )
+            return self._build_invalid_result(envelope, str(error))
+
+        delivered_count = 0
+        last_inner_result: PacketProcessingResult | None = None
+        inner_response_envelopes: list[dict[str, object]] = []
+        for inbound in receive_result.deliveries:
+            inner_envelope = ProtocolEnvelope(
+                protocol_name=envelope.protocol_name,
+                message_type=inbound.inner_message_type,
+                payload=inbound.inner_payload,
+                raw_payload=envelope.raw_payload,
+                header={
+                    **envelope.header,
+                    "message_type": inbound.inner_message_type,
+                    "reliable_message_id": inbound.reliable_message_id,
+                    "reliable_sequence_number": inbound.sequence_number,
+                },
+            )
+            if services.engine is None:
+                services.log_service.error(
+                    "virtual_session_reliable",
+                    "cannot dispatch reliable virtual payload without engine",
+                    session_id=session_id,
+                    reliable_message_id=inbound.reliable_message_id,
+                    sequence_number=inbound.sequence_number,
+                )
+                continue
+
+            last_inner_result = await services.engine.process_protocol_envelope(inner_envelope, context)
+            delivered_count += 1
+            if "virtual_response_envelope" in last_inner_result.metadata:
+                candidate_response = last_inner_result.metadata.get("virtual_response_envelope")
+                if isinstance(candidate_response, dict):
+                    inner_response_envelopes.append(candidate_response)
+                services.log_service.debug(
+                    "virtual_session_reliable",
+                    "inner reliable virtual payload produced a synchronous reply carried by reliable ack",
+                    session_id=session_id,
+                    reliable_message_id=inbound.reliable_message_id,
+                    sequence_number=inbound.sequence_number,
+                    inner_message_type=inbound.inner_message_type,
+                )
+
+        ack_sequence = receive_result.ack_payload.get("ack_for_sequence_number")
+        ack_message_id = receive_result.ack_payload.get("ack_for_message_id")
+        ack_payload = dict(receive_result.ack_payload)
+        if inner_response_envelopes:
+            ack_payload["inner_response_envelopes"] = inner_response_envelopes
+        services.log_service.info(
+            "virtual_session_reliable",
+            "processed virtual reliable data and prepared ack",
+            session_id=session_id,
+            ack_for_sequence_number=ack_sequence,
+            ack_for_message_id=ack_message_id,
+            delivered_count=delivered_count,
+            inner_response_count=len(inner_response_envelopes),
+            duplicate=receive_result.duplicate,
+            buffered=receive_result.buffered,
+            next_pending_count=services.session_manager.count_pending_reliable_outbound(session_id),
+        )
+        return self._build_virtual_response_result(
+            envelope,
+            response_message_type="VIRTUAL_SESSION_RELIABLE_ACK",
+            payload=ack_payload,
+            extra_metadata={
+                "action": "virtual_reliable_ack_sent",
+                "session_id": session_id,
+                "delivered_count": delivered_count,
+                "inner_action": last_inner_result.metadata.get("action") if last_inner_result else None,
+            },
+        )
+
+    async def _handle_virtual_session_reliable_ack(
+        self,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        payload = _as_payload_dict(envelope)
+        session_id = _read_virtual_session_id(envelope)
+        ack_for_sequence = payload.get("ack_for_sequence_number")
+        ack_for_message_id = payload.get("ack_for_message_id")
+        if (
+            not session_id
+            or not isinstance(ack_for_sequence, int)
+            or not isinstance(ack_for_message_id, str)
+            or not ack_for_message_id
+        ):
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "received invalid reliable ack",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+            )
+            return self._build_invalid_result(envelope, "invalid_virtual_reliable_ack")
+
+        acked = services.session_manager.mark_reliable_outbound_acked(
+            session_id=session_id,
+            sequence_number=ack_for_sequence,
+            reliable_message_id=ack_for_message_id,
+        )
+        services.session_manager.touch_session(session_id)
+        if acked is None:
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "received reliable ack without matching pending outbound message",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+            )
+        else:
+            services.log_service.info(
+                "virtual_session_reliable",
+                "received virtual reliable ack",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+                attempts=acked.attempts,
+                pending_count=services.session_manager.count_pending_reliable_outbound(session_id),
+            )
+
+        inner_response_envelopes = payload.get("inner_response_envelopes")
+        if not isinstance(inner_response_envelopes, list):
+            legacy_inner_response = payload.get("inner_response_envelope")
+            inner_response_envelopes = [legacy_inner_response] if isinstance(legacy_inner_response, dict) else []
+
+        inner_results: list[PacketProcessingResult] = []
+        for inner_response_envelope in inner_response_envelopes:
+            if not isinstance(inner_response_envelope, dict):
+                services.log_service.warning(
+                    "virtual_session_reliable",
+                    "reliable ack carried a non-object inner response envelope",
+                    session_id=session_id,
+                )
+                continue
+            inner_result = await self._dispatch_inner_virtual_response_from_ack(
+                envelope=envelope,
+                context=context,
+                services=services,
+                session_id=session_id,
+                inner_response_envelope=inner_response_envelope,
+            )
+            if inner_result is not None:
+                inner_results.append(inner_result)
+
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=True,
+            message_type=envelope.message_type,
+            metadata={
+                "protocol_family": self.protocol_family,
+                "action": "virtual_reliable_ack_received",
+                "session_id": session_id,
+                "ack_matched": acked is not None,
+                "inner_response_count": len(inner_results),
+                "inner_action": inner_results[-1].metadata.get("action") if inner_results else None,
+            },
+        )
+
+    async def _dispatch_inner_virtual_response_from_ack(
+        self,
+        *,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+        session_id: str,
+        inner_response_envelope: dict[str, object],
+    ) -> PacketProcessingResult | None:
+        header = inner_response_envelope.get("header")
+        payload = inner_response_envelope.get("payload")
+        if not isinstance(header, dict) or not isinstance(payload, dict):
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "reliable ack carried invalid inner response envelope",
+                session_id=session_id,
+            )
+            return None
+
+        message_type = header.get("message_type")
+        if not isinstance(message_type, str) or not message_type:
+            services.log_service.warning(
+                "virtual_session_reliable",
+                "reliable ack carried inner response without message type",
+                session_id=session_id,
+            )
+            return None
+        if services.engine is None:
+            services.log_service.error(
+                "virtual_session_reliable",
+                "cannot dispatch reliable ack inner response without engine",
+                session_id=session_id,
+                inner_message_type=message_type,
+            )
+            return None
+
+        inner_envelope = ProtocolEnvelope(
+            protocol_name=envelope.protocol_name,
+            message_type=message_type,
+            payload=payload,
+            raw_payload=envelope.raw_payload,
+            header=header,
+        )
+        result = await services.engine.process_protocol_envelope(inner_envelope, context)
+        services.log_service.info(
+            "virtual_session_reliable",
+            "dispatched inner virtual response carried by reliable ack",
+            session_id=session_id,
+            inner_message_type=message_type,
+            inner_action=result.metadata.get("action"),
+        )
+        return result
+
     async def _handle_virtual_session_keepalive(
         self,
         envelope: ProtocolEnvelope,
@@ -500,4 +757,3 @@ def _build_response_header(
     message_type: str,
 ) -> dict[str, object]:
     return build_response_header(request_header, message_type)
-

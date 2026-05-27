@@ -140,6 +140,36 @@ class RouteService:
                 .first()
             )
 
+    def get_initiator_resolution_by_final_path_id(
+        self,
+        *,
+        final_path_id: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            return (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "initiator",
+                    RouteResolution.final_path_id == final_path_id,
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+
+    def resolve_route_rtt_ms(self, *, route_id: str) -> float | None:
+        """Retorna o melhor RTT conhecido para uma rota local ou publicada na DRT."""
+
+        for resolution in (
+            self.get_initiator_resolution_by_final_path_id(final_path_id=route_id),
+            self.get_endpoint_resolution_by_final_path_id(final_path_id=route_id),
+            self.get_endpoint_resolution_by_path_id(route_path_id=route_id),
+        ):
+            rtt_ms = _read_route_rtt_ms(resolution)
+            if rtt_ms is not None:
+                return rtt_ms
+        return None
+
     def create_initiator_resolution(
         self,
         *,
@@ -531,6 +561,22 @@ def _load_metadata(metadata_json: str | None) -> dict[str, object]:
         return {}
 
     return payload if isinstance(payload, dict) else {}
+
+
+def _read_route_rtt_ms(resolution: RouteResolution | None) -> float | None:
+    if resolution is None:
+        return None
+
+    metadata = _load_metadata(resolution.metadata_json)
+    for key in (
+        "entry_point_rtt",
+        "observed_round_trip_ms",
+        "expected_round_trip_ttl_ms",
+    ):
+        value = metadata.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return float(value)
+    return None
 
 
 def _dump_metadata(metadata: dict[str, object]) -> str | None:

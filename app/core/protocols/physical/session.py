@@ -34,6 +34,8 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         "PHYSICAL_SESSION_READY",
         "PHYSICAL_SESSION_KEEPALIVE",
         "PHYSICAL_SESSION_KEEPALIVE_ACK",
+        "PHYSICAL_SESSION_RELIABLE_DATA",
+        "PHYSICAL_SESSION_RELIABLE_ACK",
         "PHYSICAL_SESSION_CLOSE",
     }
 
@@ -156,6 +158,12 @@ class SessionProtocolHandler(ProtocolMessageHandler):
 
         if envelope.message_type == "PHYSICAL_SESSION_KEEPALIVE_ACK":
             return await self._handle_physical_session_keepalive_ack(envelope, context, services)
+
+        if envelope.message_type == "PHYSICAL_SESSION_RELIABLE_DATA":
+            return await self._handle_physical_session_reliable_data(envelope, context, services)
+
+        if envelope.message_type == "PHYSICAL_SESSION_RELIABLE_ACK":
+            return await self._handle_physical_session_reliable_ack(envelope, context, services)
 
         if envelope.message_type == "PHYSICAL_SESSION_CLOSE":
             return await self._handle_physical_session_close(envelope, context, services)
@@ -479,6 +487,187 @@ class SessionProtocolHandler(ProtocolMessageHandler):
                 "transport_name": context.transport_name,
                 "action": "physical_session_activated",
                 "session_id": session_id,
+            },
+        )
+
+    async def _handle_physical_session_reliable_data(
+        self,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        payload = _as_payload_dict(envelope)
+        session_id = _read_session_id(envelope)
+        if not session_id:
+            services.log_service.warning(
+                "physical_session_reliable",
+                "received reliable data without physical session id",
+            )
+            return self._build_invalid_result(envelope, "invalid_physical_reliable_session_id")
+
+        session = services.session_manager.touch_session(session_id)
+        if session is None or session.session_scope != "physical":
+            services.log_service.warning(
+                "physical_session_reliable",
+                "received reliable data for unknown physical session",
+                session_id=session_id,
+            )
+            return self._build_invalid_result(envelope, "physical_session_not_found")
+
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
+        )
+        try:
+            receive_result = services.session_manager.receive_reliable_inbound(
+                session_id=session_id,
+                payload=payload,
+            )
+        except ValueError as error:
+            services.log_service.warning(
+                "physical_session_reliable",
+                "received invalid reliable data payload",
+                session_id=session_id,
+                reason=str(error),
+            )
+            return self._build_invalid_result(envelope, str(error))
+
+        delivered_count = 0
+        last_inner_result: PacketProcessingResult | None = None
+        for inbound in receive_result.deliveries:
+            inner_envelope = ProtocolEnvelope(
+                protocol_name=envelope.protocol_name,
+                message_type=inbound.inner_message_type,
+                payload=inbound.inner_payload,
+                raw_payload=envelope.raw_payload,
+                header={
+                    **envelope.header,
+                    "message_type": inbound.inner_message_type,
+                    "reliable_message_id": inbound.reliable_message_id,
+                    "reliable_sequence_number": inbound.sequence_number,
+                },
+            )
+            if services.engine is None:
+                services.log_service.error(
+                    "physical_session_reliable",
+                    "cannot dispatch reliable physical payload without engine",
+                    session_id=session_id,
+                    reliable_message_id=inbound.reliable_message_id,
+                    sequence_number=inbound.sequence_number,
+                )
+                continue
+
+            last_inner_result = await services.engine.process_protocol_envelope(inner_envelope, context)
+            delivered_count += 1
+            if last_inner_result.response_payload is not None or "action" in last_inner_result.metadata:
+                services.log_service.debug(
+                    "physical_session_reliable",
+                    "inner reliable physical payload was processed",
+                    session_id=session_id,
+                    reliable_message_id=inbound.reliable_message_id,
+                    sequence_number=inbound.sequence_number,
+                    inner_message_type=inbound.inner_message_type,
+                    inner_action=last_inner_result.metadata.get("action"),
+                    has_response_payload=last_inner_result.response_payload is not None,
+                )
+
+        ack_header = _build_response_header(envelope.header, "PHYSICAL_SESSION_RELIABLE_ACK")
+        response_payload = _build_packet_bytes(
+            header=ack_header,
+            payload=receive_result.ack_payload,
+        )
+        services.log_service.info(
+            "physical_session_reliable",
+            "processed physical reliable data and sent ack",
+            session_id=session_id,
+            ack_for_sequence_number=receive_result.ack_payload.get("ack_for_sequence_number"),
+            ack_for_message_id=receive_result.ack_payload.get("ack_for_message_id"),
+            delivered_count=delivered_count,
+            duplicate=receive_result.duplicate,
+            buffered=receive_result.buffered,
+            pending_count=services.session_manager.count_pending_reliable_outbound(session_id),
+        )
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=True,
+            message_type=envelope.message_type,
+            response_payload=response_payload,
+            metadata={
+                "protocol_family": self.protocol_family,
+                "transport_name": context.transport_name,
+                "action": "physical_reliable_ack_sent",
+                "session_id": session_id,
+                "delivered_count": delivered_count,
+                "inner_action": last_inner_result.metadata.get("action") if last_inner_result else None,
+            },
+        )
+
+    async def _handle_physical_session_reliable_ack(
+        self,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        payload = _as_payload_dict(envelope)
+        session_id = _read_session_id(envelope)
+        ack_for_sequence = payload.get("ack_for_sequence_number")
+        ack_for_message_id = payload.get("ack_for_message_id")
+        if (
+            not session_id
+            or not isinstance(ack_for_sequence, int)
+            or not isinstance(ack_for_message_id, str)
+            or not ack_for_message_id
+        ):
+            services.log_service.warning(
+                "physical_session_reliable",
+                "received invalid reliable ack",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+            )
+            return self._build_invalid_result(envelope, "invalid_physical_reliable_ack")
+
+        self._refresh_session_remote_endpoint(
+            session_id=session_id,
+            services=services,
+            context=context,
+        )
+        acked = services.session_manager.mark_reliable_outbound_acked(
+            session_id=session_id,
+            sequence_number=ack_for_sequence,
+            reliable_message_id=ack_for_message_id,
+        )
+        services.session_manager.touch_session(session_id)
+        if acked is None:
+            services.log_service.warning(
+                "physical_session_reliable",
+                "received reliable ack without matching pending outbound message",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+            )
+        else:
+            services.log_service.info(
+                "physical_session_reliable",
+                "received physical reliable ack",
+                session_id=session_id,
+                ack_for_sequence_number=ack_for_sequence,
+                ack_for_message_id=ack_for_message_id,
+                attempts=acked.attempts,
+                pending_count=services.session_manager.count_pending_reliable_outbound(session_id),
+            )
+
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=True,
+            message_type=envelope.message_type,
+            metadata={
+                "protocol_family": self.protocol_family,
+                "transport_name": context.transport_name,
+                "action": "physical_reliable_ack_received",
+                "session_id": session_id,
+                "ack_matched": acked is not None,
             },
         )
 

@@ -55,6 +55,12 @@ class CoreConfig:
     route_pow_difficulty_bits: int = 16
     physical_session_keepalive_seconds: int = 45
     physical_session_runtime_interval_seconds: float = 2.0
+    physical_session_reliable_retry_after_seconds: float = 2.0
+    virtual_session_reliable_retry_fallback_seconds: float = 5.0
+    virtual_session_reliable_retry_rtt_multiplier: float = 2.0
+    virtual_session_reliable_retry_min_seconds: float = 2.0
+    virtual_session_reliable_retry_max_seconds: float = 30.0
+    session_reliable_max_attempts: int = 5
     physical_session_handshake_timeout_seconds: float = 15.0
     physical_session_handshake_poll_interval_seconds: float = 0.25
     physical_node_validation_runtime_interval_seconds: float = 3.0

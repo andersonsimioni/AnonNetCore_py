@@ -134,6 +134,15 @@ def build_smoke_plan(args: argparse.Namespace) -> list[SmokeSpec]:
             summary="AES-GCM-SIV roundtrip, integrity, nonce guard",
         )
     )
+    smokes.append(
+        SmokeSpec(
+            name="reliable-session",
+            level="00 session",
+            command=[python, "tests/integration/reliable_session_smoke.py"],
+            description="Reliable session sequencing, ACK cleanup, buffering, and deduplication.",
+            summary="sequence order, ACK, buffering, dedup",
+        )
+    )
 
     if not args.skip_dom:
         smokes.append(

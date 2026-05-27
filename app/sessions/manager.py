@@ -10,6 +10,13 @@ from .messages import (
     VirtualSessionMessageReply,
 )
 from .models import NetworkSession, SessionCreateInput, SessionStateUpdateInput, utc_now
+from .reliable import (
+    ReliableOutboundMessage,
+    ReliableReceiveResult,
+    ReliableSessionState,
+    build_reliable_outbound,
+    receive_reliable_payload,
+)
 
 
 class SessionManager:
@@ -19,6 +26,7 @@ class SessionManager:
         self._sessions_by_id: dict[int, NetworkSession] = {}
         self._sessions_by_session_id: dict[str, NetworkSession] = {}
         self._virtual_message_handlers: dict[str, VirtualSessionMessageHandler] = {}
+        self._reliable_states_by_session_id: dict[str, ReliableSessionState] = {}
         self._next_id = 1
 
     def register_virtual_message_handler(
@@ -143,7 +151,7 @@ class SessionManager:
                 remote_port=remote_port,
                 key_exchange_algorithm="ml-kem-768",
                 signature_algorithm="ml-dsa-65",
-                symmetric_algorithm="aes-256-cbc",
+                symmetric_algorithm="aes-256-gcm-siv",
                 hash_algorithm="sha512",
                 remote_public_key=remote_public_key,
                 keepalive_interval_seconds=keepalive_interval_seconds,
@@ -190,7 +198,7 @@ class SessionManager:
                 remote_port=remote_port,
                 key_exchange_algorithm="ml-kem-768",
                 signature_algorithm="ml-dsa-65",
-                symmetric_algorithm="aes-256-cbc",
+                symmetric_algorithm="aes-256-gcm-siv",
                 hash_algorithm="sha512",
                 remote_public_key=remote_public_key,
                 keepalive_interval_seconds=keepalive_interval_seconds,
@@ -222,7 +230,7 @@ class SessionManager:
                 session_state="pending",
                 key_exchange_algorithm="ml-kem-768",
                 signature_algorithm="ml-dsa-65",
-                symmetric_algorithm="aes-256-cbc",
+                symmetric_algorithm="aes-256-gcm-siv",
                 hash_algorithm="sha512",
                 remote_public_key=remote_public_key,
                 bound_route_id=bound_route_id,
@@ -263,7 +271,7 @@ class SessionManager:
                 session_state="pending",
                 key_exchange_algorithm="ml-kem-768",
                 signature_algorithm="ml-dsa-65",
-                symmetric_algorithm="aes-256-cbc",
+                symmetric_algorithm="aes-256-gcm-siv",
                 hash_algorithm="sha512",
                 remote_public_key=remote_public_key,
                 bound_route_id=bound_route_id,
@@ -546,10 +554,143 @@ class SessionManager:
             return False
 
         self._sessions_by_id.pop(session.id, None)
+        self._reliable_states_by_session_id.pop(session_id, None)
         return True
 
     def session_exists(self, session_id: str) -> bool:
         return session_id in self._sessions_by_session_id
+
+    def prepare_reliable_outbound(
+        self,
+        *,
+        session_id: str,
+        inner_message_type: str,
+        inner_payload: dict[str, object],
+        retry_after_seconds: float,
+        max_attempts: int,
+    ) -> ReliableOutboundMessage:
+        session = self.get_session_by_session_id(session_id)
+        if session is None:
+            raise ValueError("session_not_found_for_reliable_outbound")
+        state = self._get_reliable_state(session)
+        return build_reliable_outbound(
+            state,
+            inner_message_type=inner_message_type,
+            inner_payload=inner_payload,
+            retry_after_seconds=retry_after_seconds,
+            max_attempts=max_attempts,
+        )
+
+    def mark_reliable_outbound_sent(
+        self,
+        *,
+        session_id: str,
+        sequence_number: int,
+    ) -> ReliableOutboundMessage | None:
+        message = self._get_reliable_outbound(session_id, sequence_number)
+        if message is None or not message.pending:
+            return None
+        message.attempts += 1
+        message.last_sent_at = utc_now()
+        return message
+
+    def mark_reliable_outbound_acked(
+        self,
+        *,
+        session_id: str,
+        sequence_number: int,
+        reliable_message_id: str,
+    ) -> ReliableOutboundMessage | None:
+        message = self._get_reliable_outbound(session_id, sequence_number)
+        if message is None:
+            return None
+        if message.reliable_message_id != reliable_message_id:
+            return None
+        message.acked_at = utc_now()
+        state = self._reliable_states_by_session_id.get(session_id)
+        if state is not None:
+            state.outbound_by_sequence.pop(sequence_number, None)
+        return message
+
+    def receive_reliable_inbound(
+        self,
+        *,
+        session_id: str,
+        payload: dict[str, object],
+    ) -> ReliableReceiveResult:
+        session = self.get_session_by_session_id(session_id)
+        if session is None:
+            raise ValueError("session_not_found_for_reliable_inbound")
+        state = self._get_reliable_state(session)
+        return receive_reliable_payload(state, payload)
+
+    def list_due_reliable_outbound_messages(self) -> list[ReliableOutboundMessage]:
+        now = utc_now()
+        due_messages: list[ReliableOutboundMessage] = []
+        for message in self.list_pending_reliable_outbound_messages():
+            if message.attempts >= message.max_attempts:
+                message.failed_at = now
+                message.failure_reason = "max_attempts_exceeded"
+                continue
+            if message.due_for_send(now):
+                due_messages.append(message)
+        return sorted(
+            due_messages,
+            key=lambda message: (message.last_sent_at or message.created_at, message.sequence_number),
+        )
+
+    def list_pending_reliable_outbound_messages(self) -> list[ReliableOutboundMessage]:
+        pending_messages: list[ReliableOutboundMessage] = []
+        for state in self._reliable_states_by_session_id.values():
+            pending_messages.extend(
+                message
+                for message in state.outbound_by_sequence.values()
+                if message.pending
+            )
+        return sorted(
+            pending_messages,
+            key=lambda message: (message.last_sent_at or message.created_at, message.sequence_number),
+        )
+
+    def mark_reliable_outbound_failed(
+        self,
+        *,
+        session_id: str,
+        sequence_number: int,
+        reason: str,
+    ) -> ReliableOutboundMessage | None:
+        message = self._get_reliable_outbound(session_id, sequence_number)
+        if message is None or not message.pending:
+            return None
+        message.failed_at = utc_now()
+        message.failure_reason = reason
+        return message
+
+    def count_pending_reliable_outbound(self, session_id: str) -> int:
+        state = self._reliable_states_by_session_id.get(session_id)
+        if state is None:
+            return 0
+        return sum(1 for message in state.outbound_by_sequence.values() if message.pending)
+
+    def _get_reliable_state(self, session: NetworkSession) -> ReliableSessionState:
+        state = self._reliable_states_by_session_id.get(session.session_id)
+        if state is None:
+            state = ReliableSessionState(
+                session_id=session.session_id,
+                session_scope=session.session_scope,
+            )
+            self._reliable_states_by_session_id[session.session_id] = state
+        return state
+
+    def _get_reliable_outbound(
+        self,
+        session_id: str,
+        sequence_number: int,
+    ) -> ReliableOutboundMessage | None:
+        state = self._reliable_states_by_session_id.get(session_id)
+        if state is None:
+            return None
+        return state.outbound_by_sequence.get(sequence_number)
 
     @staticmethod
     def _build_keepalive_deadline(keepalive_interval_seconds: int) -> datetime:
