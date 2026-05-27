@@ -6,6 +6,7 @@ from .aes import (
     encrypt_text as aes_encrypt_text,
     generate_iv_hex,
     generate_key_hex,
+    generate_nonce_hex,
 )
 from .dilithium import DilithiumKeyPair, generate_key_pair as generate_dilithium_key_pair
 from .dilithium import sign_hex as dilithium_sign_hex, verify_hex as dilithium_verify_hex
@@ -27,6 +28,7 @@ __all__ = [
     "generate_iv_hex",
     "generate_dilithium_key_pair",
     "generate_key_hex",
+    "generate_nonce_hex",
     "generate_kyber_key_pair",
     "kyber_decapsulate_hex",
     "kyber_encapsulate_hex",

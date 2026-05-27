@@ -43,7 +43,7 @@ Internet publica.
 - IDs: SHA-512 da chave publica.
 - Assinatura: ML-DSA-65 via OpenSSL quando disponivel.
 - KEM: ML-KEM-768 via OpenSSL quando disponivel.
-- Cifra simetrica: AES-256-CBC.
+- Cifra simetrica: AES-256-GCM-SIV.
 - Testes de rede: processos locais e containers Docker.
 
 ## 4. Arquitetura

@@ -26,7 +26,6 @@
 \usepackage[a4paper,top=3.5cm,bottom=2.5cm,left=3cm,right=3cm]{geometry}
 \setlength{\parskip}{6pt}
 \setlength{\parindent}{1.27cm}
-\pagestyle{empty}
 
 % ----------------------------------------------------------------
 % Figuras, tabelas, links e legendas
@@ -54,6 +53,7 @@
 \setlength{\emergencystretch}{3em}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, fit, calc, shapes.geometric}
+\input{tikz_figures}
 
 % ----------------------------------------------------------------
 % Header & Footer
@@ -219,17 +219,17 @@ Despite these limitations, P2P networks remain a fundamental building block for 
 
 Network Address Translation (NAT) is widely used in modern networks to allow multiple devices to share a single public IP address. While NAT improves address utilization and provides a basic level of security by isolating internal networks, it introduces significant challenges for peer-to-peer (P2P) communication [5]. In particular, nodes behind NATs are typically not directly reachable from external networks, which hinders the establishment of direct end-to-end connections [5].
 
-Several techniques have been proposed to overcome NAT-related limitations. One of the most widely adopted approaches is the use of Session Traversal Utilities for NAT (STUN), which allows a node to discover its public-facing IP address and port as seen by external servers [5]. However, STUN alone is insufficient in more restrictive NAT scenarios, such as symmetric NATs [5].
+Several techniques have been proposed to overcome NAT-related limitations. One of the most widely adopted approaches is the use of Session Traversal Utilities for NAT (STUN), which allows a node to discover its public-facing IP address and port as seen by external servers [15]. However, STUN alone is insufficient in more restrictive NAT scenarios, since address discovery does not guarantee that an inbound path can be created for all NAT behaviors [15].
 
-Traversal Using Relays around NAT (TURN) addresses this limitation by relaying traffic through an intermediate server when direct communication cannot be established [5]. Although effective, TURN introduces additional latency and creates a degree of centralization, which may be undesirable in fully decentralized systems [5].
+Traversal Using Relays around NAT (TURN) addresses this limitation by relaying traffic through an intermediate server when direct communication cannot be established [16]. Although effective, TURN introduces additional latency and creates a degree of centralization, which may be undesirable in fully decentralized systems [16].
 
-Interactive Connectivity Establishment (ICE) combines multiple techniques, including STUN and TURN, to systematically discover the best possible communication path between peers [5]. ICE attempts direct connectivity first and falls back to relay-based communication when necessary, improving reliability in heterogeneous network environments [5].
+Interactive Connectivity Establishment (ICE) combines multiple techniques, including STUN and TURN, to systematically discover the best possible communication path between peers [17]. ICE attempts direct connectivity first and falls back to relay-based communication when necessary, improving reliability in heterogeneous network environments [17].
 
-Another widely used technique in P2P systems is UDP hole punching, which enables two peers behind NATs to establish direct communication by coordinating simultaneous outbound packets [5]. This approach is particularly effective in NAT types that preserve endpoint mappings and is commonly used in decentralized applications due to its low latency and reduced reliance on centralized infrastructure [5].
+Another widely used technique in P2P systems is UDP hole punching, which enables two peers behind NATs to establish direct communication by coordinating simultaneous outbound packets [5], [15], [17]. This approach is particularly effective in NAT types that preserve endpoint mappings and is commonly used in decentralized applications due to its low latency and reduced reliance on centralized infrastructure [5], [15].
 
-Recent advancements have also explored the use of modern transport protocols such as QUIC, which operates over UDP and integrates features such as connection migration and improved congestion control. These properties make QUIC a promising candidate for NAT traversal in dynamic network conditions, especially when combined with P2P overlay mechanisms [5].
+Recent advancements have also explored the use of modern transport protocols such as QUIC, which operates over UDP and integrates features such as connection migration and improved congestion control [18]. These properties make QUIC a promising candidate for NAT traversal in dynamic network conditions, especially when combined with P2P overlay mechanisms [18].
 
-Despite these techniques, NAT traversal remains a non-trivial challenge, particularly in large-scale decentralized networks with heterogeneous NAT behaviors [5]. In such scenarios, hybrid approaches combining direct communication, relay mechanisms, and overlay routing are often required to ensure connectivity among all peers [5]. These challenges directly motivate the development of more robust communication schemes in decentralized P2P systems [5].
+Despite these techniques, NAT traversal remains a non-trivial challenge, particularly in large-scale decentralized networks with heterogeneous NAT behaviors [15], [16], [17]. In such scenarios, hybrid approaches combining direct communication, relay mechanisms, and overlay routing are often required to ensure connectivity among all peers [15], [16], [17]. These challenges directly motivate the development of more robust communication schemes in decentralized P2P systems [5], [8].
 
 \subsection{Post-Quantum Cryptography}
 
@@ -430,13 +430,11 @@ Publications were excluded if they met any of the following conditions:
     \item Are books, theses, or non-scientific sources
 \end{itemize}
 
+Classical foundational works published before 2015 were not treated as primary studies in the systematic review. They were used as background references when necessary to explain established concepts such as DHTs, structured overlays, anonymous routing, and NAT traversal. This distinction preserves the temporal scope of the SLR while still allowing the theoretical background to cite foundational protocols and systems.
+
 \section{Selection Process (PRISMA)}
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/prisma.png}
-\caption{PRISMA}
-\end{figure}
+\thesisprismatikz
 
 The study selection process was conducted according to the PRISMA methodology, which is organized into four main stages: identification, screening, eligibility, and inclusion. First, the search strategy retrieved a total of 2581 records across the selected sources. After removing 5 duplicate records, 2576 unique studies remained for screening. Titles and abstracts were then examined, resulting in the exclusion of 2559 records. The remaining 17 studies were assessed through full-text reading for eligibility. After this final evaluation, 6 studies were considered aligned with the objectives and inclusion criteria of this systematic literature review and were therefore included in the final synthesis.
 
@@ -476,7 +474,7 @@ This structured approach enabled a consistent comparison across the selected stu
 
 Table~\ref{tab:comparison} summarizes the main characteristics of the selected works based on the defined criteria.
 
-\begin{table*}[h]
+\begin{table}[H]
 \centering
 \caption{Comparative Analysis of Selected Works}
 \label{tab:comparison}
@@ -562,7 +560,7 @@ No \\
 \end{tabular}
 }
 
-\end{table*}
+\end{table}
 
 \subsection{Discussion of Findings}
 
@@ -885,7 +883,7 @@ where \(title\) is a stable and immutable logical name within the namespace of t
 
 The immutability of \(title\) preserves lookup stability, since the DPT key is derived from \(pk_{vn\_owner}\) and \(title\). Changing this field would alter the key itself and create a different logical entry. Therefore, in the DPT, \(title\) should be treated as a persistent local identifier rather than as an editable presentation label.
 
-The object identified by \(target\_ref\) may contain the mutable state of the resource, such as version data, roles, permissions, predecessor references, or other application-level metadata. This keeps the DPT compact, while resource evolution is represented by the sequence of pointed state objects rather than by growth inside the pointer table itself.
+The object identified by \(target\_ref\) may contain the mutable state of the resource, such as version data, roles, permissions, predecessor references, or other application-level metadata. In the common mutable-resource case, \(target\_ref\) is a content reference that can be resolved through the DDT, although the architecture also allows it to represent another DHT-resolvable reference when required by a specific application. This keeps the DPT compact, while resource evolution is represented by the sequence of pointed state objects rather than by growth inside the pointer table itself.
 
 This design avoids placing long version histories in the indexing layer and provides a stable rendezvous point through which peers may follow a resource over time.
 
@@ -894,9 +892,9 @@ Pointer ownership is authenticated through the signing key associated with \(pk_
 
 \paragraph{Distributed Tag Table (DTT)}
 
-The \textit{Distributed Tag Table} (DTT) is the semantic discovery structure of the proposed architecture. Its role is to provide an efficient distributed entry point for locating resources through normalized tags or other application-level descriptors, without requiring the requester to know the exact content hash in advance.
+The \textit{Distributed Tag Table} (DTT) is the semantic discovery structure of the proposed architecture. Its role is to provide an efficient distributed entry point for locating resources through normalized tags or other application-level descriptors, without requiring the requester to know an exact content hash in advance.
 
-Conceptually, the DTT maps a normalized semantic token to a set of candidate logical resources associated with that descriptor. In simplified form, the structure may be represented as:
+Conceptually, the DTT maps a normalized semantic token to a set of candidate resource identifiers associated with that descriptor. A resource identifier may represent either a content hash, in the case of immutable content, or a DPT pointer key, in the case of mutable logical resources such as profiles, feeds, or application state. In simplified form, the structure may be represented as:
 
 \[
 H(\mathrm{tag}) \mapsto
@@ -905,10 +903,11 @@ H(\mathrm{tag}) \mapsto
 \left[
 \left\{
 \begin{aligned}
-&\mathrm{resource\_id},\\
-&\mathrm{pk\_virtual\_node},\\
-&\mathrm{expires\_at},\\
-&\mathrm{signature}
+&\mathrm{resource\_id}: \mathrm{str},\\
+&\mathrm{resource\_kind}: \mathrm{str},\\
+&\mathrm{pk\_virtual\_node}: \mathrm{str},\\
+&\mathrm{expires\_at}: \mathrm{str},\\
+&\mathrm{signature}: \mathrm{str}
 \end{aligned}
 \right\},
 \ldots
@@ -916,11 +915,11 @@ H(\mathrm{tag}) \mapsto
 \right\}
 \]
 
-where \(tag\) represents a normalized semantic label, and each returned \(resource\_id\) identifies a logical resource that has previously been associated with that tag.
+where \(tag\) represents a normalized semantic label, \(resource\_id\) identifies a candidate resource associated with that label, and \(resource\_kind\) indicates how the identifier should be resolved. For immutable objects, \(resource\_id\) may be a content hash later resolved through the DDT. For mutable resources, \(resource\_id\) may be a DPT key that first resolves to the current state reference and only then proceeds to DDT-based holder discovery.
 
-The main purpose of the DTT is to separate semantic lookup from storage resolution. Instead of overloading the storage layer with human-readable names, profile identifiers, post descriptors, or other mutable application metadata, the architecture delegates this first discovery stage to the DTT. In this way, peers may perform searches based on semantics, while the lower layers remain focused on content-addressed retrieval and routing.
+The main purpose of the DTT is to separate semantic lookup from storage resolution. Instead of overloading the storage layer with human-readable names, profile identifiers, post descriptors, or other mutable application metadata, the architecture delegates this first discovery stage to the DTT. In this way, peers may perform searches based on semantics, while the lower layers remain focused on pointer resolution, content-addressed retrieval, holder discovery, and routing.
 
-When a query contains multiple tags, the requester may combine the returned result sets using policies such as intersection, union, ranking, or partial matching, depending on the needs of the application layer. The DTT itself does not need to interpret the semantic meaning of the query beyond maintaining the distributed association between normalized tags and candidate resources.
+When a query contains multiple tags, the requester may combine the returned result sets using policies such as intersection, union, ranking, or partial matching, depending on the needs of the application layer. The DTT itself does not need to interpret the semantic meaning of the query beyond maintaining the distributed association between normalized tags and candidate resources. It also does not store content and does not directly resolve providers; provider discovery remains the responsibility of the DDT after the candidate resource has been resolved to a concrete content reference.
 
 \paragraph{Distributed Data Table (DDT)}
 
@@ -950,7 +949,7 @@ H(\mathrm{content}) \mapsto
 \right\}
 \]
 
-where \(H(content)\) is the cryptographic identifier of the exact byte sequence of the object combined with the metadata, \(type\) describes the class of the stored object, and each tuple in \(holders\) identifies a virtual node currently advertising possession of that object together with its associated expiration information.
+where \(H(content)\) is the cryptographic identifier of the exact byte sequence of the published content object. Metadata such as \(title\), \(type\), \(tags\), and holder information is stored as associated signed record data and is not part of the content hash unless it is explicitly encoded inside the content object itself. The \(type\) field describes the class of the stored object, and each tuple in \(holders\) identifies a virtual node currently advertising possession of that object together with its associated expiration information.
 
 \paragraph{Distributed Route Table (DRT)}
 
@@ -1016,11 +1015,7 @@ where \(H(pk_{physical\_node})\) identifies the physical node, \(endpoints[]\) c
 
 \subsection{Layered Architecture}
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/layers.png}
-\caption{Overview of proposed architecture}
-\end{figure}
+\thesislayerstikz
 
 Although the proposed system is defined as a modular architecture, its internal organization is described through a layered structure. Modularity refers to the separation of the system into distinct components that may evolve or be replaced independently, while layering provides a clearer structural view of how these components interact across different levels of abstraction. In this work, the layered organization is adopted to separate physical connectivity concerns, overlay coordination mechanisms, reusable service abstractions, and application-level functionalities.
 
@@ -1114,11 +1109,7 @@ Overall, the Peer Management component provides the architectural basis for repr
 
 \subsubsection{Connection Management}
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/conn_man.png}
-\caption{Connection Management}
-\end{figure}
+\thesisconnectiontikz
 
 The Connection Management component is responsible for establishing and maintaining transport-level communication between physical nodes [5], [8]. In the proposed architecture, this module acts as an abstraction layer over the underlying connection mechanisms, allowing the overlay to operate independently from any specific transport technology [5], [8].
 
@@ -1156,15 +1147,13 @@ Overall, the Connection Management component provides a modular and extensible t
 
 \subsubsection{Routing Mechanism}
 
-The Routing Mechanism is responsible for enabling message delivery across the overlay without requiring global knowledge of the network topology [1], [2], [3], [8], [9]. In the proposed architecture, routing is designed to prioritize anonymity over path optimality, ensuring that intermediate peers are unable to infer the full origin-destination relation of a communication [6], [9], [10].
+The Routing Mechanism is responsible for enabling message delivery across the overlay without requiring global knowledge of the network topology [1], [2], [3], [8], [9]. In the proposed architecture, routing is identity-oriented and privacy-oriented: messages are routed toward virtual identities, while intermediate physical nodes should not learn the complete origin-destination relation of a communication [6], [9], [10].
 
-Routing begins with a lookup in the Distributed Routing Table (DRT), whose role is limited to indirect resolution of logical destinations [1], [2], [3], [8]. More specifically, the DRT maps the identifier of a virtual node, represented as $H(pk_{virtual\_node})$, to a set of candidate physical entry points capable of leading traffic toward that destination [5], [8], [9]. Thus, the DRT does not store full end-to-end routes, nor does it define the complete hop-by-hop forwarding process. Instead, it only provides the initial physical nodes through which a route may begin [5], [8], [9].
+Two operational phases must be distinguished. The first phase is \textit{route construction and publication}, in which a virtual node obtains one or more inbound route entries and publishes the corresponding reachability information in the Distributed Routing Table (DRT). The second phase is \textit{route resolution and execution}, in which another peer queries the DRT, selects one of the available entry points, and sends traffic through the already established route state. This distinction avoids treating the DRT as a table of complete end-to-end paths. The DRT stores candidate entry points and authorization metadata, while the actual forwarding state remains local to the physical nodes participating in each route [5], [8], [9].
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/drt.png}
-\caption{DRT}
-\end{figure}
+Routing resolution begins with a lookup in the DRT. More specifically, the DRT maps the identifier of a virtual node, represented as $H(pk_{virtual\_node})$, to a set of candidate physical entry points capable of receiving traffic toward that virtual destination [5], [8], [9]. Thus, the DRT does not store full hop sequences, nor does it prescribe the algorithm used to construct them. It only exposes the distributed information needed for a requester to start communication toward a reachable virtual identity [5], [8], [9].
+
+\thesisdrttikz
 
 Formally, the DRT may contain records of the form
 \[
@@ -1172,44 +1161,29 @@ H(pk_{virtual\_node}) \rightarrow \{H(pk_{physical\_node}^{(1)}), H(pk_{physical
 \]
 where the listed physical nodes are entry points authorized to receive traffic destined to the corresponding virtual identity [5], [9]. This preserves the indirect relation between virtual and physical entities, since the network never exposes an explicit and permanent binding between them [9], [10].
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/hop_by_hop.png}
-\caption{Route construction}
-\end{figure}
+\thesisroutestrategyconstructiontikz
 
-In a TTL-based route construction strategy, once one of these entry points is selected,
-the sender constructs a route by choosing an initial physical node, a final physical
-node, a unique route identifier (\textit{path\_id}), a route expiration interval, and a
-time budget represented as a TTL in milliseconds [6], [9], [10].
+\thesishopbyhoptikz
 
-The sender then estimates the communication delay to the
-first hop and forwards a route creation request containing the encrypted
-virtual-destination information, the final physical node, the chosen \textit{path\_id}, and
-the remaining TTL after subtracting the estimated cost of the current hop [6], [9].
-In this process, the virtual-destination information remains protected along the path,
-so that intermediate forwarding peers handle the \textit{path\_id} only as an opaque routing
-reference and cannot associate it with the target virtual node. Only the final physical
-node designated as the entry point is able to resolve the received route information and
-determine which virtual node is associated with that path.
+Route construction is performed hop by hop. A route creation request starts from a physical node acting on behalf of a virtual node and is progressively forwarded through intermediate physical nodes until a final physical node is selected as the entry point for that virtual identity. During this process, the route protocol defines the invariant lifecycle of the route, while the route strategy defines how each next hop is selected. Therefore, the architecture is not fixed to a single TTL-based algorithm. TTL is the temporal budget used by the current MVP strategy, not a mandatory property of all possible route strategies.
 
-At each intermediate hop, the route is extended locally without revealing the complete route structure [9], [10]. Each node only knows the previous hop and the next hop to which the route must be forwarded [9], [10]. To further reduce linkability, each node remaps the received \textit{path\_id} into a new local identifier before forwarding the route creation request. As a result, the same route is not represented by a single stable identifier from origin to destination. Instead, the route is translated hop by hop through local tables, so that intermediate nodes cannot associate the original identifier with the final virtual destination [9], [10].
+Figure~\ref{fig:ttl-route-strategy-example} illustrates the TTL-based strategy as one concrete example of this model. In the current MVP strategy, named \texttt{random\_walk\_ttl}, the route creation request carries a remaining time budget represented as a TTL in milliseconds [6], [9], [10]. Each forwarding step estimates or observes the cost of the current hop, subtracts that cost from the remaining budget, and forwards the route creation request only while the budget remains valid. Other strategies may replace this termination rule with a maximum hop counter, latency threshold, bandwidth requirement, reliability score, diversity constraint, or onion-like preselected path without changing the general route execution model.
 
-A particularly important property of this mechanism appears at the final stage of route establishment. The last intermediate node does not learn the virtual destination itself; it only learns that the route must be forwarded to the designated final physical node [9], [10]. Only this final physical node is capable of resolving the route toward the intended virtual node. Consequently, even the final intermediate relay cannot determine which virtual identity is actually being reached, which strengthens the anonymity properties of the architecture [9], [10].
+At each intermediate hop, the route is extended locally without revealing the complete route structure [9], [10]. Each node only knows the previous hop and the next hop to which the route must be forwarded [9], [10]. To reduce linkability, each node remaps the received \textit{path\_id} into a new local identifier before forwarding the route creation request. As a result, the same route is not represented by a single stable identifier from origin to destination. Instead, the route is translated hop by hop through local tables, so that intermediate nodes cannot associate the original identifier with the final virtual destination [9], [10].
+
+A particularly important property of this mechanism appears at the final stage of route establishment. The last intermediate node does not learn the virtual destination itself; it only learns that the route must be forwarded to the designated final physical node [9], [10]. Only this final physical node is capable of resolving the route toward the intended virtual node and publishing the corresponding authorized DRT entry. Consequently, even the final intermediate relay cannot determine which virtual identity is actually being reached, which strengthens the anonymity properties of the architecture [9], [10].
 
 After route establishment, message forwarding becomes a purely local operation [1], [2], [3], [9]. Each node maintains local routing state that associates a received \textit{path\_id} with the next forwarding action. Therefore, the forwarding decision is always local, and no node is required to know the complete route. In this model, a node typically knows only the next hop associated with a given local identifier, rather than multiple candidates or a complete end-to-end path [9], [10].
 
-The proposed routing strategy is identity-oriented, that is, it is primarily designed to deliver messages toward virtual identities represented by $H(pk_{virtual\_node})$ [5], [9]. Routing for files or other persistent data objects is treated separately through another distributed structure [8]. In the case of stored files, the corresponding storage DHT is expected to return the ephemeral virtual nodes responsible for storing that content, after which routing can proceed toward those virtual identities using the same overlay forwarding principles [8], [10].
+The proposed routing strategy is identity-oriented, that is, it is primarily designed to deliver messages toward virtual identities represented by $H(pk_{virtual\_node})$ [5], [9]. Routing for files or other persistent data objects is treated separately through the DDT and DPT/DTT discovery structures [8]. In the case of stored files, the corresponding storage lookup is expected to return the virtual nodes responsible for serving that content, after which routing proceeds toward those virtual identities using the same overlay forwarding principles [8], [10].
 
-To prevent indefinite circulation of traffic, the architecture currently relies on TTL-based expiration [7], [8], [10]. Each route creation and forwarding process is bounded by a finite time budget, and packets or route fragments that exceed this bound are discarded. At the current stage of the design, this TTL mechanism is the primary loop-limiting strategy. Additional message-cache mechanisms may be incorporated in the future, and local caches with temporal expiration are left open as an architectural extension, but they are not mandatory for the current proposal [7], [8].
+To prevent indefinite circulation of route-construction traffic, the MVP relies on the TTL rule of the \texttt{random\_walk\_ttl} strategy [7], [8], [10]. This is a strategy-specific loop-limiting mechanism rather than a universal constraint of the architecture. In addition, the implementation may maintain local \texttt{seen\_hash} records as a best-effort mechanism to avoid repeated processing of already observed packets, messages, or objects. Future strategies may combine temporal expiration, hop counters, message identifiers, route sequence numbers, and cache-based deduplication.
 
-The routing mechanism does not attempt to always select the fastest possible path. On the contrary, the preferred strategy is to make correlation harder by avoiding overly direct or predictable routes whenever anonymity would benefit from additional indirection [6], [9], [10]. In this sense, routing is intentionally biased toward privacy preservation. Nevertheless, the architecture allows future policies in which users may explicitly choose to favor faster routes when they are willing to accept a lower anonymity margin [6].
+The routing mechanism does not attempt to always select the fastest possible path. On the contrary, privacy-oriented strategies may intentionally avoid overly direct or predictable routes whenever anonymity would benefit from additional indirection [6], [9], [10]. Nevertheless, the architecture allows other policies in which users or applications explicitly choose to favor faster, more stable, or higher-bandwidth routes when they are willing to accept a lower anonymity margin [6].
 
 If a route fails during operation, the current design does not attempt automatic mid-route repair. Instead, the route is considered interrupted, and failure is indirectly observed through timeout [5], [8]. Local caches may record such failures for future decisions, but route failure does not directly invalidate DRT entries, since the DRT only stores entry-point resolution information rather than the operational state of every hop in a previously constructed route [5], [8].
 
-The DRT itself is distributed across the network, although peers may cache previously resolved routes or destination information locally in order to reduce repeated lookup overhead [1], [2], [3], [8]. DRT records may include metadata such as destination identifier, candidate entry points, validity interval, route expiration, latency-related estimates, and auxiliary policy fields. These records are also signed in order to reduce the risk of poisoning or falsification [5], [9]. In the current design, publication of DRT entries is restricted to authorized entry points, with authorization being derived from signatures issued by the corresponding virtual node to the designated final physical node [9].
-
-Overall, the Routing Mechanism combines indirect destination resolution through the DRT with local hop-by-hop forwarding based on remapped route identifiers [5], [8], [9], [10]. This allows the overlay to deliver messages without global topology awareness, without explicit exposure of virtual-to-physical bindings, and without resorting to classical flooding [7], [8], [9]. As a result, the routing model remains compatible with the modular, decentralized, and anonymity-oriented goals of the proposed architecture [5], [8], [9], [10].
+Overall, the Routing Mechanism combines indirect destination resolution through the DRT with local hop-by-hop forwarding based on remapped route identifiers [5], [8], [9], [10]. The stable part of the mechanism is the route lifecycle, authorization, publication, local \textit{path\_id} mapping, and \texttt{ROUTE\_DATA} execution. The modular part is the route strategy used to select hops and define termination conditions. This allows the overlay to deliver messages without global topology awareness, without explicit exposure of virtual-to-physical bindings, and without resorting to classical flooding [7], [8], [9].
 
 \subsubsection{Route Strategy Abstraction}
 \label{subsubsec:route-strategy-abstraction}
@@ -1232,8 +1206,8 @@ This distinction can be represented conceptually as follows:
 route\_construction = route\_lifecycle + route\_strategy
 \]
 
-where the route lifecycle defines the abstract process of creating, validating, using,
-and expiring a route, while the route strategy defines the path-selection policy applied
+where the route lifecycle defines the abstract process of creating, validating, publishing, using,
+and expiring a route, while the route strategy defines the path-selection policy and termination condition applied
 during construction.
 
 The main advantage of this abstraction is architectural extensibility. A decentralized
@@ -1243,15 +1217,17 @@ large content transfer may require a route with higher bandwidth and greater
 stability. Similarly, privacy-sensitive communication may prefer routes that are less
 direct and harder to correlate, even if they introduce additional delay [6], [9], [10].
 
-Therefore, rather than defining routing as a fixed algorithm, the proposed architecture
+Therefore, rather than defining routing as a fixed TTL algorithm, the proposed architecture
 treats routing as a family of possible strategies that share the same conceptual route
-layer. This allows the overlay to evolve without requiring the entire routing model to
+layer. A TTL-based random walk is only one concrete policy. Other policies may use hop counters,
+latency measurements, bandwidth constraints, reliability metrics, network diversity, or onion-like preselected paths.
+This allows the overlay to evolve without requiring the entire routing model to
 be redesigned whenever a new path-selection policy is introduced.
 
 Table~\ref{tab:route-strategy-abstraction} summarizes examples of route strategies
 that may be supported by the architecture.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \caption{Examples of route strategies supported by the architectural model.}
 \label{tab:route-strategy-abstraction}
@@ -1352,11 +1328,7 @@ communication.
 \subsubsection{Discovery Module}
 
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/peer_discovery.png}
-\caption{Peer discovery}
-\end{figure}
+\thesispeerdiscoverytikz
 
 
 The Discovery Module is responsible for learning reachable physical peers in the classical network layer [5], [8]. Its purpose is not to resolve virtual identities or routing paths, but rather to progressively expand the local knowledge of physical participants that may later be used by other components of the architecture [5], [8], [10].
@@ -1417,7 +1389,7 @@ For session establishment, the module adopts an authenticated key exchange proce
 
 The cryptographic handshake is defined independently of the underlying transport mechanism [5], [9], [13], [14]. As a result, the same logical procedure can be executed over direct UDP, direct TCP, direct IPv6, hole punching, or relay-assisted communication [5]. This transport-agnostic design ensures that changes in connectivity method do not alter the cryptographic semantics of session establishment, authentication, or key renewal [5], [9]. Relay nodes may forward encrypted traffic when direct connectivity is unavailable, but they must not obtain access to plaintext content or to the hidden association between physical and virtual identities [5], [9], [10].
 
-In the current validation scenario, the module is instantiated with ML-DSA, derived from the CRYSTALS-Dilithium signature scheme, for digital signatures; ML-KEM, standardized from CRYSTALS-Kyber, for dynamic key exchange; AES-256-CBC for symmetric session encryption; and SHA-512 for hashing [13], [14], [26]. These primitives are adopted as a concrete proof-of-concept configuration rather than as immutable architectural constraints. The design remains intentionally open to future substitution of algorithms, although the present architecture assumes a fixed cryptographic suite shared by all participants [13], [14], [26].
+In the current validation scenario, the module is instantiated with ML-DSA, derived from the CRYSTALS-Dilithium signature scheme, for digital signatures; ML-KEM, standardized from CRYSTALS-Kyber, for dynamic key exchange; AES-256-GCM-SIV for authenticated symmetric session encryption; and SHA-512 for hashing [13], [14], [26], [27]. These primitives are adopted as a concrete proof-of-concept configuration rather than as immutable architectural constraints. The design remains intentionally open to future substitution of algorithms, although the present architecture assumes a fixed cryptographic suite shared by all participants [13], [14], [26], [27].
 
 Hashing functions are used to derive stable identifiers for overlay structures and published objects, including lookups such as \(H(pk\_virtual\_node)\) and content-based references in the distributed storage layer [1], [2], [3], [8], [9]. Digital signatures are required not only during session establishment, but also for the authenticity of control-plane records [9], [13], [14]. In particular, DRT entries must be signed by authorized entry points using the physical node key, while DDT records must also include cryptographic authentication [9]. In the case of stored content, confidentiality is preserved through end-to-end encryption, ensuring that the distributed storage substrate does not expose application data in plaintext [10], [13], [14].
 
@@ -1432,11 +1404,7 @@ The Storage Management component is responsible for the persistence of applicati
 In the proposed architecture, only application data is handled by the storage layer. Content is identified exclusively by its hash, which acts as the canonical reference for publication, lookup, verification, and replication [8]. As a consequence, stored objects are immutable from the perspective of the overlay: any modification to the content produces a distinct hash and therefore requires the creation of a new record in the distributed storage structure [8].
 
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/ddt.png}
-\caption{DDT}
-\end{figure}
+\thesisddttikz
 
 
 The DDT does not store the content itself. Instead, it maintains references to the ephemeral virtual nodes that currently store a given object [8], [10]. This decision avoids binding storage state to physical nodes and reduces direct exposure of network-level infrastructure [9], [10]. Since ephemeral virtual nodes are used as storage references, the system can support persistence while making it harder to infer which physical hosts are responsible for maintaining specific data [9], [10].
@@ -1447,11 +1415,7 @@ Only virtual nodes may act as storage participants. Physical nodes do not appear
 
 All content is encrypted before being propagated through the overlay [10], [13], [14]. However, peers that store a given object may still possess the ability to read it, depending on the application-level access model under which that content is shared. Therefore, the storage layer guarantees protected transport and distributed persistence, but does not assume that every stored object must remain opaque to every storing node [10], [13], [14].
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/ephemeral_vns.png}
-\caption{Ephemeral Virtual Nodes}
-\end{figure}
+\thesisephemeraltikz
 
 The DDT records only which ephemeral virtual nodes currently store a content object identified by its hash. It does not reveal which node originally published the data [8], [10]. This separation is intentional: the publication event and the storage state must remain unlinkable at the distributed record level, so that long-term observation of DDT entries does not directly expose content origin [9], [10].
 
@@ -1625,11 +1589,11 @@ The architecture also explicitly separates network-level and application-level i
 
 \subsubsection{Encryption Mechanisms}
 
-After session establishment, all traffic exchanged between peers is encrypted using a symmetric session key [9], [13], [14]. This symmetric protection is the default rule for post-handshake communication and is responsible for providing confidentiality, integrity, and authenticity for hop-to-hop traffic [9], [13], [14]. Since the session key is derived from authenticated ephemeral key exchange material, session-level encryption also inherits authentication guarantees from the identity verification performed during the handshake [9], [13], [14].
+After session establishment, all traffic exchanged between peers is encrypted using a symmetric session key [9], [13], [14]. In the current proof of concept, the selected symmetric primitive is AES-256-GCM-SIV, an authenticated-encryption mode with nonce-misuse resistance [27]. This means that post-handshake traffic protection is modeled as an AEAD channel rather than as unauthenticated encryption, providing confidentiality, integrity, and authenticity for protected traffic within the scope of the established session [9], [13], [14], [27]. Since the session key is derived from authenticated ephemeral key exchange material, session-level encryption also inherits authentication guarantees from the identity verification performed during the handshake [9], [13], [14].
 
 The architecture adopts a dual protection strategy for messages and stored content [10], [13], [14]. First, a symmetric session key protects communication between peers participating in a given exchange [9], [13], [14]. Second, message payloads and private data may also be protected with an additional encryption layer associated with the final recipient or the protected content itself [10], [13], [14]. This ensures that intermediate nodes only process the minimum information necessary for forwarding, without gaining access to useful plaintext content [9], [10].
 
-For the current version of the architecture, the symmetric encryption mechanism is fixed rather than negotiated dynamically [13], [14]. This choice simplifies implementation and evaluation while still preserving the possibility of future modular evolution. Furthermore, the architecture is designed to support forward secrecy, so that the later compromise of a long-term identity key does not automatically expose previously established sessions [9], [13], [14].
+For the current version of the architecture, the symmetric encryption mechanism is fixed to AES-256-GCM-SIV rather than negotiated dynamically [13], [14], [27]. This choice simplifies implementation and evaluation while still preserving the possibility of future modular evolution. Future versions may introduce negotiation between multiple AEAD algorithms if interoperability requirements justify it. Furthermore, the architecture is designed to support forward secrecy, so that the later compromise of a long-term identity key does not automatically expose previously established sessions [9], [13], [14].
 
 Only security-sensitive protocol elements are signed directly [9], [13], [14]. In practice, signatures are mainly used for critical control artifacts, especially the ephemeral public keys employed in session establishment. Continuous traffic protection is then delegated to the authenticated symmetric channel derived from that signed exchange [9], [13], [14].
 
@@ -1934,37 +1898,35 @@ Cache management may also follow local expiration policies when enabled by the n
 
 \subsubsection{Content Discovery and Resolution Model}
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/dtt.png}
-\caption{DTT}
-\end{figure}
+\thesisdtttikz
 
-In the proposed architecture, content discovery is performed through a lightweight two-stage resolution process that connects semantic discovery to current content availability [8], [10]. Rather than depending on a single distributed structure for both search and storage resolution, the system adopts two complementary distributed tables: the Distributed Tag Table (DTT) and the Distributed Data Table (DDT) [8].
+In the proposed architecture, content and application-state discovery are performed through a lightweight resolution process that connects semantic discovery to the appropriate lower-level table [8], [10]. Rather than depending on a single distributed structure for search, mutability, and storage availability, the system separates these responsibilities among the Distributed Tag Table (DTT), the Distributed Pointer Table (DPT), and the Distributed Data Table (DDT) [8].
 
-The purpose of this organization is to preserve low lookup cost while still supporting semantic search and distributed storage [8]. In this model, the DTT is responsible for semantic filtering, whereas the DDT resolves candidate content objects into lightweight descriptors and currently available storage holders [8], [10].
+The purpose of this organization is to preserve low lookup cost while still supporting semantic search, mutable logical resources, and content-addressed retrieval [8]. In this model, the DTT is responsible for semantic filtering, the DPT is responsible for stable mutable pointers, and the DDT is responsible for resolving immutable content hashes into currently available holders [8], [10].
 
-First, the \textit{Distributed Tag Table} (DTT) acts as the semantic entry point for content search. It maps normalized tags directly to sets of candidate content hashes, allowing a peer to discover content objects through tag-based queries [8]. Conceptually, the structure may be represented as:
+The \textit{Distributed Tag Table} (DTT) acts as the semantic entry point for search. It maps normalized tags to candidate resource identifiers, not directly to providers. Conceptually, the structure may be represented as:
 
 \[
-H(tag) \rightarrow \{H(content_1), H(content_2), \dots\}
+H(tag) \rightarrow \{resource\_id_1, resource\_id_2, \dots\}
 \]
 
-When a query contains multiple tags, the requester may combine the returned sets through intersection or partial matching policies. As a result, the DTT provides an efficient and lightweight mechanism for semantic filtering without requiring full-text indexing or expensive query processing [8].
+Each returned \(resource\_id\) is interpreted according to its associated resource kind. If the resource represents immutable content, the identifier may already be \(H(content)\), and the requester can resolve it directly through the DDT. If the resource represents a mutable logical object, such as a profile, feed, collection, or application state, the identifier may be a DPT key, and the requester must first resolve the pointer in the DPT to obtain the current \(target\_ref\).
 
-Second, the \textit{Distributed Data Table} (DDT) resolves each discovered content hash into a lightweight content descriptor together with the set of virtual storage nodes that currently advertise possession of that object [8], [10]. In the current design, the DDT therefore stores both the minimal metadata required to identify the object in search results and the references needed for later retrieval.
+The \textit{Distributed Pointer Table} (DPT) provides this stable indirection layer for mutable resources. A DPT record maps an owner-scoped pointer key to the current content reference that represents the latest known state of that logical resource. Therefore, mutable application objects evolve by updating signed pointers toward new immutable state objects, rather than by mutating the stored content object itself.
 
-This allows the system to present human-readable search results, validate tag associations, and immediately obtain the currently available holders of the content through a single distributed lookup [8], [10].
+The \textit{Distributed Data Table} (DDT) resolves each content hash into a lightweight descriptor together with the set of virtual storage nodes that currently advertise possession of that object [8], [10]. The DDT does not store the object bytes. It stores availability metadata and holder references, allowing the requester to later route toward one of the advertised ephemeral virtual nodes and retrieve the object [8], [10].
 
-From that point onward, the requester may use the normal routing mechanisms of the overlay to reach one of the available storage virtual nodes and retrieve the desired object [8], [10].
-
-Overall, the complete discovery cycle can therefore be summarized as:
+From that point onward, the requester may use the normal routing mechanisms of the overlay to reach one of the available storage virtual nodes and retrieve the desired object [8], [10]. Thus, the discovery cycle may follow either a direct immutable-content path or a mutable-resource path:
 
 \[
 DTT \rightarrow DDT
 \]
 
-That is, the DTT determines which content hashes are associated with the requested tags, and the DDT resolves those hashes into both lightweight content descriptors and the currently available storage holders [8], [10]. This decomposition keeps the discovery process computationally lightweight while preserving semantic search and distributed retrieval within the storage layer [8].
+\[
+DTT \rightarrow DPT \rightarrow DDT
+\]
+
+The first path is used when semantic discovery directly returns content hashes. The second path is used when semantic discovery returns stable logical pointers whose current target must be resolved before content retrieval. This decomposition keeps the discovery process computationally lightweight while preserving semantic search, mutable application state, and distributed content retrieval within the same architectural model [8].
 
 
 \subsection{Resilience and Fault Tolerance}
@@ -2078,16 +2040,17 @@ Departure does not directly delete published content. Instead, it reduces availa
 
 \subsubsection{Data Lookup Process}
 
-The lookup workflow may begin either from application-level semantics or from a known content hash. When semantic discovery is required, the requester first queries the Distributed Tag Table (DTT), which maps normalized tags or higher-level descriptors to candidate manifest identifiers. From the selected manifest, the requester obtains the corresponding content reference and proceeds with content-addressed resolution. If the hash of the desired object is already known, the process may start directly from \(H(content)\) [8], [10]. At the storage and network level, however, actual object retrieval remains content-addressed.
+The lookup workflow may begin either from application-level semantics or from a known content hash. If the requester already knows \(H(content)\), it may query the DDT directly [8], [10]. If semantic discovery is required, the requester first queries the Distributed Tag Table (DTT), which maps normalized tags or higher-level descriptors to candidate resource identifiers. These identifiers are not interpreted as providers. They are interpreted as references that must be resolved according to their type.
 
-The lookup process may begin in two different ways, depending on whether the requester already knows the hash of the desired content object. If \(H(content)\) is already known, the requester may query the DDT directly [8], [10]. Otherwise, the requester may first perform an optional semantic lookup through the DTT, using normalized tags or other higher-level descriptors in order to obtain candidate manifest identifiers and, from them, the corresponding content reference.
+When the DTT returns a content identifier, the requester proceeds directly to the DDT using \(H(content)\) [8], [10]. When the DTT returns a pointer identifier, the requester first queries the DPT to obtain the current signed \(target\_ref\). If this target reference identifies an immutable content object, the requester then proceeds to the DDT. This avoids introducing a separate manifest table while still allowing semantic search to reach mutable application resources through stable pointer records.
 
 Once the content hash has been obtained, the first storage-level step is a query to the DDT using \(H(content)\) [8], [10]. The DDT returns a list of ephemeral virtual nodes that currently advertise possession of the requested object, together with their associated expiration information [8], [10]. These virtual nodes are not sufficient on their own to begin transfer, since the requester still needs to discover how to reach the chosen provider. For that reason, the requester next selects one of the returned virtual nodes, typically at random in order to respect load balancing, and queries the DRT to obtain route information or entry points for that specific ephemeral virtual node [5], [8], [10].
 
 The complete lookup process therefore follows a sequential logic:
 \begin{enumerate}
-    \item optionally query the DTT when the content hash is not yet known;
-    \item obtain \(H(content)\);
+    \item start from a known \(H(content)\) or optionally query the DTT when semantic discovery is needed;
+    \item if the DTT returns a DPT pointer key, resolve it through the DPT and obtain the current \(target\_ref\);
+    \item obtain the final \(H(content)\) reference;
     \item query the DDT using that hash;
     \item receive a list of ephemeral virtual nodes that advertise the object;
     \item choose one candidate virtual node, preferably in a load-balanced manner;
@@ -2102,15 +2065,11 @@ Once a valid provider is reached, the requester may retrieve either the entire c
 
 For private content, the lookup process itself remains the same. The only difference is that the retrieved data carries an additional encryption layer, and only peers possessing the appropriate decryption key can recover the plaintext [10], [13], [14]. Thus, the storage and discovery workflow is identical for public and private content, while confidentiality is enforced cryptographically at the content level [10], [13], [14].
 
-After a successful download, the requester becomes a new potential provider of that content [8], [10]. In the normal case, the node keeps the downloaded object locally, creates a fresh ephemeral virtual node associated with serving that content, and publishes a new advertisement in the DDT [8], [10]. This process continues until the node removes the object from local storage, which operationally means that it has stopped consuming and serving that content. In this way, lookup and replication are directly connected: consuming an object naturally produces new serving capacity for the same object [8], [10]. Additionally, both DDT and DRT query results may be cached locally so that future lookups can avoid unnecessary repeated load on the network [8].
+After a successful download, the requester becomes a new potential provider of that content [8], [10]. In the normal case, the node keeps the downloaded object locally, creates a fresh ephemeral virtual node associated with serving that content, and publishes a new advertisement in the DDT [8], [10]. This process continues until the node removes the object from local storage, which operationally means that it has stopped consuming and serving that content. In this way, lookup and replication are directly connected: consuming an object naturally produces new serving capacity for the same object [8], [10]. Additionally, DDT, DPT, and DRT query results may be cached locally so that future lookups can avoid unnecessary repeated load on the network [8].
 
 \subsubsection{Message Routing Process}
 
-\begin{figure}[H]
-\centering
-\thesisfiguregraphic{img/delivery.png}
-\caption{Routing}
-\end{figure}
+\thesisdeliverytikz
 
 Message routing is the most central operational workflow of the proposed architecture, since it concentrates the main mechanisms used to preserve destination obfuscation and decentralized communication [9], [10]. Messages and data transfers follow the same general discovery principle, in the sense that both rely on DRT-published routes toward virtual nodes [5], [8], [9]. The key difference is that ordinary message exchange typically involves long-lived virtual nodes, whereas content access usually targets ephemeral virtual nodes created specifically for content serving [8], [10].
 
@@ -2122,7 +2081,7 @@ From a cryptographic perspective, message routing operates with two protection l
 
 If a hop fails, the sender restarts the routing attempt from the beginning rather than assuming that the partially traversed path can be safely resumed from the intermediate point [5], [8], [9]. Since each route is resolved hop by hop and may still lead to the same destination virtual node through different physical entry points, multiple routing attempts may be performed by exhausting the available entry point list [5], [9]. If all known alternatives fail, the message delivery attempt is aborted with error. To reduce unnecessary load on DHT structures, peers may also rely on local route cache information when available instead of querying the DRT repeatedly for every attempt [8].
 
-In the current MVP, the architecture does not yet define a dedicated message identifier for loop prevention or deduplication, and this remains a limitation for future refinement. Likewise, some control messages may require special treatment, especially during the pre-session phase, whereas ordinary application messages follow the standard routing and protection pipeline [8], [9]. Larger transfers, such as content publication or retrieval, use the same general routing mechanism as shorter messages, although nodes may choose shorter effective concealment paths in some cases at the cost of reduced obfuscation [6], [10].
+In the current MVP, the architecture does not yet define a globally meaningful application-level message identifier for robust loop prevention or deduplication. However, it maintains local \texttt{seen\_hash} records as a best-effort mechanism to avoid repeated processing of already observed packets, messages, or objects. This local mechanism reduces redundant processing, but it does not replace a future protocol-level identifier with stronger replay and loop-prevention semantics. Likewise, some control messages may require special treatment, especially during the pre-session phase, whereas ordinary application messages follow the standard routing and protection pipeline [8], [9]. Larger transfers, such as content publication or retrieval, use the same general routing mechanism as shorter messages, although nodes may choose shorter effective concealment paths in some cases at the cost of reduced obfuscation [6], [10].
 
 Finally, reply traffic should not be forced to reuse the same path in reverse. Instead, replies should follow an independent routing process, allowing the responding side to resolve a fresh path toward the original sender [9], [10]. This reduces path symmetry and makes traffic correlation more difficult, which is more consistent with the anonymity goals of the architecture [6], [9], [10]. Overall, the routing workflow is intentionally designed not merely for minimal delivery reliability, but above all to complicate tracing of the final virtual destination while preserving decentralized communication [9], [10].
 
@@ -2165,6 +2124,8 @@ The methodology adopted in the implementation can be summarized as follows:
 \end{enumerate}
 
 The implementation was intentionally optimized for clarity, protocol validation, and observability. As a result, some decisions were simplified when compared to a production network. For example, the prototype currently uses TCP transport, local or Docker-based clusters, SQLite persistence, and a simplified DHT routing model. More advanced features such as complete NAT traversal, QUIC transport, full Kademlia routing tables, formal anti-abuse mechanisms, and security auditing are treated as future work.
+
+Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, and earlier cryptographic choices such as Kyber-1024 and SHA3-512, the experimental implementation prioritizes validation of the architectural model in a controlled environment. Therefore, the MVP adopts Python, TCP transport, SQLite persistence, SHA-512-based identifiers, ML-KEM/ML-DSA through the selected cryptographic backend, and AES-256-GCM-SIV for authenticated symmetric encryption. This distinction separates the proposed architecture from the current proof-of-concept implementation and avoids presenting the MVP as a production-ready public network.
 
 \subsection{Implementation Scope}
 \label{sec:implementation-scope}
@@ -2211,7 +2172,7 @@ Content storage & Filesystem storage, with metadata persisted in the local datab
 Identity identifier & \codebreak{SHA-512(public\_\allowbreak{}key)} for both physical and virtual nodes. \\
 Post-quantum KEM & ML-KEM-768 when available through the cryptographic backend. \\
 Post-quantum signature & ML-DSA-65 when available through the cryptographic backend. \\
-Symmetric encryption & AES-256-CBC for encrypted session payloads. \\
+Symmetric encryption & AES-256-GCM-SIV for authenticated encrypted session payloads. \\
 Local API & HTTP API on \texttt{127.0.0.1:18080} and WebSocket events on \codebreak{127.0.0.1:\allowbreak{}18081/\allowbreak{}v1/\allowbreak{}events}. \\
 Testing environment & Local processes and Docker-based clusters. \\
 Application PoC & Local HTML/JavaScript social interface using the local API. \\
@@ -2598,9 +2559,9 @@ Figure~\ref{fig:route-strategy-abstraction} illustrates this separation between 
 \label{fig:route-strategy-abstraction}
 \end{figure}
 
-The current MVP primarily implements the \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl} strategy. In this strategy, the virtual node starts route creation with an expected temporal budget, expressed in milliseconds. Each intermediate physical node forwards the \codebreak{ROUTE\_\allowbreak{}CREATE} message to another physical node while the route remains within the expected construction constraints. When the final physical node is reached, the route is validated through \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} and \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}. The observed round-trip time is compared against the expected budget, including an acceptable error window. If the measured RTT is valid, the final physical node signs the route information and publishes the route entry in the DRT.
+The current MVP primarily implements the \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl} strategy. In this strategy, the virtual node starts route creation with an expected temporal budget, expressed in milliseconds. Each intermediate physical node forwards the \codebreak{ROUTE\_\allowbreak{}CREATE} message to another physical node while the route remains within the expected construction constraints. The TTL value is therefore interpreted as a strategy-specific construction budget, not as a fixed rule of the routing layer. When the final physical node is reached, the route is validated through \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} and \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}. The observed round-trip time is compared against the expected budget, including an acceptable error window. If the measured RTT is valid, the final physical node signs the route information and publishes the route entry in the DRT.
 
-This strategy is useful for the MVP because it is simple, dynamic, and capable of creating relatively unpredictable paths without requiring global knowledge of the network. It also fits the experimental nature of the prototype, since it can be evaluated through local clusters, route logs, DRT records, and smoke tests.
+This strategy is useful for the MVP because it is simple, dynamic, and capable of creating relatively unpredictable paths without requiring global knowledge of the network. It also fits the experimental nature of the prototype, since it can be evaluated through local clusters, route logs, DRT records, and smoke tests. However, the same route lifecycle can be reused by future strategies that terminate by hop count, bandwidth threshold, reliability score, or onion-like path definition.
 
 Although \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl} is the main strategy used by the MVP, the architecture was designed to support additional strategies. Table~\ref{tab:route-strategies} summarizes possible strategies and their intended purpose.
 
@@ -2669,7 +2630,12 @@ In this example, lower scores indicate better candidate routes. The first term p
 
 The main architectural advantage of this design is extensibility. New strategies can be implemented without rewriting the route build protocol, the DRT publication format, or the \codebreak{ROUTE\_\allowbreak{}DATA} execution mechanism. Applications may request routes according to their own requirements: privacy-oriented routes, low-latency routes, high-bandwidth routes, stable routes, or hybrid routes. As a result, the route layer becomes a reusable substrate for multiple decentralized applications and traffic profiles.
 
-The MVP implements the route strategy \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}. The implemented route build message sequence is:
+\subsubsection{Hop-by-Hop Route Construction and Execution}
+\label{subsec:hop-by-hop-route-construction-execution}
+
+The MVP implements the route strategy \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}. Hop-by-hop construction means that the initiator does not install a complete globally visible path. Instead, each physical hop receives a route creation request, applies the active strategy to decide whether and where to forward it, creates a local \texttt{path\_id} mapping, and forwards only the information required by the next hop. The strategy is responsible for selecting the next hop and deciding when the route should stop; the execution layer is responsible only for forwarding later packets through the local mappings created during construction.
+
+The implemented route build message sequence is:
 
 \begin{equation}
 \begin{aligned}
@@ -2682,7 +2648,7 @@ The MVP implements the route strategy \codebreak{random\_\allowbreak{}walk\_\all
 \end{aligned}
 \end{equation}
 
-During route creation, each intermediate physical node stores only the local mapping required to forward packets. For example, an intermediate hop stores a mapping from a received \texttt{path\_id} to a generated \texttt{path\_id}. It does not need to know the full path or the final virtual identity. This design preserves the separation between physical routing and virtual semantics.
+During route creation, each intermediate physical node stores only the local mapping required to forward packets. For example, an intermediate hop stores a mapping from a received \texttt{path\_id} to a generated \texttt{path\_id}, together with the next physical forwarding action. It does not need to know the full path or the final virtual identity. This design preserves the separation between physical routing and virtual semantics. The TTL used by the implemented strategy limits construction and validation for \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}, but packet execution after publication depends on local route state rather than on recomputing the random walk.
 
 After a route is created, virtual envelopes are transported inside physical \codebreak{ROUTE\_\allowbreak{}DATA} messages. Conceptually, the physical envelope has the following structure:
 
@@ -2693,11 +2659,13 @@ physical_envelope {
         path_id,
         direction,
         virtual_session_id,
-        virtual_envelope_ciphered,
+        virtual_envelope_ciphered: bool,
         virtual_envelope
     }
 }
 \end{verbatim}
+
+The \texttt{virtual\_envelope\_ciphered} field is a boolean flag indicating whether the serialized virtual envelope carried in \texttt{virtual\_envelope} is encrypted. It is not a second copy of the payload. When the flag is true, the field contains an encrypted serialized virtual envelope; when the flag is false, the field carries a plaintext control envelope allowed by the current protocol stage. This distinction is useful during session establishment and debugging, while ordinary post-session application traffic is expected to use the encrypted form.
 
 The route execution handler resolves the local \texttt{path\_id}, decides whether the packet must be forwarded or delivered locally, and re-encapsulates virtual responses when necessary. It does not interpret application-level semantics. Its role is only to move virtual envelopes through physical routes.
 
@@ -2946,6 +2914,27 @@ Table~\ref{tab:smoke-tests} summarizes the main validation tests.
 \end{tabularx}
 \end{table}
 
+Table~\ref{tab:experimental-results-summary} summarizes the functional outcomes observed during validation.
+
+\begin{table}[H]
+\centering
+\caption{Summary of experimental validation results.}
+\label{tab:experimental-results-summary}
+\begin{tabularx}{\textwidth}{L{0.32\textwidth} L{0.20\textwidth} Y}
+\toprule
+\textbf{Experiment} & \textbf{Observed result} & \textbf{Interpretation} \\
+\midrule
+Local physical cluster execution & Successful & Multiple physical nodes were instantiated and connected through the bootstrap process. \\
+Virtual node creation & Successful & The core was able to create and maintain independent virtual identities. \\
+DRT route publication & Successful & Virtual node reachability information was published and resolved through DHT records. \\
+Virtual session establishment & Successful & Virtual endpoints established sessions over physical route structures. \\
+Virtual message delivery & Successful & Application messages were delivered through the virtual session pipeline. \\
+Content advertisement and retrieval & Successful & Content objects were stored, advertised in the DDT, resolved, and downloaded using byte ranges. \\
+Social PoC integration & Successful & The external application consumed the local API to create profiles, posts, friendships, feed entries, and direct messages. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
 The observed result is that the MVP demonstrates the complete functional path expected for the prototype:
 
 \begin{itemize}
@@ -3133,6 +3122,10 @@ The prototype currently runs in controlled local or Docker environments and stil
 Tor / onion routing~[20] &
 The route layer also separates intermediate forwarding from final virtual semantics, and intermediate hops do not need to know the complete route. &
 The MVP does not implement Tor's complete onion routing design, directory authority model, circuit construction protocol, relay ecosystem, or mature resistance against global traffic correlation. \\
+
+I2P / garlic routing~[21] &
+The architecture shares the goal of hiding communication relationships through indirect overlay routing and separation between network-level and application-level identities. &
+The MVP does not implement I2P's garlic routing model, tunnel management, network database, lease sets, or mature anonymity mechanisms, focusing instead on validating virtual identities, DHT-based discovery, and route construction in a simplified prototype. \\
 
 Content-addressed systems~[19] &
 Content is addressed by hash and announced through distributed references. &
@@ -3378,6 +3371,12 @@ RFC 2697. RFC Editor, September 1999.
 
 [26] NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY (NIST) (2024).
 \textit{FIPS 204: Module-Lattice-Based Digital Signature Standard}. Gaithersburg: NIST, 2024.
+
+
+[27] GUERON, Shay; LANGLEY, Adam; LINDELL, Yehuda (2019).
+\textit{AES-GCM-SIV: Nonce Misuse-Resistant Authenticated Encryption}.
+RFC 8452. RFC Editor, April 2019.
+DOI: 10.17487/RFC8452.
 
 \endgroup
 

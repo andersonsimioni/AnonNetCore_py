@@ -125,6 +125,16 @@ def build_smoke_plan(args: argparse.Namespace) -> list[SmokeSpec]:
     cluster_nodes = str(args.cluster_nodes)
     smokes: list[SmokeSpec] = []
 
+    smokes.append(
+        SmokeSpec(
+            name="crypto-aes-gcm-siv",
+            level="00 crypto",
+            command=[python, "tests/integration/crypto_aes_smoke.py"],
+            description="Authenticated AES-GCM-SIV encryption, tamper rejection, and nonce reuse guard.",
+            summary="AES-GCM-SIV roundtrip, integrity, nonce guard",
+        )
+    )
+
     if not args.skip_dom:
         smokes.append(
             SmokeSpec(

@@ -1,0 +1,501 @@
+\newcommand{\serverglyph}[1]{%
+\begin{scope}[shift={#1}]
+  \draw[fill=gray!20, rounded corners=1pt] (0,0) rectangle (0.36,0.62);
+  \draw[fill=gray!35] (0.36,0) -- (0.52,0.10) -- (0.52,0.72) -- (0.36,0.62) -- cycle;
+  \draw (0.07,0.46) -- (0.28,0.46);
+  \draw (0.07,0.34) -- (0.28,0.34);
+  \draw (0.07,0.22) -- (0.20,0.22);
+  \fill (0.09,0.09) circle (0.025);
+\end{scope}}
+
+\newcommand{\dbglyph}[1]{%
+\begin{scope}[shift={#1}]
+  \draw[fill=gray!20] (0,0) ellipse (0.34 and 0.11);
+  \draw[fill=gray!12] (-0.34,0) -- (-0.34,-0.55) arc (180:360:0.34 and 0.11) -- (0.34,0);
+  \draw (0,-0.18) ellipse (0.34 and 0.11);
+  \draw (0,-0.37) ellipse (0.34 and 0.11);
+\end{scope}}
+
+\newcommand{\personglyph}[1]{%
+\begin{scope}[shift={#1}]
+  \draw[fill=gray!10] (0,0) circle (0.34);
+  \fill[gray!55] (0,0.12) circle (0.11);
+  \draw[fill=gray!45] (-0.18,-0.18) arc (180:0:0.18 and 0.17) -- (0.18,-0.28) -- (-0.18,-0.28) -- cycle;
+\end{scope}}
+
+\newcommand{\thesisprismatikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.74\textwidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={rectangle, draw, very thick, minimum width=9.2cm, minimum height=1.55cm, align=center, font=\large},
+  arrow/.style={-{Latex[length=4mm]}, line width=1.2pt},
+  node distance=0.72cm
+]
+\node[font=\bfseries\LARGE] (title) {PRISMA Flow Diagram};
+\node[box, below=0.85cm of title] (id) {Identification\\{\normalsize 2581 records retrieved}};
+\node[box, below=of id] (screen) {Screening\\{\normalsize 5 duplicates removed}\\{\normalsize 2576 records screened}};
+\node[box, below=of screen] (elig) {Eligibility\\{\normalsize 2559 excluded}\\{\normalsize 17 full-text assessed}};
+\node[box, below=of elig] (inc) {Included\\{\normalsize 6 studies in final review}};
+\draw[arrow] (id) -- (screen);
+\draw[arrow] (screen) -- (elig);
+\draw[arrow] (elig) -- (inc);
+\end{tikzpicture}}
+\caption{PRISMA flow diagram.}
+\end{figure}}
+
+\newcommand{\thesislayerstikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[
+  baseLayer/.style={rectangle, rounded corners=6pt, very thick, minimum width=10.5cm, minimum height=1.55cm, text width=10cm, align=center},
+  appLayer/.style={baseLayer, draw=orange!70!black, fill=orange!18},
+  serviceLayer/.style={baseLayer, draw=blue!70!black, fill=blue!18},
+  overlayLayer/.style={baseLayer, draw=green!70!black, fill=green!18},
+  physicalLayer/.style={baseLayer, draw=gray!70!black, fill=gray!18},
+  label/.style={font=\bfseries, align=right, text width=2.35cm},
+  node distance=0.42cm
+]
+\node[appLayer] (app) {\textbf{Application Layer}\\[2pt]Decentralized Applications \quad Social Network \quad File Sharing \quad DApps};
+\node[serviceLayer, below=of app] (svc) {\textbf{Service Layer}\\[2pt]Secure Messaging \quad Data Access Services \quad Session Management};
+\node[overlayLayer, below=of svc] (ovl) {\textbf{Overlay Network Layer}\\[2pt]Peer Discovery \quad Routing \& Anonymity \quad Distributed Storage};
+\node[physicalLayer, below=of ovl] (phy) {\textbf{Physical \& Classical Network Layer}\\[2pt]IP / UDP / TCP / QUIC \quad NAT Traversal \quad STUN / TURN / Relay};
+\node[label, left=0.8cm of app] {Application-Level};
+\node[label, left=0.8cm of svc] {Reusable Services};
+\node[label, left=0.8cm of ovl] {Overlay Coordination};
+\node[label, left=0.8cm of phy] {Physical Connectivity};
+\end{tikzpicture}}
+\caption{Layered architecture.}
+\end{figure}}
+
+\newcommand{\thesisconnectiontikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  panel/.style={rectangle, draw, minimum width=2.75cm, minimum height=1.45cm, align=center},
+  main/.style={rectangle, draw, rounded corners=5pt, very thick, minimum width=4.25cm, minimum height=0.9cm, align=center, font=\bfseries},
+  small/.style={rectangle, draw, minimum width=2.35cm, minimum height=0.62cm, align=center, font=\scriptsize},
+  arrow/.style={-{Latex[length=3mm]}, thick},
+  dashedlink/.style={dashed, gray!70, thick}
+]
+\node[font=\bfseries\Large] at (0,4.1) {Connection Management};
+\draw (-6.4,3.72) -- (3.35,3.72);
+\node[panel] (phys) at (-5.0,2.25) {\textbf{Physical Peers}\\[0.75cm]};
+\serverglyph{(-5.45,1.77)} \serverglyph{(-4.65,1.77)}
+\node[panel, text width=2.45cm] (meta) at (-5.0,-0.15) {\textbf{Peer Metadata}\\[3pt]\scriptsize endpoints\\reachability\\transport};
+\node[main] (cm) at (0,2.25) {Connection Management};
+\node[panel, text width=2.45cm] (endpoint) at (5.05,3.0) {\textbf{Endpoint Options}\\[3pt]IPv4\\IPv6\\Relay};
+\node[panel, text width=2.45cm] (status) at (5.05,-0.15) {\textbf{Status Check}\\[3pt]Valid\\Degraded\\Failed};
+\node[align=left, text width=5.85cm, font=\small] (opts) at (0,0.0) {$\bullet$ Direct Connection\\$\bullet$ Hole Punching / NAT Traversal\\$\bullet$ Relay-Assisted Establishment\\$\bullet$ Continuous Relay Forwarding};
+\node[font=\bfseries] (auto) at (0,-2.22) {Automatic Selection};
+\node[small] (ka) at (-3.75,-3.55) {Keep-Alive};
+\node[small] (fd) at (-1.25,-3.55) {Failure Detection};
+\node[small] (ru) at (1.25,-3.55) {Retry \& Update};
+\node[small] (rf) at (3.75,-3.55) {Relay Forwarding};
+\draw[arrow] (phys.east) -- (cm.west);
+\draw[arrow] (cm.east) -- (endpoint.west);
+\draw[dashedlink] (phys) -- (meta);
+\draw[dashedlink] (cm.east) -- (status.west);
+\draw[arrow] (opts.south) -- (auto.north);
+\draw[arrow] (auto.south) -- ++(0,-0.45) -| (ka.north);
+\draw[arrow] (auto.south) -- ++(0,-0.45) -| (fd.north);
+\draw[arrow] (auto.south) -- ++(0,-0.45) -| (ru.north);
+\draw[arrow] (auto.south) -- ++(0,-0.45) -| (rf.north);
+\end{tikzpicture}}
+\caption{Connection Management diagram.}
+\end{figure}}
+
+\newcommand{\thesisdrttikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  vnode/.style={rectangle, draw=blue!55!black, rounded corners=5pt, fill=blue!8, minimum width=1.9cm, minimum height=0.72cm, align=center},
+  pgroup/.style={rectangle, draw=gray!75!black, dashed, rounded corners=8pt, fill=gray!4, minimum width=3.15cm, minimum height=1.18cm, align=center},
+  pn/.style={rectangle, draw=gray!70!black, rounded corners=3pt, fill=gray!16, minimum width=1.18cm, minimum height=0.38cm, align=center, font=\scriptsize},
+  cell/.style={font=\scriptsize, align=center},
+  arrow/.style={-{Latex[length=3mm]}, thick},
+  dashedarrow/.style={-{Latex[length=3mm]}, dashed, thick}
+]
+\node[font=\bfseries\Large] at (0,5.35) {Distributed Routing Table (DRT)};
+\node[text width=10.2cm, align=center, font=\small] at (0,4.55) {The DRT indirectly maps a virtual node identifier to physical entry points authorized to receive its traffic.};
+\node[align=center] at (-5.85,3.08) {\textbf{Virtual Nodes}\\(logical identities)};
+\node[vnode] (v1) at (-5.85,2.05) {$H(pk_1)$};
+\node[vnode] (v2) at (-5.85,0.60) {$H(pk_2)$};
+\node[vnode] (vn) at (-5.85,-1.10) {$H(pk_n)$};
+\node[draw, rounded corners=8pt, fill=gray!5, minimum width=5.75cm, minimum height=3.82cm] (table) at (0,0.45) {};
+\node[font=\bfseries] at (0,2.58) {DRT Records};
+\draw (-2.55,1.68) rectangle (2.55,-1.02);
+\draw (-0.35,1.68) -- (-0.35,-1.02);
+\draw (-2.55,1.0) -- (2.55,1.0);
+\draw (-2.55,0.32) -- (2.55,0.32);
+\draw (-2.55,-0.36) -- (2.55,-0.36);
+\node[cell, font=\scriptsize\bfseries] at (-1.45,1.34) {Virtual ID};
+\node[cell, font=\scriptsize\bfseries] at (1.10,1.34) {Entry point IDs};
+\node[cell] at (-1.45,0.66) {$H(pk_1)$};
+\node[cell] at (1.10,0.66) {$\{pn_a,\ pn_b\}$};
+\node[cell] at (-1.45,-0.02) {$H(pk_2)$};
+\node[cell] at (1.10,-0.02) {$\{pn_c,\ pn_d\}$};
+\node[cell] at (-1.45,-0.70) {$H(pk_n)$};
+\node[cell] at (1.10,-0.70) {$\{pn_x,\ ...\}$};
+\node[align=center] at (5.75,3.08) {\textbf{Physical Nodes}\\(entry points)};
+\node[pgroup] (p1) at (5.75,1.90) {};
+\node[pn] at (5.10,2.08) {$pn_a$};
+\node[pn] at (6.40,2.08) {$pn_b$};
+\node[cell] at (5.75,1.60) {authorized for $H(pk_1)$};
+\node[pgroup] (p2) at (5.75,0.40) {};
+\node[pn] at (5.10,0.58) {$pn_c$};
+\node[pn] at (6.40,0.58) {$pn_d$};
+\node[cell] at (5.75,0.10) {authorized for $H(pk_2)$};
+\node[pgroup] (p3) at (5.75,-1.10) {};
+\node[pn] at (5.10,-0.92) {$pn_x$};
+\node[pn] at (6.40,-0.92) {$...$};
+\node[cell] at (5.75,-1.40) {authorized for $H(pk_n)$};
+\draw[dashedarrow] (v1.east) -- (table.west |- v1);
+\draw[dashedarrow] (v2.east) -- (table.west |- v2);
+\draw[dashedarrow] (vn.east) -- (table.west |- vn);
+\draw[arrow] (table.east |- p1) -- (p1.west);
+\draw[arrow] (table.east |- p2) -- (p2.west);
+\draw[arrow] (table.east |- p3) -- (p3.west);
+\node[draw, rounded corners=5pt, text width=10.2cm, align=left, fill=blue!4, font=\small] at (0,-3.35) {$\bullet$ The DRT does not store complete routes.\\$\bullet$ It provides authorized physical entry points.\\$\bullet$ Virtual-to-physical mapping remains indirect.};
+\end{tikzpicture}}
+\caption{Distributed Routing Table.}
+\end{figure}}
+
+\newcommand{\thesishopbyhoptikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  hop/.style={rectangle, draw=gray!75!black, rounded corners=5pt, fill=gray!10, minimum width=1.45cm, minimum height=0.74cm, align=center, font=\scriptsize},
+  vnode/.style={rectangle, draw=blue!60!black, rounded corners=6pt, fill=blue!8, minimum width=1.7cm, minimum height=0.78cm, align=center, font=\scriptsize},
+  finalnode/.style={rectangle, draw=red!65!black, rounded corners=6pt, fill=red!6, minimum width=1.65cm, minimum height=0.78cm, align=center, font=\scriptsize},
+  route/.style={-{Latex[length=3mm]}, very thick, blue!65!black},
+  alt/.style={-{Latex[length=2.6mm]}, dashed, thick, gray!70},
+  note/.style={font=\scriptsize, align=center, fill=white, inner sep=1.5pt}
+]
+\node[font=\bfseries\Large] at (0,5.45) {TTL-Based Hop-by-Hop Route Example};
+\node[text width=10.1cm, align=center, font=\small] at (0,4.45) {A route is built incrementally: each physical node stores only its local mapping and chooses the next hop while TTL remains valid.};
+\node[vnode] (vn) at (-5.85,2.45) {VN\\request};
+\node[hop] (entry) at (-3.55,2.45) {Entry PN\\TTL 4};
+\node[hop] (hop1) at (-1.25,2.45) {Hop 1\\TTL 3};
+\node[hop] (hop2) at (1.05,2.45) {Hop 2\\TTL 2};
+\node[hop] (hop3) at (3.35,2.45) {Hop 3\\TTL 1};
+\node[finalnode] (final) at (5.65,2.45) {Final PN\\TTL 0};
+\draw[route] (vn.east) -- (entry.west);
+\draw[route] (entry.east) -- (hop1.west);
+\draw[route] (hop1.east) -- (hop2.west);
+\draw[route] (hop2.east) -- (hop3.west);
+\draw[route] (hop3.east) -- (final.west);
+\node[note] at (-4.70,2.90) {entry};
+\node[note] at (-2.40,2.90) {random next};
+\node[note] at (-0.10,2.90) {random next};
+\node[note] at (2.20,2.90) {random next};
+\node[note, text=red!70!black] at (4.50,2.90) {TTL ends};
+\node[draw=blue!60!black, rounded corners=5pt, fill=blue!5, align=center, font=\scriptsize, text width=3.0cm] at (-3.45,1.05) {Each hop saves only\\previous $\rightarrow$ next};
+\node[draw=blue!60!black, rounded corners=5pt, fill=blue!5, align=center, font=\scriptsize, text width=3.0cm] at (0,1.05) {TTL decreases\\at every hop};
+\node[draw=red!65!black, rounded corners=5pt, fill=red!5, align=center, font=\scriptsize, text width=3.0cm] at (3.45,1.05) {Construction finishes\\at the final PN};
+\draw[alt] (-3.45,0.25) .. controls (-1.25,-0.42) and (1.25,-0.42) .. (3.45,0.25);
+\node[note] at (0,-0.40) {another random walk can build a different path};
+\node[draw, rounded corners=5pt, fill=blue!4, text width=10.2cm, align=left, font=\small] at (0,-2.25) {$\bullet$ Each hop chooses one next physical node.\\$\bullet$ TTL decreases at every forwarding step.\\$\bullet$ The route emerges during forwarding.};
+\end{tikzpicture}}
+\caption{Example of hop-by-hop route construction with a TTL-based strategy.}
+\label{fig:ttl-route-strategy-example}
+\end{figure}}
+
+\newcommand{\thesisroutestrategyconstructiontikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  block/.style={rectangle, draw=gray!75!black, rounded corners=6pt, fill=gray!8, minimum width=2.05cm, minimum height=0.72cm, align=center, font=\scriptsize},
+  protocol/.style={rectangle, draw=blue!65!black, rounded corners=7pt, fill=blue!8, minimum width=2.75cm, minimum height=0.88cm, align=center, font=\scriptsize},
+  strategy/.style={rectangle, draw=orange!75!black, rounded corners=7pt, fill=orange!10, minimum width=2.75cm, minimum height=0.88cm, align=center, font=\scriptsize},
+  hop/.style={circle, draw=gray!70!black, fill=gray!8, minimum size=0.88cm, align=center, font=\scriptsize},
+  finalnode/.style={circle, draw=red!65!black, fill=red!8, minimum size=0.98cm, align=center, font=\scriptsize},
+  record/.style={rectangle, draw=purple!65!black, rounded corners=5pt, fill=purple!7, minimum width=2.45cm, minimum height=0.68cm, align=center, font=\scriptsize},
+  arrow/.style={-{Latex[length=2.8mm]}, thick, blue!65!black},
+  control/.style={-{Latex[length=2.5mm]}, thick, orange!80!black},
+  dashedarrow/.style={-{Latex[length=2.5mm]}, dashed, thick, gray!70},
+  note/.style={font=\scriptsize, align=center, fill=white, inner sep=1.2pt}
+]
+\node[font=\bfseries\Large] at (0,5.25) {Strategy-Based Route Construction};
+\node[text width=10.6cm, align=center, font=\small] at (0,4.40) {The route protocol keeps the lifecycle stable. The active route strategy chooses each next physical hop and defines when construction should finish.};
+
+\node[block, fill=green!8, draw=green!45!black] (vn) at (-5.35,3.10) {Virtual node\\requests route};
+\node[protocol] (protocol) at (-2.55,3.10) {Route protocol\\lifecycle};
+\node[strategy] (strategy) at (0.45,3.10) {Route strategy\\policy};
+\node[block, fill=blue!6, draw=blue!55!black] (mapping) at (3.15,3.10) {Local mappings\\per hop};
+\node[record] (drt) at (5.55,3.10) {DRT entry\\published};
+
+\draw[arrow] (vn.east) -- (protocol.west);
+\draw[arrow] (protocol.east) -- (strategy.west);
+\draw[arrow] (strategy.east) -- (mapping.west);
+\draw[arrow] (mapping.east) -- (drt.west);
+
+\node[hop] (h1) at (-4.20,1.30) {PN};
+\node[hop] (h2) at (-2.15,1.30) {PN};
+\node[hop] (h3) at (-0.10,1.30) {PN};
+\node[hop] (h4) at (1.95,1.30) {PN};
+\node[finalnode] (final) at (4.00,1.30) {Final\\PN};
+
+\draw[arrow] (h1.east) -- node[note, above=1pt] {path id map} (h2.west);
+\draw[arrow] (h2.east) -- node[note, above=1pt] {path id map} (h3.west);
+\draw[arrow] (h3.east) -- node[note, above=1pt] {path id map} (h4.west);
+\draw[arrow] (h4.east) -- node[note, above=1pt] {path id map} (final.west);
+
+\draw[control] (strategy.south) -- ++(0,-0.55) -| node[pos=0.28, right, note] {next-hop choice} (h3.north);
+\draw[dashedarrow] (final.north) -- ++(0,0.55) -| (drt.south);
+
+\node[record, text width=2.55cm] (candidates) at (-3.70,-0.35) {Candidate peers\\and local state};
+\node[record, text width=2.55cm] (objectives) at (-0.75,-0.35) {Optimization goal\\privacy, latency,\\bandwidth, reliability};
+\node[record, text width=2.55cm] (termination) at (2.20,-0.35) {Termination rule\\strategy-specific};
+
+\node[draw, rounded corners=5pt, fill=blue!4, text width=11.0cm, align=left, font=\small] at (0,-2.20) {$\bullet$ The protocol defines invariant route lifecycle messages and publication rules.\\$\bullet$ The strategy defines hop selection and stopping conditions.\\$\bullet$ Different strategies can optimize privacy, latency, bandwidth, reliability, or diversity without changing route execution.};
+\end{tikzpicture}}
+\caption{Generic route construction through a route strategy.}
+\end{figure}}
+
+\newcommand{\thesispeerdiscoverytikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.96\textwidth}{!}{%
+\begin{tikzpicture}[
+  arrow/.style={-{Latex[length=2.8mm]}, thick, blue!65!black},
+  dashedarrow/.style={-{Latex[length=2.5mm]}, dashed, thick, gray!70},
+  seed/.style={rectangle, draw=green!45!black, rounded corners=4pt, fill=green!8, minimum width=2.38cm, minimum height=0.58cm, align=center, font=\scriptsize},
+  public/.style={circle, draw=blue!60!black, fill=blue!8, minimum size=0.9cm, align=center, font=\scriptsize},
+  private/.style={circle, draw=red!60!black, fill=red!7, minimum size=0.9cm, align=center, font=\scriptsize},
+  box/.style={rectangle, draw=gray!75!black, rounded corners=5pt, fill=gray!8, minimum width=2.35cm, minimum height=0.78cm, align=center, font=\scriptsize},
+  relay/.style={diamond, draw=orange!70!black, fill=orange!10, aspect=1.6, inner sep=1.5pt, minimum width=1.55cm, minimum height=1.0cm, align=center, font=\scriptsize},
+  meta/.style={rectangle, draw=purple!55!black, rounded corners=5pt, fill=purple!7, minimum width=2.85cm, minimum height=0.78cm, text width=2.65cm, align=center, font=\scriptsize},
+  stage/.style={font=\bfseries\scriptsize, align=center, text width=2.55cm}
+]
+\node[font=\bfseries\Large] at (0,5.45) {Peer Discovery Process};
+\node[text width=11.2cm, align=center, font=\small] at (0,4.65) {Public peers bootstrap the network, learn about private peers, and share reachability metadata for relay or hole-punch attempts.};
+
+\node[stage] at (-5.35,3.78) {1. Bootstrap};
+\node[seed] (seed1) at (-5.35,3.05) {DNS seeds};
+\node[seed] (seed2) at (-5.35,2.32) {Hardcoded\\public nodes};
+
+\node[stage] at (-2.40,3.78) {2. Public peer view};
+\node[public] (pubA) at (-3.10,2.80) {P1};
+\node[public] (pubB) at (-1.70,2.80) {P2};
+\node[public] (pubC) at (-2.40,1.75) {P3};
+\node[box, fill=blue!6, draw=blue!50!black, minimum width=2.75cm] (publicView) at (-2.40,0.55) {Known public\\peer exchange};
+\draw[dashed, gray!65] (pubA) -- (pubB) -- (pubC) -- (pubA);
+
+\node[stage] at (0.90,3.78) {3. Private peers};
+\node[private] (privA) at (0.20,1.92) {N1};
+\node[private] (privB) at (1.60,1.92) {N2};
+\node[box, draw=red!55!black, fill=red!6, minimum width=3.05cm] (nat) at (0.90,0.72) {Behind NAT / Firewall};
+
+\node[stage] at (4.45,3.78) {4. Connect};
+\node[meta] (meta) at (4.45,2.62) {Published metadata\\reachable via relay\\or hole punching};
+\node[relay] (relay) at (3.48,1.08) {Relay};
+\node[box, fill=orange!7, draw=orange!70!black] (hole) at (5.42,1.08) {Hole punching\\attempt};
+\node[public] (newPeer) at (4.45,-0.30) {P4};
+
+\draw[arrow] (seed1.east) -- (pubA.west);
+\draw[arrow] (seed2.east) -- (pubC.west);
+\draw[arrow] (pubA.south) -- (publicView.north west);
+\draw[arrow] (pubB.south) -- (publicView.north east);
+\draw[arrow] (pubC.south) -- (publicView.north);
+
+\draw[dashedarrow] (nat.north west) -- (privA.south);
+\draw[dashedarrow] (nat.north east) -- (privB.south);
+\draw[arrow, shorten >=3pt, shorten <=3pt] (nat.west) -- (publicView.east);
+
+\draw[arrow, shorten >=3pt, shorten <=3pt]
+  (pubB.east) -- ++(0.42,0) |- node[pos=0.54, above, font=\tiny, fill=white, inner sep=1pt] {private reachability} (meta.west);
+\draw[arrow] (meta.south west) -- (relay.north);
+\draw[arrow] (meta.south east) -- (hole.north);
+\draw[arrow] (relay.south) -- (newPeer.north west);
+\draw[dashedarrow] (hole.south) -- (newPeer.north east);
+
+\node[draw, rounded corners=5pt, fill=blue!4, text width=11.6cm, align=left, font=\small] at (0,-2.45) {$\bullet$ New peers first contact DNS seeds or hardcoded public nodes.\\$\bullet$ Private peers connect to public peers and publish metadata.\\$\bullet$ Other peers use that metadata for relay routing or NAT hole punching.};
+\end{tikzpicture}}
+\caption{Peer discovery process.}
+\end{figure}}
+
+\newcommand{\thesisddttikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  arrow/.style={-{Latex[length=3mm]}, thick, blue!60!black},
+  dashedarrow/.style={-{Latex[length=2.6mm]}, dashed, thick, gray!70},
+  vnode/.style={circle, draw=gray!75!black, fill=gray!10, minimum size=0.95cm, align=center, font=\scriptsize},
+  tablebox/.style={draw=gray!80!black, rounded corners=6pt, fill=gray!4},
+  card/.style={draw=blue!55!black, rounded corners=5pt, fill=blue!5, text width=3.1cm, minimum height=0.82cm, align=center, font=\scriptsize},
+  warncard/.style={draw=red!60!black, rounded corners=5pt, fill=red!5, text width=3.25cm, minimum height=0.82cm, align=center, font=\scriptsize}
+]
+\node[font=\bfseries\Large] at (0,4.45) {Distributed Data Table (DDT)};
+\node[text width=11.9cm, align=center, font=\small] at (0,3.82) {The DDT maps content hashes to virtual holders; it stores neither content bytes nor physical node identities.};
+\node[tablebox, minimum width=5.75cm, minimum height=2.75cm] (table) at (-3.85,1.35) {};
+\node[font=\bfseries\small] at (-3.75,3.18) {Availability Records};
+\draw (-6.50,2.18) rectangle (-1.20,0.42);
+\draw (-4.62,2.18) -- (-4.62,0.42);
+\draw (-6.50,1.58) -- (-1.20,1.58);
+\draw (-6.50,1.00) -- (-1.20,1.00);
+\node[font=\scriptsize\bfseries] at (-5.56,1.88) {Hash};
+\node[font=\scriptsize\bfseries] at (-2.91,1.88) {Ephemeral VN holders};
+\node[font=\scriptsize] at (-5.56,1.30) {$H(content_A)$};
+\node[font=\scriptsize] at (-2.91,1.30) {$evn_1,\ evn_2$};
+\node[font=\scriptsize] at (-5.56,0.72) {$H(content_B)$};
+\node[font=\scriptsize] at (-2.91,0.72) {$evn_3,\ evn_4$};
+\node[vnode] (a) at (0.10,2.20) {$evn_1$};
+\node[vnode] (b) at (1.65,2.55) {$evn_2$};
+\node[vnode] (c) at (3.20,2.05) {$evn_3$};
+\node[vnode] (d) at (0.35,0.65) {$evn_4$};
+\node[vnode] (e) at (1.85,0.25) {$evn_5$};
+\node[vnode] (f) at (3.45,0.75) {$evn_6$};
+\foreach \x/\y in {a/b,b/c,a/d,d/e,e/f,c/f,b/e} \draw[dashed, gray!65] (\x) -- (\y);
+\draw[arrow] (table.east) -- node[font=\scriptsize, fill=white, inner sep=1pt, above, pos=0.62] {lookup} (a.west);
+\draw[arrow] (table.east) -- (d.west);
+\node[card] (interest) at (1.85,-1.15) {\textbf{Interest-driven}\\holders keep wanted content};
+\draw[dashedarrow] (d.south) -- (interest.north west);
+\draw[dashedarrow] (f.south) -- (interest.north east);
+\node[warncard, text width=3.05cm] (noPhysical) at (6.10,1.35) {\textbf{No physical IDs}\\records expose only virtual holders};
+\draw[dashedarrow] (c.east) -- (noPhysical.west);
+\draw[dashedarrow] (f.east) -- (noPhysical.west);
+\node[card] at (-4.55,-2.95) {\textbf{Hash check}\\bytes must match $H(content)$};
+\node[card] at (-0.95,-2.95) {\textbf{Refresh}\\holders renew records};
+\node[warncard] at (2.75,-2.95) {\textbf{No central delete}\\availability ends when holders stop};
+\end{tikzpicture}}
+\caption{Distributed Data Table.}
+\end{figure}}
+
+\newcommand{\thesisephemeraltikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  arrow/.style={-{Latex[length=3mm]}, thick, blue!60!black},
+  dashedarrow/.style={-{Latex[length=2.7mm]}, dashed, thick, gray!70},
+  vnode/.style={circle, draw=gray!75!black, fill=gray!10, minimum size=0.95cm, align=center, font=\scriptsize},
+  pnode/.style={rectangle, draw=gray!75!black, rounded corners=5pt, fill=gray!10, minimum width=1.85cm, minimum height=0.72cm, align=center, font=\scriptsize},
+  data/.style={rectangle, draw=blue!60!black, rounded corners=4pt, fill=blue!6, minimum width=1.75cm, minimum height=0.7cm, align=center, font=\scriptsize},
+  ddt/.style={rectangle, draw=green!55!black, rounded corners=5pt, fill=green!7, minimum width=2.5cm, minimum height=0.82cm, align=center, font=\scriptsize},
+  card/.style={rectangle, draw=blue!55!black, rounded corners=5pt, fill=blue!5, text width=3.1cm, minimum height=0.82cm, align=center, font=\scriptsize},
+  warncard/.style={rectangle, draw=red!60!black, rounded corners=5pt, fill=red!5, text width=3.1cm, minimum height=0.82cm, align=center, font=\scriptsize}
+]
+\node[font=\bfseries\Large] at (0,5.35) {Ephemeral Virtual Nodes};
+\node[text width=10.6cm, align=center, font=\small] at (0,4.62) {Temporary holder identities avoid permanent publisher linkage.};
+\node[font=\bfseries] at (-3.95,3.72) {Publication without publisher linkage};
+\node[pnode] (publisher) at (-5.70,2.50) {Permanent VN\\publisher};
+\node[data] (file) at (-3.35,2.50) {Encrypted\\content};
+\node[ddt] (ddt) at (-0.88,2.50) {DDT record\\$H(content)$};
+\node[vnode] (e1) at (1.45,3.18) {$evn_1$};
+\node[vnode] (e2) at (3.00,2.64) {$evn_2$};
+\node[vnode] (e3) at (1.45,1.72) {$evn_3$};
+\node[vnode] (e4) at (4.45,2.50) {$evn_4$};
+\draw[arrow] ([xshift=3pt]publisher.east) -- ([xshift=-4pt]file.west);
+\draw[arrow] ([xshift=3pt]file.east) -- ([xshift=-4pt]ddt.west);
+\draw[arrow, shorten >=2pt, shorten <=3pt] (ddt.north east) -- (e1.west);
+\draw[arrow, shorten >=2pt, shorten <=3pt] (ddt.south east) -- (e3.west);
+\foreach \a/\b in {e1/e2,e2/e4,e1/e3,e3/e2,e3/e4} \draw[dashed, gray!65] (\a) -- (\b);
+\node[warncard] (pubcard) at (-4.75,0.78) {\textbf{Publisher not stored}\\DDT contains only holder references};
+\node[card] (holdercard) at (2.95,0.50) {\textbf{Ephemeral holders}\\temporary VNs serve the content};
+\draw (-6.35,-0.25) -- (5.90,-0.25);
+\node[font=\bfseries] at (-3.95,-0.68) {Expiration and renewal};
+\node[vnode] (old) at (-4.75,-1.90) {$evn_Q$};
+\node[warncard] (expired) at (-1.75,-1.90) {\textbf{Expired}\\old record is ignored};
+\node[vnode] (new) at (1.35,-1.90) {$evn_R$};
+\node[ddt] (renewed) at (4.35,-1.90) {Renewed\\DDT record};
+\draw[arrow, shorten >=2pt, shorten <=4pt] (old.east) -- (expired.west);
+\draw[arrow, shorten >=2pt, shorten <=4pt] (expired.east) -- (new.west);
+\draw[arrow, shorten >=2pt, shorten <=4pt] (new.east) -- (renewed.west);
+\node[card] at (-3.95,-3.35) {\textbf{Refresh}\\holders renew records};
+\node[card] at (0,-3.35) {\textbf{Persistence}\\content remains with holders};
+\node[warncard] at (3.95,-3.35) {\textbf{Origin hidden}\\holders hide publisher};
+\end{tikzpicture}}
+\caption{Ephemeral Virtual Nodes.}
+\end{figure}}
+
+\newcommand{\thesisdtttikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  block/.style={rectangle, rounded corners=5pt, minimum width=4.05cm, minimum height=3.75cm, text width=3.72cm, align=center},
+  greenBlock/.style={block, draw=green!65!black, fill=green!10},
+  blueBlock/.style={block, draw=blue!65!black, fill=blue!10},
+  side/.style={rectangle, draw, rounded corners=5pt, minimum width=1.95cm, minimum height=3.45cm, text width=1.70cm, align=center},
+  row/.style={rectangle, draw=gray!55, rounded corners=2pt, fill=white, minimum width=3.25cm, minimum height=0.36cm, align=center, font=\tiny},
+  arrow/.style={-{Latex[length=3mm]}, thick, blue!55!black}
+]
+\node[font=\bfseries\Large, blue!35!black] at (0,5.3) {Content Discovery and Resolution Model (Two-Stage)};
+\node[text width=10.4cm, align=center, blue!35!black] at (0,4.55) {A lightweight process connecting semantic discovery to current content availability using two distributed tables.};
+\node[side] (query) at (-6.35,1.0) {\textbf{Query}\\[5pt]Tags\\[3pt]\texttt{tag1}\\\texttt{tag2}\\\texttt{tag3}};
+\node[greenBlock] (dtt) at (-3.0,0.85) {};
+\node[font=\bfseries\scriptsize, text width=3.3cm, align=center] at (-3.0,2.42) {1. Distributed Tag Table\\(DTT)};
+\node[align=center, font=\scriptsize] at (-3.0,1.58) {Semantic Entry Point};
+\node[row] at (-3.0,0.92) {\texttt{tag1} $\rightarrow$ \{hA, hB, hC\}};
+\node[row] at (-3.0,0.34) {\texttt{tag2} $\rightarrow$ \{hB, hD, hE\}};
+\node[row] at (-3.0,-0.24) {\texttt{tag3} $\rightarrow$ \{hA, hF, hG\}};
+\node[blueBlock] (ddt) at (1.82,0.85) {};
+\node[font=\bfseries\scriptsize, text width=3.3cm, align=center] at (1.82,2.42) {2. Distributed Data Table\\(DDT)};
+\node[align=center, font=\scriptsize, text width=3.35cm] at (1.82,1.58) {Resolution and Availability Layer};
+\node[row] at (1.82,0.92) {hA $\rightarrow$ descriptor + vn1};
+\node[row] at (1.82,0.34) {hB $\rightarrow$ descriptor + vn2};
+\node[row] at (1.82,-0.24) {hC $\rightarrow$ descriptor + vn3};
+\node[side, minimum width=2.25cm, text width=1.95cm] (overlay) at (6.45,1.0) {\textbf{Overlay}\\\textbf{Network}\\[4pt]Storage VNs\\[3pt]vn1\\vn2\\vn3\\[4pt]Retrieve Object};
+\draw[arrow] (query) -- (dtt);
+\draw[arrow] (dtt.east) -- node[above, font=\tiny, fill=white, inner sep=1.5pt] {hashes} (ddt.west);
+\draw[arrow] (ddt.east) -- node[above, font=\tiny, fill=white, inner sep=1.5pt] {holders} (overlay.west);
+\node[draw, rounded corners=4pt, fill=orange!10, minimum width=8.9cm, minimum height=0.72cm] at (0,-2.35) {\textbf{Overall Discovery Cycle:} \quad DTT $\rightarrow$ DDT $\rightarrow$ Overlay retrieval};
+\node[draw=green!50!black, fill=green!8, rounded corners=4pt, text width=3.95cm, minimum height=1.15cm, align=left, font=\small] at (-4.45,-4.95) {\textbf{DTT}\\Maps tags to hashes.\\Semantic filtering.};
+\node[draw=blue!50!black, fill=blue!8, rounded corners=4pt, text width=3.95cm, minimum height=1.15cm, align=left, font=\small] at (0,-4.95) {\textbf{DDT}\\Resolves hashes.\\Tracks holders.};
+\node[draw=orange!70!black, fill=orange!8, rounded corners=4pt, text width=3.95cm, minimum height=1.15cm, align=left, font=\small] at (4.45,-4.95) {\textbf{Overlay Retrieval}\\Routes to storage VNs.\\Retrieves content.};
+\end{tikzpicture}}
+\caption{Content discovery and resolution model.}
+\end{figure}}
+
+\newcommand{\thesisdeliverytikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  panel/.style={rectangle, draw, rounded corners=4pt, fill=gray!8, minimum width=2.2cm, minimum height=1.25cm, text width=2.0cm, align=center, font=\scriptsize},
+  nodebox/.style={rectangle, draw, rounded corners=4pt, fill=blue!8, minimum width=2.05cm, minimum height=0.95cm, align=center},
+  arrow/.style={-{Latex[length=2.8mm]}, thick},
+  route/.style={-{Latex[length=3mm]}, very thick, blue!65!black},
+  alt/.style={-{Latex[length=2.4mm]}, dashed, thick, blue!60!black},
+  e2e/.style={-{Latex[length=3mm]}, very thick, green!55!black, bend left=20},
+  reply/.style={-{Latex[length=2.8mm]}, dashed, thick, purple!60!black}
+]
+\node[font=\bfseries\Large, blue!35!black] at (0,5.05) {Message Routing Process};
+\node[font=\bfseries] at (0,4.58) {Secure, Decentralized, and Obfuscated Communication};
+\foreach \i/\x/\t in {1/-5.0/DRT Query,2/-2.5/Entry Points,3/0/Hop-by-Hop Routing,4/2.5/Protected Communication,5/5.0/Reply Path} {
+  \node[panel] at (\x,3.55) {\textbf{\i. \t}\\\scriptsize workflow step};
+}
+\node[nodebox] (sender) at (-5.90,1.0) {Sender\\Virtual A};
+\node[cylinder, shape border rotate=90, draw, aspect=0.25, minimum height=1.1cm, minimum width=0.7cm, fill=gray!20] (drt) at (-3.65,1.0) {DRT};
+\node[ellipse, draw, minimum width=5.7cm, minimum height=2.95cm, fill=blue!5] (cloud) at (0.15,0.55) {};
+\foreach \n/\x/\y/\label in {a/-1.65/0.15/A,b/-0.35/1.05/B,c/1.0/0.75/C,d/-0.15/-0.75/D,e/-1.35/-1.25/E,f/1.45/-1.15/F,g/0.45/-1.75/G,h/2.45/0.0/H} {
+  \node[rectangle, draw, fill=gray!25, minimum width=0.45cm, minimum height=0.75cm] (n\n) at (\x,\y+0.55) {};
+  \node[font=\scriptsize] at (\x,\y) {Node \label};
+}
+\node[nodebox, draw=purple!70!black] (dest) at (5.55,1.0) {Destination\\Virtual B};
+\draw[arrow] (sender) -- (drt);
+\node[font=\tiny, fill=white, inner sep=1pt, align=center] at (-4.48,1.34) {DRT\\query};
+\draw[arrow, dashed] (drt) -- (na);
+\node[font=\scriptsize, fill=white, inner sep=1pt] at (-2.54,1.33) {entry points};
+\draw[route] (na) -- (nb) -- (nc) -- (nh) -- (dest);
+\draw[alt] (na) -- (ne);
+\draw[alt] (ne) -- (nd);
+\draw[alt] (nd) -- (nf);
+\draw[alt] (nf) -- (nh);
+\draw[alt] (nd) -- (nc);
+\draw[e2e] (sender.north) to node[above, font=\scriptsize, fill=white, inner sep=1pt] {End-to-end encrypted session} (dest.north);
+\draw[reply] (dest.south) .. controls (4.0,-2.92) and (-3.0,-2.92) .. (sender.south);
+\node[draw, rounded corners=4pt, fill=blue!7, text width=2.9cm, minimum height=1.8cm, align=left, font=\small] at (-4.8,-3.85) {\textbf{Node knowledge}\\Previous hop and next hop only.};
+\node[draw, rounded corners=4pt, fill=blue!7, text width=2.9cm, minimum height=1.8cm, align=left, font=\small] at (-1.6,-3.85) {\textbf{Protection}\\E2E layer plus hop layer.};
+\node[draw, rounded corners=4pt, fill=blue!7, text width=2.9cm, minimum height=1.8cm, align=left, font=\small] at (1.6,-3.85) {\textbf{Failure}\\Retry entry point or route.};
+\node[draw, rounded corners=4pt, fill=blue!7, text width=2.9cm, minimum height=1.8cm, align=left, font=\small] at (4.8,-3.85) {\textbf{Properties}\\Obfuscated path, no global route.};
+\end{tikzpicture}}
+\caption{Message routing process.}
+\end{figure}}

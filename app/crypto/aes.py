@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import os
+from threading import Lock
 from dataclasses import dataclass
 
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCMSIV
 
 from .utils import BytesLike, bytes_to_hex, ensure_bytes, hex_to_bytes, validate_hex_length
 
 
 AES_KEY_SIZE = 32
-AES_BLOCK_SIZE = 16
+AES_GCM_SIV_NONCE_SIZE = 12
+AES_GCM_SIV_TAG_SIZE = 16
+
+_used_nonce_keys: set[tuple[str, str]] = set()
+_used_nonce_keys_lock = Lock()
 
 
 @dataclass(frozen=True)
@@ -19,34 +23,39 @@ class AESCipherHexResult:
     ciphertext_hex: str
     payload_hex: str
 
+    @property
+    def nonce_hex(self) -> str:
+        return self.iv_hex
+
 
 def generate_key_hex() -> str:
     return os.urandom(AES_KEY_SIZE).hex()
 
 
 def generate_iv_hex() -> str:
-    return os.urandom(AES_BLOCK_SIZE).hex()
+    return generate_nonce_hex()
+
+
+def generate_nonce_hex() -> str:
+    return os.urandom(AES_GCM_SIV_NONCE_SIZE).hex()
 
 
 def encrypt_bytes(data: bytes, key_hex: str, iv_hex: str | None = None) -> AESCipherHexResult:
     validate_hex_length(key_hex, AES_KEY_SIZE, field_name="key_hex")
-    iv_hex = iv_hex or generate_iv_hex()
-    validate_hex_length(iv_hex, AES_BLOCK_SIZE, field_name="iv_hex")
+    nonce_hex = iv_hex or _generate_unused_nonce_hex(key_hex)
+    validate_hex_length(nonce_hex, AES_GCM_SIV_NONCE_SIZE, field_name="nonce_hex")
+    _remember_nonce_use(key_hex, nonce_hex)
 
     key = hex_to_bytes(key_hex)
-    iv = hex_to_bytes(iv_hex)
+    nonce = hex_to_bytes(nonce_hex)
 
-    padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded_data = padder.update(data) + padder.finalize()
-
-    encryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()
-    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+    ciphertext = AESGCMSIV(key).encrypt(nonce, data, None)
     ciphertext_hex = bytes_to_hex(ciphertext)
 
     return AESCipherHexResult(
-        iv_hex=iv_hex,
+        iv_hex=nonce_hex,
         ciphertext_hex=ciphertext_hex,
-        payload_hex=iv_hex + ciphertext_hex,
+        payload_hex=nonce_hex + ciphertext_hex,
     )
 
 
@@ -60,25 +69,23 @@ def encrypt_hex(plaintext_hex: str, key_hex: str, iv_hex: str | None = None) -> 
 
 def decrypt_bytes(payload_hex: str, key_hex: str) -> bytes:
     validate_hex_length(key_hex, AES_KEY_SIZE, field_name="key_hex")
-    if len(payload_hex) < AES_BLOCK_SIZE * 2:
-        raise ValueError("payload_hex deve conter IV + ciphertext em HEX.")
+    nonce_hex_length = AES_GCM_SIV_NONCE_SIZE * 2
+    minimum_payload_hex_length = (AES_GCM_SIV_NONCE_SIZE + AES_GCM_SIV_TAG_SIZE) * 2
+    if len(payload_hex) < minimum_payload_hex_length:
+        raise ValueError("payload_hex deve conter nonce + ciphertext autenticado em HEX.")
 
-    iv_hex = payload_hex[: AES_BLOCK_SIZE * 2]
-    ciphertext_hex = payload_hex[AES_BLOCK_SIZE * 2 :]
+    nonce_hex = payload_hex[:nonce_hex_length]
+    ciphertext_hex = payload_hex[nonce_hex_length:]
 
-    validate_hex_length(iv_hex, AES_BLOCK_SIZE, field_name="iv_hex")
+    validate_hex_length(nonce_hex, AES_GCM_SIV_NONCE_SIZE, field_name="nonce_hex")
     if not ciphertext_hex:
         raise ValueError("payload_hex nao contem ciphertext.")
 
     key = hex_to_bytes(key_hex)
-    iv = hex_to_bytes(iv_hex)
+    nonce = hex_to_bytes(nonce_hex)
     ciphertext = hex_to_bytes(ciphertext_hex)
 
-    decryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
-    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-
-    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
-    return unpadder.update(padded_plaintext) + unpadder.finalize()
+    return AESGCMSIV(key).decrypt(nonce, ciphertext, None)
 
 
 def decrypt_text(payload_hex: str, key_hex: str, *, encoding: str = "utf-8") -> str:
@@ -87,3 +94,24 @@ def decrypt_text(payload_hex: str, key_hex: str, *, encoding: str = "utf-8") -> 
 
 def decrypt_hex(payload_hex: str, key_hex: str) -> str:
     return bytes_to_hex(decrypt_bytes(payload_hex, key_hex))
+
+
+def _generate_unused_nonce_hex(key_hex: str) -> str:
+    for _ in range(256):
+        nonce_hex = generate_nonce_hex()
+        if not _was_nonce_used(key_hex, nonce_hex):
+            return nonce_hex
+    raise RuntimeError("nao foi possivel gerar nonce AES-GCM-SIV unico para esta chave.")
+
+
+def _remember_nonce_use(key_hex: str, nonce_hex: str) -> None:
+    nonce_key = (key_hex, nonce_hex)
+    with _used_nonce_keys_lock:
+        if nonce_key in _used_nonce_keys:
+            raise ValueError("nonce AES-GCM-SIV reutilizado com a mesma chave.")
+        _used_nonce_keys.add(nonce_key)
+
+
+def _was_nonce_used(key_hex: str, nonce_hex: str) -> bool:
+    with _used_nonce_keys_lock:
+        return (key_hex, nonce_hex) in _used_nonce_keys
