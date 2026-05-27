@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from bootstrap import BootstrapResolutionResult
+from common import load_json_object
 from crypto import aes_decrypt_hex, aes_encrypt_hex
 from .network import detect_local_network_host
 from .models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -16,6 +17,7 @@ from .router import MessageRouter
 from .services import EngineServices
 from transport import (
     OutboundMessage,
+    RelayTcpTransportAdapter,
     TcpTransportAdapter,
     TcpTransportConfig,
     TransportEndpoint,
@@ -26,6 +28,15 @@ from transport import (
 
 def _should_force_new_forward_connection(message_type: str) -> bool:
     return message_type.startswith("ROUTE_CREATE")
+
+
+def _read_metadata_string(metadata: dict[str, object], field_name: str) -> str | None:
+    value = metadata.get(field_name)
+    return value if isinstance(value, str) and value else None
+
+
+def _can_forward_through_observed_only_session(message_type: str) -> bool:
+    return message_type in {"PHYSICAL_RELAY_DATA", "PHYSICAL_RELAY_CLOSE"}
 
 
 class CoreEngine:
@@ -42,6 +53,7 @@ class CoreEngine:
         self.services = services or EngineServices()
         self.services.ensure_defaults()
         self.services.bind_engine(self)
+        self._configure_relay_transport_adapter()
         self.services.transport.set_inbound_packet_handler(self.handle_transport_packet)
         self.bootstrap_result: BootstrapResolutionResult | None = None
         self.message_router = MessageRouter()
@@ -72,6 +84,44 @@ class CoreEngine:
     async def send_packet(self, message: OutboundMessage) -> None:
         prepared_message = self._prepare_outbound_message(message)
         await self.services.transport.send(prepared_message)
+
+    def _configure_relay_transport_adapter(self) -> None:
+        adapter = self.services.transport.adapters.get("relay_tcp")
+        if adapter is None:
+            relay_adapter = RelayTcpTransportAdapter(self._send_relay_transport_packet)
+            self.services.transport.register_adapter(relay_adapter)
+            return
+
+        if isinstance(adapter, RelayTcpTransportAdapter):
+            adapter.set_relay_sender(self._send_relay_transport_packet)
+
+    async def _send_relay_transport_packet(self, message: OutboundMessage) -> None:
+        if self.services.protocol_clients is None:
+            raise RuntimeError("Protocol clients are not initialized.")
+
+        target_physical_node_id = _read_metadata_string(message.metadata, "target_physical_node_id")
+        relay_physical_node_id = _read_metadata_string(message.metadata, "relay_physical_node_id")
+        if target_physical_node_id is None:
+            raise ValueError("relay_tcp message requires target_physical_node_id metadata.")
+        if relay_physical_node_id is None:
+            relay_physical_node_id = self._resolve_relay_node_id_from_endpoint(message.remote_endpoint)
+        if relay_physical_node_id is None:
+            raise ValueError("relay_tcp message requires relay_physical_node_id metadata.")
+
+        await self.services.protocol_clients.physical.relay.send_transport_packet(
+            relay_physical_node_id=relay_physical_node_id,
+            target_physical_node_id=target_physical_node_id,
+            payload=message.payload,
+            relay_endpoint=message.remote_endpoint,
+            relay_channel_id=_read_metadata_string(message.metadata, "relay_channel_id"),
+        )
+
+    def _resolve_relay_node_id_from_endpoint(self, endpoint: TransportEndpoint) -> str | None:
+        return self.services.identity_service.find_remote_physical_node_id_by_endpoint(
+            transport="tcp",
+            host=endpoint.host,
+            port=endpoint.port,
+        )
 
     async def handle_transport_packet(self, packet: TransportPacket) -> None:
         context = PacketContext(
@@ -219,8 +269,12 @@ class CoreEngine:
                 TcpTransportConfig(
                     listen_host=config.listen_host,
                     listen_port=config.listen_port,
+                    listen_enabled=not self.is_private_physical_node(),
                 )
             )
+        )
+        transport_service.register_adapter(
+            RelayTcpTransportAdapter(self._send_relay_transport_packet)
         )
         transport_service.set_inbound_packet_handler(self.handle_transport_packet)
         self.services.transport = transport_service
@@ -349,6 +403,22 @@ class CoreEngine:
 
         node_index = int(match.group(1))
         return 19001 + node_index - 1
+
+    def is_private_physical_node(self) -> bool:
+        return self.services.config.physical_node_reachability.lower() == "private"
+
+    def build_local_physical_endpoints(self, transport_name: str = "tcp") -> list[dict[str, object]]:
+        if transport_name != "tcp" or self.is_private_physical_node():
+            return []
+
+        return [
+            {
+                "transport": "tcp",
+                "host": self.get_advertised_tcp_host(),
+                "port": self.get_advertised_tcp_port(),
+                "priority": 0,
+            }
+        ]
 
     def build_message_header(
         self,
@@ -525,7 +595,10 @@ class CoreEngine:
             if (
                 session is not None
                 and session.session_state == "active"
-                and not self._is_observed_only_physical_session(session)
+                and (
+                    not self._is_observed_only_physical_session(session)
+                    or _can_forward_through_observed_only_session(message_type)
+                )
             ):
                 await self._send_message_over_physical_session(
                     session=session,
@@ -648,7 +721,11 @@ class CoreEngine:
                 transport_name=endpoint.transport_name,
                 payload=packet_bytes,
                 remote_endpoint=endpoint,
-                metadata={"force_new_connection": force_new_connection},
+                metadata={
+                    **load_json_object(session.metadata_json),
+                    "target_physical_node_id": session.remote_identity_id,
+                    "force_new_connection": force_new_connection,
+                },
             )
         )
 
@@ -688,6 +765,7 @@ class CoreEngine:
             transport_name=session.transport,
             host=session.remote_host,
             port=session.remote_port,
+            metadata=load_json_object(session.metadata_json),
         )
 
     def _resolve_session_send_endpoint(self, session) -> TransportEndpoint | None:
@@ -730,17 +808,7 @@ class CoreEngine:
     def _is_observed_only_physical_session(session) -> bool:
         if session.session_scope != "physical":
             return False
-        if not session.metadata_json:
-            return False
-
-        try:
-            metadata = json.loads(session.metadata_json)
-        except json.JSONDecodeError:
-            return False
-
-        if not isinstance(metadata, dict):
-            return False
-        return metadata.get("physical_endpoint_source") == "observed"
+        return load_json_object(session.metadata_json).get("physical_endpoint_source") == "observed"
 
     def _validate_message_policy(
         self,

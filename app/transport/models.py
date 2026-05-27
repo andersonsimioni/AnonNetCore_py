@@ -20,6 +20,7 @@ class TransportEndpoint:
     transport_name: str
     host: str
     port: int
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from common import load_json_object
 from crypto import (
     dilithium_sign_hex,
     dilithium_verify_hex,
@@ -11,6 +12,7 @@ from crypto import (
     sha512_hex,
 )
 from sessions import SessionStateUpdateInput
+from transport import normalize_endpoint_list
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -229,7 +231,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         services.session_manager.update_session_state(
             session_id,
-            data=_build_endpoint_metadata_update(endpoint_source),
+            data=_build_endpoint_metadata_update(endpoint_source, context.metadata),
         )
 
         ephemeral_key_pair = generate_kyber_key_pair()
@@ -837,7 +839,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             )
             return
 
-        initiator_endpoints = _select_valid_endpoints(payload.get("initiator_endpoints"))
+        initiator_endpoints = normalize_endpoint_list(payload.get("initiator_endpoints"))
         if not initiator_endpoints:
             services.log_service.debug(
                 "physical_session",
@@ -919,7 +921,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         services.session_manager.update_session_state(
             session_id,
-            data=_build_endpoint_metadata_update(endpoint_source),
+            data=_build_endpoint_metadata_update(endpoint_source, context.metadata),
         )
         services.log_service.debug(
             "physical_session",
@@ -947,6 +949,9 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         fallback_host: str | None,
         fallback_port: int | None,
     ) -> tuple[str, str | None, int | None, str]:
+        if services.config.physical_node_reachability == "private" and fallback_transport == "relay_tcp":
+            return fallback_transport, fallback_host, fallback_port, "relay"
+
         known_endpoints = services.identity_service.list_remote_physical_node_endpoints(remote_physical_node_id)
         for endpoint in known_endpoints:
             if endpoint.transport == fallback_transport:
@@ -1017,10 +1022,21 @@ def _read_session_id(envelope: ProtocolEnvelope) -> str | None:
     return read_physical_session_id(envelope)
 
 
-def _build_endpoint_metadata_update(endpoint_source: str) -> SessionStateUpdateInput:
+def _build_endpoint_metadata_update(
+    endpoint_source: str,
+    context_metadata: dict[str, object] | None = None,
+) -> SessionStateUpdateInput:
+    metadata = {
+        key: value
+        for key, value in (context_metadata or {}).items()
+        if key in {"relay_channel_id", "relay_physical_node_id", "target_physical_node_id"}
+        and isinstance(value, str)
+        and value
+    }
+    metadata["physical_endpoint_source"] = endpoint_source
     return SessionStateUpdateInput(
         metadata_json=json.dumps(
-            {"physical_endpoint_source": endpoint_source},
+            metadata,
             separators=(",", ":"),
             sort_keys=True,
         )
@@ -1028,48 +1044,5 @@ def _build_endpoint_metadata_update(endpoint_source: str) -> SessionStateUpdateI
 
 
 def _read_endpoint_source(metadata_json: str | None) -> str | None:
-    if not metadata_json:
-        return None
-
-    try:
-        metadata = json.loads(metadata_json)
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(metadata, dict):
-        return None
-
-    endpoint_source = metadata.get("physical_endpoint_source")
+    endpoint_source = load_json_object(metadata_json).get("physical_endpoint_source")
     return endpoint_source if isinstance(endpoint_source, str) else None
-
-
-def _select_valid_endpoints(endpoints: object) -> list[dict[str, object]]:
-    if not isinstance(endpoints, list):
-        return []
-
-    valid_endpoints: list[dict[str, object]] = []
-    for endpoint in endpoints:
-        if not isinstance(endpoint, dict):
-            continue
-
-        transport = endpoint.get("transport")
-        host = endpoint.get("host")
-        port = endpoint.get("port")
-        priority = endpoint.get("priority", 0)
-        if not isinstance(transport, str) or not transport:
-            continue
-        if not isinstance(host, str) or not host:
-            continue
-        if not isinstance(port, int):
-            continue
-
-        valid_endpoints.append(
-            {
-                "transport": transport,
-                "host": host,
-                "port": port,
-                "priority": priority if isinstance(priority, int) else 0,
-            }
-        )
-
-    return valid_endpoints

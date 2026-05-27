@@ -28,6 +28,7 @@ class TcpConnection:
 class TcpTransportConfig:
     listen_host: str = "0.0.0.0"
     listen_port: int = 9000
+    listen_enabled: bool = True
     backlog: int = 100
     idle_timeout_seconds: int = 60
 
@@ -54,12 +55,13 @@ class TcpTransportAdapter(TransportAdapter):
             return
 
         self._state = TransportState.STARTING
-        self._server = await asyncio.start_server(
-            self._handle_connection,
-            host=self.config.listen_host,
-            port=self.config.listen_port,
-            backlog=self.config.backlog,
-        )
+        if self.config.listen_enabled:
+            self._server = await asyncio.start_server(
+                self._handle_connection,
+                host=self.config.listen_host,
+                port=self.config.listen_port,
+                backlog=self.config.backlog,
+            )
         self._state = TransportState.STARTED
 
     async def stop(self) -> None:

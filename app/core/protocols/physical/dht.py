@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from common import load_json_object
 from dht import parse_record, serialize_record, validate_and_merge
 from storage.models import DhtRecord
 
@@ -928,17 +929,7 @@ def _summarize_responsible_nodes(nodes: list[dict[str, object]]) -> list[dict[st
 
 
 def _is_observed_only_physical_session(session) -> bool:
-    if not session.metadata_json:
-        return False
-
-    try:
-        metadata = json.loads(session.metadata_json)
-    except json.JSONDecodeError:
-        return False
-
-    if not isinstance(metadata, dict):
-        return False
-    return metadata.get("physical_endpoint_source") == "observed"
+    return load_json_object(session.metadata_json).get("physical_endpoint_source") == "observed"
 
 
 @dataclass(slots=True, frozen=True)

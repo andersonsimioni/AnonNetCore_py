@@ -30,6 +30,7 @@ def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
 
 @dataclass(slots=True)
 class CoreConfig:
+    physical_node_reachability: str = "public"
     listen_host: str = "0.0.0.0"
     listen_port: int = 19001
     log_dir: str | Path = "data/local/logs"
@@ -69,6 +70,9 @@ class CoreConfig:
     physical_node_info_exchange_interval_seconds: int = 120
     physical_node_info_exchange_runtime_interval_seconds: float = 5.0
     physical_node_info_exchange_max_records: int = 32
+    physical_relay_challenge_ttl_seconds: int = 60
+    physical_relay_registration_ttl_seconds: int = 30 * 60
+    physical_relay_channel_ttl_seconds: int = 10 * 60
     dht_replication_factor: int = 3
     dht_maintenance_runtime_interval_seconds: float = 5.0
     dht_maintenance_publish_backoff_seconds: float = 600.0

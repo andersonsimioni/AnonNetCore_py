@@ -106,6 +106,65 @@ def count_running_cluster_containers() -> int:
     return len([line for line in completed.stdout.splitlines() if line.strip()])
 
 
+def wait_for_cluster_to_reach_local_core_ports(
+    *ports: int,
+    host: str = "host.docker.internal",
+    probe_container: str = "anonnet-node-001",
+    timeout_seconds: float = 45.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error = ""
+
+    while time.monotonic() < deadline:
+        failed_ports: list[int] = []
+        for port in ports:
+            result = probe_tcp_from_cluster_container(
+                host=host,
+                port=port,
+                probe_container=probe_container,
+            )
+            if result.returncode == 0:
+                print(f"docker reachability OK: {host}:{port}", flush=True)
+                continue
+
+            failed_ports.append(port)
+            last_error = (result.stderr or result.stdout or "").strip()
+
+        if not failed_ports:
+            return
+
+        print(
+            "waiting docker reachability: "
+            f"host={host} failed_ports={failed_ports} last_error={last_error}",
+            flush=True,
+        )
+        time.sleep(1.0)
+
+    raise TimeoutError(
+        f"Docker cluster cannot reach local core ports {list(ports)} through {host}. "
+        f"Last error: {last_error}"
+    )
+
+
+def probe_tcp_from_cluster_container(
+    *,
+    host: str,
+    port: int,
+    probe_container: str,
+) -> subprocess.CompletedProcess[str]:
+    script = (
+        "import socket; "
+        f"sock=socket.create_connection(({host!r}, {int(port)}), timeout=3); "
+        "sock.close()"
+    )
+    return subprocess.run(
+        ["docker", "exec", probe_container, "python", "-c", script],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+
 def create_test_core(
     *,
     data_dir: Path,

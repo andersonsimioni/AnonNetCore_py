@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from common import load_json_object
 from crypto import sha512_hex
 from dht import DpntRecordPayload, DrtRecordPayload, DrtRouteEntryRecord, parse_record
 from ..helpers import (
@@ -693,18 +694,9 @@ class VirtualSessionClient:
         return verify_dilithium_payload_signature(payload, record.signature, record.pk_physical_node)
 
     def _read_session_entry_point_physical_node_id(self, session) -> str | None:
-        if not session.metadata_json:
-            return None
-
-        try:
-            metadata = json.loads(session.metadata_json)
-        except json.JSONDecodeError:
-            return None
-
-        if not isinstance(metadata, dict):
-            return None
-
-        entry_point_physical_node_id = metadata.get("entry_point_physical_node_id")
+        entry_point_physical_node_id = load_json_object(session.metadata_json).get(
+            "entry_point_physical_node_id"
+        )
         if isinstance(entry_point_physical_node_id, str) and entry_point_physical_node_id:
             return entry_point_physical_node_id
         return None

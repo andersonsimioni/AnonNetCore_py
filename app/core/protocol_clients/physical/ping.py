@@ -4,7 +4,7 @@ import asyncio
 from time import perf_counter
 from uuid import uuid4
 
-from transport import OutboundMessage, TransportEndpoint
+from transport import OutboundMessage, build_transport_endpoint_from_result
 
 from ...protocols import PingProtocolHandler
 
@@ -37,11 +37,17 @@ class PhysicalPingClient:
 
         last_error: Exception | None = None
         for endpoint_data in endpoints:
-            endpoint = TransportEndpoint(
-                transport_name=endpoint_data.transport,
-                host=endpoint_data.host,
-                port=endpoint_data.port,
-            )
+            if not self.engine.services.transport.has_adapter(endpoint_data.transport):
+                self.engine.services.log_service.debug(
+                    "physical_ping_client",
+                    "skipping ping endpoint without registered transport adapter",
+                    remote_physical_node_id=remote_physical_node_id,
+                    transport=endpoint_data.transport,
+                    host=endpoint_data.host,
+                    port=endpoint_data.port,
+                )
+                continue
+            endpoint = build_transport_endpoint_from_result(endpoint_data)
             self.engine.services.log_service.info(
                 "physical_ping_client",
                 "trying ping on remote endpoint",

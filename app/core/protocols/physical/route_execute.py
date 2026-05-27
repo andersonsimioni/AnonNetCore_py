@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 
+from common import load_json_object
 from crypto import aes_decrypt_hex, aes_encrypt_hex
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -522,7 +523,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         if session.bound_route_id != route_data.path_id:
             return None
 
-        metadata = _load_metadata_dict(session.metadata_json)
+        metadata = load_json_object(session.metadata_json)
         entry_point_physical_node_id = metadata.get("entry_point_physical_node_id")
         if not isinstance(entry_point_physical_node_id, str) or not entry_point_physical_node_id:
             return None
@@ -594,19 +595,6 @@ def _opposite_route_direction(direction: str) -> str:
     if direction == "pn_to_vn":
         return "vn_to_pn"
     raise ValueError("direction invalido.")
-
-
-def _load_metadata_dict(metadata_json: str | None) -> dict[str, object]:
-    if not metadata_json:
-        return {}
-
-    try:
-        metadata = json.loads(metadata_json)
-    except json.JSONDecodeError:
-        return {}
-
-    return metadata if isinstance(metadata, dict) else {}
-
 
 def _build_virtual_envelope_aad(
     *,

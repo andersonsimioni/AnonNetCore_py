@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 
-from common import utc_now
+from common import compact_json_text, load_json_object, utc_now
 from crypto import generate_dilithium_key_pair, sha512_hex
 from dht import DpntRecordPayload, serialize_record
 from storage import DatabaseManager, get_database
@@ -34,8 +34,8 @@ def _merge_notes_json(
     existing_notes_json: str | None,
     new_notes_json: str | None,
 ) -> str | None:
-    existing_notes = _load_json_object(existing_notes_json)
-    new_notes = _load_json_object(new_notes_json)
+    existing_notes = load_json_object(existing_notes_json)
+    new_notes = load_json_object(new_notes_json)
     merged_notes = dict(existing_notes)
 
     for key, value in new_notes.items():
@@ -53,19 +53,18 @@ def _merge_notes_json(
     return json.dumps(merged_notes, separators=(",", ":"))
 
 
-def _load_json_object(payload: str | None) -> dict[str, object]:
-    if not payload:
-        return {}
+def _normalize_endpoint_metadata_json(endpoint_data: dict[str, object]) -> str | None:
+    metadata = endpoint_data.get("metadata")
+    if isinstance(metadata, dict) and metadata:
+        return compact_json_text(metadata)
 
-    try:
-        parsed = json.loads(payload)
-    except json.JSONDecodeError:
-        return {}
+    metadata_json = endpoint_data.get("metadata_json")
+    if isinstance(metadata_json, str) and metadata_json:
+        parsed = load_json_object(metadata_json)
+        if parsed:
+            return compact_json_text(parsed)
 
-    if not isinstance(parsed, dict):
-        return {}
-
-    return parsed
+    return None
 
 
 class IdentityService:
@@ -309,9 +308,28 @@ class IdentityService:
                 host=endpoint.host,
                 port=endpoint.port,
                 priority=endpoint.priority,
+                metadata_json=endpoint.metadata_json,
             )
             for endpoint in endpoints
         ]
+
+    def find_remote_physical_node_id_by_endpoint(
+        self,
+        *,
+        transport: str,
+        host: str,
+        port: int,
+    ) -> str | None:
+        with self.database.session_scope() as session:
+            endpoint = session.scalar(
+                select(NodeEndpoint)
+                .where(NodeEndpoint.transport == transport)
+                .where(NodeEndpoint.host == host)
+                .where(NodeEndpoint.port == port)
+                .where(NodeEndpoint.is_active.is_(True))
+                .order_by(NodeEndpoint.last_success_at.desc(), NodeEndpoint.id.asc())
+            )
+            return endpoint.physical_node_hash_id if endpoint is not None else None
 
     def list_remote_physical_nodes_for_info_exchange(
         self,
@@ -568,6 +586,7 @@ class IdentityService:
                 host = endpoint_data["host"]
                 port = endpoint_data["port"]
                 priority = endpoint_data.get("priority", 0)
+                metadata_json = _normalize_endpoint_metadata_json(endpoint_data)
 
                 endpoint = session.scalar(
                     select(NodeEndpoint).where(
@@ -586,7 +605,7 @@ class IdentityService:
                         priority=priority if isinstance(priority, int) else 0,
                         is_active=True,
                         last_success_at=now,
-                        metadata_json=None,
+                        metadata_json=metadata_json,
                     )
                     session.add(endpoint)
                 else:
@@ -594,6 +613,7 @@ class IdentityService:
                     endpoint.is_active = True
                     endpoint.last_success_at = now
                     endpoint.failure_count = 0
+                    endpoint.metadata_json = metadata_json or endpoint.metadata_json
 
             session.flush()
             session.refresh(remote_node)
@@ -652,6 +672,7 @@ class IdentityService:
                 host = endpoint_data["host"]
                 port = endpoint_data["port"]
                 priority = endpoint_data.get("priority", 0)
+                metadata_json = _normalize_endpoint_metadata_json(endpoint_data)
 
                 endpoint = session.scalar(
                     select(NodeEndpoint).where(
@@ -670,11 +691,12 @@ class IdentityService:
                         priority=priority if isinstance(priority, int) else 0,
                         is_active=False,
                         last_success_at=None,
-                        metadata_json=None,
+                        metadata_json=metadata_json,
                     )
                     session.add(endpoint)
                 else:
                     endpoint.priority = priority if isinstance(priority, int) else endpoint.priority
+                    endpoint.metadata_json = metadata_json or endpoint.metadata_json
                     if not node_was_validated:
                         endpoint.is_active = False
 
@@ -868,7 +890,7 @@ class IdentityService:
         if not endpoints:
             return None
 
-        notes = _load_json_object(remote_node.notes_json)
+        notes = load_json_object(remote_node.notes_json)
         dpnt_signature = notes.get("dpnt_signature")
         dpnt_feature_flags = notes.get("dpnt_feature_flags", [])
         dpnt_reachability_class = notes.get("dpnt_reachability_class")
@@ -897,6 +919,7 @@ class IdentityService:
                     "host": endpoint.host,
                     "port": endpoint.port,
                     "priority": endpoint.priority,
+                    "metadata": load_json_object(endpoint.metadata_json),
                 }
                 for endpoint in endpoints
             ],
@@ -969,15 +992,3 @@ class IdentityService:
         session.add(state)
         session.flush()
         return state
-
-
-def _load_json_object(raw_json: str | None) -> dict[str, object]:
-    if not raw_json:
-        return {}
-
-    try:
-        payload = json.loads(raw_json)
-    except json.JSONDecodeError:
-        return {}
-
-    return payload if isinstance(payload, dict) else {}

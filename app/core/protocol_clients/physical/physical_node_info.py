@@ -64,14 +64,7 @@ class PhysicalNodeInfoClient(EngineBoundComponent):
         self,
         transport_name: str,
     ) -> list[dict[str, object]]:
-        return [
-            {
-                "transport": transport_name,
-                "host": self.engine.get_advertised_tcp_host(),
-                "port": self.engine.get_advertised_tcp_port(),
-                "priority": 0,
-            }
-        ]
+        return self.engine.build_local_physical_endpoints(transport_name)
 
     def _build_local_dpnt_descriptor(
         self,
@@ -87,7 +80,7 @@ class PhysicalNodeInfoClient(EngineBoundComponent):
             return None
 
         protocol_version = "1"
-        reachability_class = "direct"
+        reachability_class = self.engine.services.config.physical_node_reachability
         relay_capable = False
         hole_punch_capable = False
         feature_flags: list[str] = []

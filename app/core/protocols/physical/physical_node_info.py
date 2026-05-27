@@ -5,6 +5,7 @@ from hashlib import sha512
 from uuid import uuid4
 
 from crypto import dilithium_sign_hex
+from transport import normalize_endpoint_list
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -228,7 +229,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         requester_node_id = payload.get("requester_node_id")
         requester_public_key = payload.get("requester_public_key")
-        requester_endpoints = _select_valid_endpoints(payload.get("requester_endpoints"))
+        requester_endpoints = normalize_endpoint_list(payload.get("requester_endpoints"))
         requester_status = payload.get("requester_status")
         requester_reachability_class = payload.get("requester_reachability_class")
         requester_relay_capable = payload.get("requester_relay_capable", False)
@@ -327,7 +328,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
         feature_flags = payload.get("feature_flags")
         dpnt_signature = payload.get("dpnt_signature")
 
-        valid_endpoints = _select_valid_endpoints(endpoints)
+        valid_endpoints = normalize_endpoint_list(endpoints)
         services.log_service.debug(
             "physical_node_info",
             "received physical node info response descriptor",
@@ -417,6 +418,8 @@ def _build_response_endpoints(
         if services.engine is not None
         else context.local_port
     )
+    if services.engine is not None and services.engine.is_private_physical_node():
+        return []
     if not advertised_host or advertised_port is None:
         return []
 
@@ -462,29 +465,3 @@ def _sign_dpnt_descriptor(
         sort_keys=True,
     ).encode("utf-8").hex()
     return dilithium_sign_hex(payload_hex, private_key_pem)
-
-
-def _select_valid_endpoints(endpoints: object) -> list[dict[str, object]]:
-    if not isinstance(endpoints, list):
-        return []
-
-    valid_endpoints: list[dict[str, object]] = []
-    for endpoint in endpoints:
-        if not isinstance(endpoint, dict):
-            continue
-
-        transport = endpoint.get("transport")
-        host = endpoint.get("host")
-        port = endpoint.get("port")
-        if isinstance(transport, str) and transport and isinstance(host, str) and host and isinstance(port, int):
-            priority = endpoint.get("priority", 0)
-            valid_endpoints.append(
-                {
-                    "transport": transport,
-                    "host": host,
-                    "port": port,
-                    "priority": priority if isinstance(priority, int) else 0,
-                }
-            )
-
-    return valid_endpoints

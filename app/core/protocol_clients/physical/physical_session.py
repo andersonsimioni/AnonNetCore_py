@@ -5,8 +5,17 @@ import json
 
 from crypto import sha512_hex
 from dht import DpntRecordPayload, parse_record
-from sessions import build_remote_endpoint_from_session, is_observed_only_physical_session
-from transport import OutboundMessage, TransportEndpoint
+from sessions import (
+    SessionStateUpdateInput,
+    build_remote_endpoint_from_session,
+    is_observed_only_physical_session,
+)
+from transport import (
+    OutboundMessage,
+    TransportEndpoint,
+    build_transport_endpoint_from_result,
+    normalize_endpoint_list,
+)
 
 from ...protocols import SessionProtocolHandler
 from ..helpers import (
@@ -65,11 +74,17 @@ class PhysicalSessionClient:
             endpoint_count=len(endpoints),
         )
         for endpoint_data in endpoints:
-            endpoint = TransportEndpoint(
-                transport_name=endpoint_data.transport,
-                host=endpoint_data.host,
-                port=endpoint_data.port,
-            )
+            if not self.engine.services.transport.has_adapter(endpoint_data.transport):
+                self.engine.services.log_service.debug(
+                    "physical_session_client",
+                    "skipping physical session endpoint without transport adapter",
+                    remote_physical_node_id=remote_physical_node_id,
+                    transport=endpoint_data.transport,
+                    host=endpoint_data.host,
+                    port=endpoint_data.port,
+                )
+                continue
+            endpoint = build_transport_endpoint_from_result(endpoint_data)
             self.engine.services.log_service.info(
                 "physical_session_client",
                 "trying to establish physical session",
@@ -255,28 +270,7 @@ class PhysicalSessionClient:
 
     @staticmethod
     def _normalize_dpnt_endpoints(endpoints: list[dict[str, object]]) -> list[dict[str, object]]:
-        valid_endpoints: list[dict[str, object]] = []
-        for endpoint in endpoints:
-            transport = endpoint.get("transport")
-            host = endpoint.get("host")
-            port = endpoint.get("port")
-            priority = endpoint.get("priority", 0)
-            if not isinstance(transport, str) or not transport:
-                continue
-            if not isinstance(host, str) or not host:
-                continue
-            if not isinstance(port, int):
-                continue
-
-            valid_endpoints.append(
-                {
-                    "transport": transport,
-                    "host": host,
-                    "port": port,
-                    "priority": priority if isinstance(priority, int) else 0,
-                }
-            )
-        return valid_endpoints
+        return normalize_endpoint_list(endpoints)
 
     async def send_keepalive(
         self,
@@ -439,6 +433,14 @@ class PhysicalSessionClient:
             remote_port=endpoint.port,
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
+        session_metadata = _build_session_transport_metadata(
+            target_physical_node_id=remote_physical_node_id,
+            endpoint_metadata=endpoint.metadata,
+        )
+        self.engine.services.session_manager.update_session_state(
+            session.session_id,
+            SessionStateUpdateInput(metadata_json=json.dumps(session_metadata, separators=(",", ":"))),
+        )
         header = self.engine.build_message_header(
             message_type="PHYSICAL_SESSION_INIT",
             physical_session_id=session.session_id,
@@ -447,7 +449,7 @@ class PhysicalSessionClient:
             header=header,
             initiator_physical_node_id=local_physical_node_id,
             initiator_public_key=local_public_key,
-            initiator_endpoints=self._build_local_advertised_endpoints(endpoint.transport_name),
+            initiator_endpoints=self.engine.build_local_physical_endpoints("tcp"),
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
 
@@ -457,6 +459,7 @@ class PhysicalSessionClient:
                     transport_name=endpoint.transport_name,
                     payload=payload,
                     remote_endpoint=endpoint,
+                    metadata=session_metadata,
                 )
             )
         except Exception as error:
@@ -541,19 +544,6 @@ class PhysicalSessionClient:
             port=endpoint.port,
         )
 
-    def _build_local_advertised_endpoints(self, transport_name: str) -> list[dict[str, object]]:
-        if transport_name != "tcp":
-            return []
-
-        return [
-            {
-                "transport": "tcp",
-                "host": self.engine.get_advertised_tcp_host(),
-                "port": self.engine.get_advertised_tcp_port(),
-                "priority": 0,
-            }
-        ]
-
     @staticmethod
     def _build_remote_endpoint(session) -> TransportEndpoint:
         return build_remote_endpoint_from_session(session)
@@ -569,3 +559,13 @@ def _build_packet_bytes(
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+
+
+def _build_session_transport_metadata(
+    *,
+    target_physical_node_id: str,
+    endpoint_metadata: dict[str, object],
+) -> dict[str, object]:
+    metadata = dict(endpoint_metadata)
+    metadata["target_physical_node_id"] = target_physical_node_id
+    return metadata

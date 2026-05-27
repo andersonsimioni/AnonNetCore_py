@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from datetime import timedelta
 
+from common import load_json_object
 from sessions import is_observed_only_physical_endpoint
 from .base import PeriodicRuntime
 
@@ -300,16 +300,7 @@ def self_now():
 
 
 def _read_positive_float_from_session_metadata(session, key: str) -> float | None:
-    if not session.metadata_json:
-        return None
-    try:
-        metadata = json.loads(session.metadata_json)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(metadata, dict):
-        return None
-
-    value = metadata.get(key)
+    value = load_json_object(session.metadata_json).get(key)
     if isinstance(value, (int, float)) and value > 0:
         return float(value)
     return None

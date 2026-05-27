@@ -11,6 +11,7 @@ from .protocols import (
     PingProtocolHandler,
     PhysicalNodeInfoExchangeProtocolHandler,
     PhysicalNodeInfoProtocolHandler,
+    PhysicalRelayProtocolHandler,
     ProtocolMessageHandler,
     RouteBuildProtocolHandler,
     RouteExecuteProtocolHandler,
@@ -36,6 +37,7 @@ class MessageRegistry:
         physical_ping = PingProtocolHandler()
         physical_session = SessionProtocolHandler()
         physical_node_info_exchange = PhysicalNodeInfoExchangeProtocolHandler()
+        physical_relay = PhysicalRelayProtocolHandler()
         physical_dht = DhtProtocolHandler()
         physical_route_build = RouteBuildProtocolHandler()
         physical_route_execute = RouteExecuteProtocolHandler()
@@ -206,6 +208,11 @@ class MessageRegistry:
                     requires_physical_session=True,
                 ),
             ]
+        )
+        self._register_handler(
+            physical_relay,
+            layer="physical",
+            requires_physical_session=True,
         )
         self._register_handler(
             physical_dht,

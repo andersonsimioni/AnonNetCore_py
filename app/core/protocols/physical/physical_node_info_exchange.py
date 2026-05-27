@@ -5,6 +5,7 @@ import json
 from sqlalchemy import func, select
 
 from storage.models import NodeEndpoint, RemotePhysicalNodeIdentity
+from transport import normalize_endpoint_list
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -138,6 +139,7 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                                 "host": endpoint.host,
                                 "port": endpoint.port,
                                 "priority": endpoint.priority,
+                                "metadata": _parse_notes_json(endpoint.metadata_json),
                             }
                             for endpoint in endpoints
                         ],
@@ -229,7 +231,7 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                 _count_skip(skip_reasons, "missing_required_record_fields")
                 continue
 
-            valid_endpoints = _select_valid_endpoints(endpoints)
+            valid_endpoints = normalize_endpoint_list(endpoints)
             if not valid_endpoints:
                 skipped_count += 1
                 _count_skip(skip_reasons, "no_valid_endpoints")
@@ -389,30 +391,6 @@ def _parse_notes_json(notes_json: str | None) -> dict[str, object]:
         return {}
 
     return payload if isinstance(payload, dict) else {}
-
-
-def _select_valid_endpoints(endpoints: list[object]) -> list[dict[str, object]]:
-    valid_endpoints: list[dict[str, object]] = []
-    for endpoint in endpoints:
-        if not isinstance(endpoint, dict):
-            continue
-
-        transport = endpoint.get("transport")
-        host = endpoint.get("host")
-        port = endpoint.get("port")
-        if isinstance(transport, str) and transport and isinstance(host, str) and host and isinstance(port, int):
-            priority = endpoint.get("priority", 0)
-            valid_endpoints.append(
-                {
-                    "transport": transport,
-                    "host": host,
-                    "port": port,
-                    "priority": priority if isinstance(priority, int) else 0,
-                }
-            )
-
-    return valid_endpoints
-
 
 def _count_skip(skip_reasons: dict[str, int], reason: str) -> None:
     skip_reasons[reason] = skip_reasons.get(reason, 0) + 1

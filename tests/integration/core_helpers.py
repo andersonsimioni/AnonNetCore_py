@@ -23,6 +23,7 @@ def create_isolated_core(
     data_dir: Path,
     listen_port: int,
     listen_host: str = "0.0.0.0",
+    physical_node_reachability: str = "public",
     log_dir: Path | None = None,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
@@ -42,6 +43,7 @@ def create_isolated_core(
 
     database = DatabaseManager(DatabaseConfig(db_path=db_path))
     config = CoreConfig(
+        physical_node_reachability=physical_node_reachability,
         listen_host=listen_host,
         listen_port=listen_port,
         log_dir=log_dir or data_dir / "logs",

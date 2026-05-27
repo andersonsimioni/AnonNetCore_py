@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-import json
+from common import load_json_object
 
 
 def load_session_metadata(session) -> dict[str, object]:
-    if not session.metadata_json:
-        return {}
-
-    try:
-        metadata = json.loads(session.metadata_json)
-    except json.JSONDecodeError:
-        return {}
-
-    return metadata if isinstance(metadata, dict) else {}
+    return load_json_object(session.metadata_json)
 
 
 def is_observed_only_physical_endpoint(session) -> bool:
@@ -36,4 +28,5 @@ def build_remote_endpoint_from_session(session):
         transport_name=session.transport,
         host=session.remote_host,
         port=session.remote_port,
+        metadata=load_session_metadata(session),
     )

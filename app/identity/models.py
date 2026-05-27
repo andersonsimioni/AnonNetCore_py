@@ -36,6 +36,7 @@ class RemotePhysicalNodeEndpointResult:
     host: str
     port: int
     priority: int
+    metadata_json: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

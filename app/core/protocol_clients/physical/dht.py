@@ -5,6 +5,7 @@ import json
 import random
 from datetime import datetime
 
+from common import load_json_object
 from transport import OutboundMessage, TransportEndpoint
 
 from ...protocols import DhtProtocolHandler
@@ -579,14 +580,4 @@ class PhysicalDhtClient:
 
     @staticmethod
     def _is_observed_only_physical_session(session) -> bool:
-        if not session.metadata_json:
-            return False
-
-        try:
-            metadata = json.loads(session.metadata_json)
-        except json.JSONDecodeError:
-            return False
-
-        if not isinstance(metadata, dict):
-            return False
-        return metadata.get("physical_endpoint_source") == "observed"
+        return load_json_object(session.metadata_json).get("physical_endpoint_source") == "observed"

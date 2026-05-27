@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from time import monotonic
 from uuid import uuid4
 
+from common import load_json_object
 from crypto import (
     aes_decrypt_text,
     aes_encrypt_text,
@@ -385,7 +386,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         final_physical_node_id = _build_physical_node_id(
             initiator_state.final_physical_node_public_key
         )
-        initiator_metadata = _load_metadata_dict(initiator_state.metadata_json)
+        initiator_metadata = load_json_object(initiator_state.metadata_json)
         expected_round_trip_ttl_ms = initiator_metadata.get("expected_round_trip_ttl_ms")
         if not isinstance(expected_round_trip_ttl_ms, int) or expected_round_trip_ttl_ms <= 0:
             return self._build_invalid_result(
@@ -722,7 +723,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             )
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
 
-        metadata = _load_metadata_dict(route_endpoint_state.metadata_json)
+        metadata = load_json_object(route_endpoint_state.metadata_json)
         last_ping_id = metadata.get("last_ping_id")
         started_at_monotonic_ms = metadata.get("last_ping_sent_at_monotonic_ms")
         expected_round_trip_ttl_ms = metadata.get("expected_round_trip_ttl_ms")
@@ -1726,20 +1727,8 @@ def _select_route_local_virtual_node(services, local_virtual_node_id: str | None
     return _select_default_local_virtual_node(services)
 
 
-def _load_metadata_dict(metadata_json: str | None) -> dict[str, object]:
-    if not metadata_json:
-        return {}
-
-    try:
-        payload = json.loads(metadata_json)
-    except json.JSONDecodeError:
-        return {}
-
-    return payload if isinstance(payload, dict) else {}
-
-
 def _read_optional_metadata_string(metadata_json: str | None, key: str) -> str | None:
-    value = _load_metadata_dict(metadata_json).get(key)
+    value = load_json_object(metadata_json).get(key)
     if isinstance(value, str) and value:
         return value
     return None

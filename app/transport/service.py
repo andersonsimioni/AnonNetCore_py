@@ -25,6 +25,9 @@ class TransportService:
     def adapters(self) -> dict[str, TransportAdapter]:
         return self._adapters
 
+    def has_adapter(self, transport_name: str) -> bool:
+        return transport_name in self._adapters
+
     async def start(self) -> None:
         for adapter in self._adapters.values():
             await adapter.start()
