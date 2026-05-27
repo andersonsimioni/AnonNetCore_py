@@ -449,7 +449,7 @@ class PhysicalSessionClient:
             header=header,
             initiator_physical_node_id=local_physical_node_id,
             initiator_public_key=local_public_key,
-            initiator_endpoints=self.engine.build_local_physical_endpoints("tcp"),
+            initiator_endpoints=self.engine.build_local_physical_endpoints(),
             keepalive_interval_seconds=keepalive_interval_seconds,
         )
 

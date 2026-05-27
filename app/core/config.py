@@ -31,8 +31,16 @@ def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
 @dataclass(slots=True)
 class CoreConfig:
     physical_node_reachability: str = "public"
+    physical_tcp_listen_enabled: bool = True
     listen_host: str = "0.0.0.0"
     listen_port: int = 19001
+    udp_enabled: bool = True
+    udp_listen_host: str = "0.0.0.0"
+    udp_listen_port: int | None = None
+    udp_max_datagram_size: int = 1200
+    udp_chunk_payload_size: int = 512
+    udp_max_frame_size: int = 1024 * 1024
+    udp_reassembly_timeout_seconds: float = 10.0
     log_dir: str | Path = "data/local/logs"
     bootstrap_dns_seeds: list[DnsSeed] = field(default_factory=list)
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(

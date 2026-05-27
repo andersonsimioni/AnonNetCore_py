@@ -24,6 +24,9 @@ def create_isolated_core(
     listen_port: int,
     listen_host: str = "0.0.0.0",
     physical_node_reachability: str = "public",
+    physical_tcp_listen_enabled: bool = True,
+    udp_enabled: bool | None = None,
+    udp_listen_port: int | None = None,
     log_dir: Path | None = None,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
@@ -44,10 +47,14 @@ def create_isolated_core(
     database = DatabaseManager(DatabaseConfig(db_path=db_path))
     config = CoreConfig(
         physical_node_reachability=physical_node_reachability,
+        physical_tcp_listen_enabled=physical_tcp_listen_enabled,
         listen_host=listen_host,
         listen_port=listen_port,
+        udp_listen_port=udp_listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
+    if udp_enabled is not None:
+        config.udp_enabled = udp_enabled
     config.api_enabled = False
     if api_port is not None:
         config.api_enabled = True

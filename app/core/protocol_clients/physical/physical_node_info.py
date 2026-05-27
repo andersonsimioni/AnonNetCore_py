@@ -64,7 +64,7 @@ class PhysicalNodeInfoClient(EngineBoundComponent):
         self,
         transport_name: str,
     ) -> list[dict[str, object]]:
-        return self.engine.build_local_physical_endpoints(transport_name)
+        return self.engine.build_local_physical_endpoints()
 
     def _build_local_dpnt_descriptor(
         self,

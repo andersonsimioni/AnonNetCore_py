@@ -8,6 +8,7 @@ from .endpoints import (
 from .relay_transport import RelayTcpTransportAdapter
 from .service import TransportService
 from .tcp_transport import TcpTransportAdapter, TcpTransportConfig
+from .udp_transport import UdpTransportAdapter, UdpTransportConfig
 
 __all__ = [
     "InboundPacketHandler",
@@ -20,6 +21,8 @@ __all__ = [
     "TransportPacket",
     "TransportService",
     "TransportState",
+    "UdpTransportAdapter",
+    "UdpTransportConfig",
     "build_transport_endpoint_from_result",
     "normalize_endpoint_dict",
     "normalize_endpoint_list",

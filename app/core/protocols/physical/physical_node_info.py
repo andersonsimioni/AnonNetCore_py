@@ -408,26 +408,19 @@ def _build_response_endpoints(
     context: PacketContext,
     services: EngineServices,
 ) -> list[dict[str, object]]:
-    advertised_host = (
-        services.engine.get_advertised_tcp_host()
-        if services.engine is not None
-        else context.local_host
-    )
-    advertised_port = (
-        services.engine.get_advertised_tcp_port()
-        if services.engine is not None
-        else context.local_port
-    )
     if services.engine is not None and services.engine.is_private_physical_node():
         return []
-    if not advertised_host or advertised_port is None:
+    if services.engine is not None:
+        return services.engine.build_local_physical_endpoints()
+
+    if not context.local_host or context.local_port is None:
         return []
 
     return [
         {
             "transport": context.transport_name,
-            "host": advertised_host,
-            "port": advertised_port,
+            "host": context.local_host,
+            "port": context.local_port,
             "priority": 0,
         }
     ]

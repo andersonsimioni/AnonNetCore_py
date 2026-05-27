@@ -143,6 +143,15 @@ def build_smoke_plan(args: argparse.Namespace) -> list[SmokeSpec]:
             summary="sequence order, ACK, buffering, dedup",
         )
     )
+    smokes.append(
+        SmokeSpec(
+            name="physical-udp",
+            level="00 transport",
+            command=[python, "tests/integration/physical_udp_smoke.py"],
+            description="Physical session handshake and keepalive over UDP with JSON chunk reassembly.",
+            summary="UDP transport, chunking, session keepalive",
+        )
+    )
 
     if not args.skip_dom:
         smokes.append(

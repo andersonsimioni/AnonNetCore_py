@@ -23,6 +23,8 @@ from transport import (
     TransportEndpoint,
     TransportPacket,
     TransportService,
+    UdpTransportAdapter,
+    UdpTransportConfig,
 )
 
 
@@ -269,10 +271,24 @@ class CoreEngine:
                 TcpTransportConfig(
                     listen_host=config.listen_host,
                     listen_port=config.listen_port,
-                    listen_enabled=not self.is_private_physical_node(),
+                    listen_enabled=config.physical_tcp_listen_enabled and not self.is_private_physical_node(),
                 )
             )
         )
+        if config.udp_enabled:
+            transport_service.register_adapter(
+                UdpTransportAdapter(
+                    UdpTransportConfig(
+                        listen_host=config.udp_listen_host,
+                        listen_port=self.get_configured_udp_listen_port(),
+                        listen_enabled=not self.is_private_physical_node(),
+                        max_datagram_size=config.udp_max_datagram_size,
+                        chunk_payload_size=config.udp_chunk_payload_size,
+                        max_frame_size=config.udp_max_frame_size,
+                        reassembly_timeout_seconds=config.udp_reassembly_timeout_seconds,
+                    )
+                )
+            )
         transport_service.register_adapter(
             RelayTcpTransportAdapter(self._send_relay_transport_packet)
         )
@@ -404,21 +420,53 @@ class CoreEngine:
         node_index = int(match.group(1))
         return 19001 + node_index - 1
 
+    def get_configured_udp_listen_port(self) -> int:
+        if self.services.config.udp_listen_port is not None:
+            return self.services.config.udp_listen_port
+        return self.services.config.listen_port + 10000
+
+    def get_advertised_udp_host(self) -> str:
+        advertised_host_from_env = os.getenv("ANONNET_ADVERTISED_UDP_HOST")
+        if advertised_host_from_env:
+            return advertised_host_from_env
+        return self.get_advertised_tcp_host()
+
+    def get_advertised_udp_port(self) -> int:
+        advertised_port_from_env = os.getenv("ANONNET_ADVERTISED_UDP_PORT")
+        if advertised_port_from_env:
+            try:
+                return int(advertised_port_from_env)
+            except ValueError:
+                pass
+        return self.get_configured_udp_listen_port()
+
     def is_private_physical_node(self) -> bool:
         return self.services.config.physical_node_reachability.lower() == "private"
 
-    def build_local_physical_endpoints(self, transport_name: str = "tcp") -> list[dict[str, object]]:
-        if transport_name != "tcp" or self.is_private_physical_node():
+    def build_local_physical_endpoints(self, transport_name: str | None = None) -> list[dict[str, object]]:
+        if self.is_private_physical_node():
             return []
 
-        return [
-            {
-                "transport": "tcp",
-                "host": self.get_advertised_tcp_host(),
-                "port": self.get_advertised_tcp_port(),
-                "priority": 0,
-            }
-        ]
+        endpoints: list[dict[str, object]] = []
+        if self.services.config.physical_tcp_listen_enabled and transport_name in {None, "tcp"}:
+            endpoints.append(
+                {
+                    "transport": "tcp",
+                    "host": self.get_advertised_tcp_host(),
+                    "port": self.get_advertised_tcp_port(),
+                    "priority": 0,
+                }
+            )
+        if self.services.config.udp_enabled and transport_name in {None, "udp"}:
+            endpoints.append(
+                {
+                    "transport": "udp",
+                    "host": self.get_advertised_udp_host(),
+                    "port": self.get_advertised_udp_port(),
+                    "priority": 10,
+                }
+            )
+        return endpoints
 
     def build_message_header(
         self,
