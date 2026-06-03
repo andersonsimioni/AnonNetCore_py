@@ -2890,18 +2890,14 @@ Direct messages use virtual sessions. The application requests a session with a 
 \subsection{Experimental Execution}
 \label{sec:experimental-execution}
 
-The implementation includes scripts to run local cores, clusters, the social PoC, the Debug Console, and integration smokes. The following commands are representative examples:
+The implementation includes three main execution scripts: one to run a local core, one to run the social PoC with cluster and Debug Console support, and one to run the official integration smokes. The following commands are representative examples:
 
 \begin{verbatim}
-.\.venv\Scripts\python.exe scripts\run_cluster.py 10
-
-.\.venv\Scripts\python.exe scripts\run_local_core.py
+.\.venv\Scripts\python.exe scripts\run_core.py
 
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 
-.\.venv\Scripts\python.exe scripts\run_poc_debug.py 10
-
-.\.venv\Scripts\python.exe tests\integration\core_full_flow_smoke.py
+.\.venv\Scripts\python.exe scripts\run_smokes.py 10
 \end{verbatim}
 
 The experimental environment validates execution with multiple local or containerized nodes. The Debug Console and the \texttt{/debug/state} endpoint were used to inspect peers, sessions, DHT records, route state, runtime status, and potential operational inconsistencies.

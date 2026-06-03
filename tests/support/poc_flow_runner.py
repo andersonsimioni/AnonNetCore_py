@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_ROOT = PROJECT_ROOT / "app"
-INTEGRATION_ROOT = PROJECT_ROOT / "tests" / "integration"
-for path in (APP_ROOT, INTEGRATION_ROOT):
+SUPPORT_ROOT = PROJECT_ROOT / "tests" / "support"
+for path in (APP_ROOT, SUPPORT_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
@@ -35,7 +35,7 @@ from smoke_helpers import (
 from smokes_config import SMOKES_CONFIG
 
 
-TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "poc-social-js-smoke"
+TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "poc-full-flow-smoke"
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
 SOCIAL_SMOKE_SCRIPT = PROJECT_ROOT / "poc" / "smokes" / "social_flow.js"
 

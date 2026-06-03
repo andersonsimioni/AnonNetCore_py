@@ -29,7 +29,7 @@ def main() -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Sobe apenas um core local AnonNetCore.")
+    parser = argparse.ArgumentParser(description="Run one local AnonNetCore core.")
     parser.add_argument(
         "--listen-port",
         type=int,

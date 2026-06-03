@@ -15,22 +15,22 @@ Instale dependencias no ambiente virtual e execute:
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-Com Debug Console:
+O comando da PoC tambem sobe o Debug Console:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_poc_debug.py 10
+.\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
 Rodar apenas o core local:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_local_core.py
+.\.venv\Scripts\python.exe scripts\run_core.py
 ```
 
-Rodar cluster Docker:
+Rodar smokes oficiais:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_cluster.py 10
+.\.venv\Scripts\python.exe scripts\run_smokes.py 10
 ```
 
 ## Documentacao

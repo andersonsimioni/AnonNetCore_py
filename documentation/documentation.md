@@ -422,16 +422,10 @@ O `target_ref` aponta para o `content_id` do estado social mais recente.
 
 ## 15. Scripts
 
-Rodar cluster:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_cluster.py 10
-```
-
 Rodar core local:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_local_core.py
+.\.venv\Scripts\python.exe scripts\run_core.py
 ```
 
 Rodar PoC:
@@ -440,10 +434,10 @@ Rodar PoC:
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-Rodar PoC com debug:
+Rodar smokes oficiais:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_poc_debug.py 10
+.\.venv\Scripts\python.exe scripts\run_smokes.py 10
 ```
 
 ## 16. Observabilidade

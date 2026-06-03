@@ -69,7 +69,7 @@ def main() -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run all AnonNet smoke tests from the simplest to the most advanced.",
+        description="Run the official AnonNet smoke flows and summarize the results.",
     )
     parser.add_argument(
         "cluster_nodes",
@@ -90,21 +90,6 @@ def parse_args() -> argparse.Namespace:
         help="Continue running the remaining smokes after a failure.",
     )
     parser.add_argument(
-        "--skip-dom",
-        action="store_true",
-        help="Skip the frontend-only DOM smoke.",
-    )
-    parser.add_argument(
-        "--skip-stress",
-        action="store_true",
-        help="Skip the heavier API stress smokes.",
-    )
-    parser.add_argument(
-        "--skip-social",
-        action="store_true",
-        help="Skip the integrated PoC social smoke.",
-    )
-    parser.add_argument(
         "--list",
         action="store_true",
         help="Print the smoke plan without running it.",
@@ -123,149 +108,31 @@ def build_run_dir(custom_run_dir: Path | None) -> Path:
 def build_smoke_plan(args: argparse.Namespace) -> list[SmokeSpec]:
     python = sys.executable
     cluster_nodes = str(args.cluster_nodes)
-    smokes: list[SmokeSpec] = []
-
-    smokes.append(
+    return [
         SmokeSpec(
-            name="crypto-aes-gcm-siv",
-            level="00 crypto",
-            command=[python, "tests/integration/crypto_aes_smoke.py"],
-            description="Authenticated AES-GCM-SIV encryption, tamper rejection, and nonce reuse guard.",
-            summary="AES-GCM-SIV roundtrip, integrity, nonce guard",
-        )
-    )
-    smokes.append(
+            name="core-full-flow",
+            level="01 core",
+            command=[
+                python,
+                "tests/integration/core_full_flow_smoke.py",
+                "--cluster-nodes",
+                cluster_nodes,
+            ],
+            description="Full core validation: physical discovery, DHT/DRT, routes, virtual session, messages, and content.",
+            summary="core protocols, DHT/DRT, route, session, message, content",
+        ),
         SmokeSpec(
-            name="reliable-session",
-            level="00 session",
-            command=[python, "tests/integration/reliable_session_smoke.py"],
-            description="Reliable session sequencing, ACK cleanup, buffering, and deduplication.",
-            summary="sequence order, ACK, buffering, dedup",
-        )
-    )
-    smokes.append(
-        SmokeSpec(
-            name="physical-udp",
-            level="00 transport",
-            command=[python, "tests/integration/physical_udp_smoke.py"],
-            description="Physical session handshake and keepalive over UDP with JSON chunk reassembly.",
-            summary="UDP transport, chunking, session keepalive",
-        )
-    )
-
-    if not args.skip_dom:
-        smokes.append(
-            SmokeSpec(
-                name="poc-social-dom",
-                level="01 frontend",
-                command=["node", "poc/smokes/social_dom.js"],
-                description="Frontend DOM behavior without core/network dependencies.",
-                summary="DOM profile, friends, posts, and DM UI",
-            )
-        )
-
-    smokes.extend(
-        [
-            SmokeSpec(
-                name="debug-state",
-                level="02 cluster",
-                command=[python, "tests/integration/debug_state_smoke.py"],
-                description="Docker cluster health and debug snapshot consistency.",
-                summary="cluster health, sessions, DHT duplicates",
-            ),
-            SmokeSpec(
-                name="virtual-session",
-                level="03 virtual",
-                command=[
-                    python,
-                    "tests/integration/virtual_session_smoke.py",
-                    "--cluster-nodes",
-                    cluster_nodes,
-                ],
-                description="Virtual route discovery and virtual session establishment.",
-                summary="DRT route discovery and session keepalive",
-            ),
-            SmokeSpec(
-                name="virtual-message",
-                level="04 virtual",
-                command=[
-                    python,
-                    "tests/integration/virtual_message_smoke.py",
-                    "--cluster-nodes",
-                    cluster_nodes,
-                ],
-                description="Application messages over an active virtual session.",
-                summary="virtual app message exchange",
-            ),
-            SmokeSpec(
-                name="virtual-content",
-                level="05 virtual",
-                command=[
-                    python,
-                    "tests/integration/virtual_content_smoke.py",
-                    "--cluster-nodes",
-                    cluster_nodes,
-                ],
-                description="Virtual content info/range transfer flow.",
-                summary="content info and byte range download",
-            ),
-            SmokeSpec(
-                name="core-full-flow",
-                level="06 full core",
-                command=[
-                    python,
-                    "tests/integration/core_full_flow_smoke.py",
-                    "--cluster-nodes",
-                    cluster_nodes,
-                ],
-                description="Route, DRT, virtual session, message, and content flow together.",
-                summary="route, DRT, session, message, content",
-            ),
-        ]
-    )
-
-    if not args.skip_stress:
-        smokes.extend(
-            [
-                SmokeSpec(
-                    name="virtual-api-stress",
-                    level="07 api stress",
-                    command=[
-                        python,
-                        "tests/integration/virtual_api_stress_smoke.py",
-                        "--cluster-nodes",
-                        cluster_nodes,
-                    ],
-                    description="HTTP API stress with two cores and randomized virtual traffic.",
-                    summary="two-core API traffic, messages, downloads",
-                ),
-                SmokeSpec(
-                    name="virtual-api-local-vn-stress",
-                    level="08 api stress",
-                    command=[
-                        python,
-                        "tests/integration/virtual_api_local_vn_stress_smoke.py",
-                        "--cluster-nodes",
-                        cluster_nodes,
-                    ],
-                    description="HTTP API stress with two local VNs on the same core.",
-                    summary="same-core multi-VN API stress",
-                ),
-            ]
-        )
-
-    if not args.skip_social:
-        smokes.append(
-            SmokeSpec(
-                name="poc-social-integrated",
-                level="09 poc",
-                command=[python, "scripts/run_social_smoke.py", cluster_nodes],
-                description="Integrated PoC social flow through the core HTTP API.",
-                summary="PoC social profiles, feed, DHT, DM",
-            )
-        )
-
-    return smokes
+            name="poc-full-flow",
+            level="02 poc",
+            command=[
+                python,
+                "tests/integration/poc_full_flow_smoke.py",
+                cluster_nodes,
+            ],
+            description="Full PoC social validation through the core HTTP API and WebSocket-facing flow.",
+            summary="social profiles, feed, DHT, DM, API flow",
+        ),
+    ]
 
 
 def print_smoke_plan(smokes: list[SmokeSpec]) -> None:

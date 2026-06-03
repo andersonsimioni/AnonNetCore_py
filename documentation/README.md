@@ -54,11 +54,7 @@ Sem abrir o navegador automaticamente:
 .\.venv\Scripts\python.exe scripts\run_poc.py 10 --no-open
 ```
 
-Com Debug Console:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_poc_debug.py 10
-```
+O `run_poc.py` tambem sobe o Debug Console.
 
 ## Observacao para o TCC
 

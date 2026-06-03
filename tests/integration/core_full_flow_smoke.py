@@ -8,8 +8,10 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 APP_ROOT = PROJECT_ROOT / "app"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+SUPPORT_ROOT = PROJECT_ROOT / "tests" / "support"
+for path in (APP_ROOT, SUPPORT_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
@@ -26,9 +28,11 @@ from smoke_helpers import (
     wait_for_runtime_route_active,
     wait_for_virtual_session_active,
 )
-from virtual_content_smoke import run_virtual_content_protocol_smoke
-from virtual_message_smoke import run_virtual_message_protocol_smoke
-from virtual_session_smoke import run_virtual_session_protocol_smoke
+from core_flow_checks import (
+    validate_virtual_content_download,
+    validate_virtual_message_exchange,
+    validate_virtual_session_keepalive,
+)
 from smokes_config import SMOKES_CONFIG
 
 
@@ -122,16 +126,16 @@ async def main() -> None:
         await wait_for_virtual_session_active(core_b, session_id)
         print(f"checkpoint 8 OK: virtual session active: session_id={session_id}")
 
-        print("running virtual_session_smoke validation with reused cluster and cores")
-        await run_virtual_session_protocol_smoke(core_b, session_id)
-        print("checkpoint 9 OK: virtual session smoke passed")
+        print("running virtual session keepalive validation with reused cluster and cores")
+        await validate_virtual_session_keepalive(core_b, session_id)
+        print("checkpoint 9 OK: virtual session keepalive passed")
 
-        print("running virtual_message_smoke validation with reused cluster and cores")
-        await run_virtual_message_protocol_smoke(core_a, core_b, session_id)
-        print("checkpoint 10 OK: virtual message smoke passed")
+        print("running virtual message validation with reused cluster and cores")
+        await validate_virtual_message_exchange(core_a, core_b, session_id)
+        print("checkpoint 10 OK: virtual message exchange passed")
 
-        print("running virtual_content_smoke validation with reused cluster and cores")
-        downloaded_bytes = await run_virtual_content_protocol_smoke(
+        print("running virtual content validation with reused cluster and cores")
+        downloaded_bytes = await validate_virtual_content_download(
             provider_engine=core_a,
             downloader_engine=core_b,
             session_id=session_id,

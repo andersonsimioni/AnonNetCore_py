@@ -15,7 +15,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CORE_DEBUG_URL = "http://127.0.0.1:18080/debug/state"
 DOCKER_DEBUG_URL = "http://127.0.0.1:18080/debug/state"
 
