@@ -29,13 +29,14 @@ from smoke_helpers import (
 from virtual_content_smoke import run_virtual_content_protocol_smoke
 from virtual_message_smoke import run_virtual_message_protocol_smoke
 from virtual_session_smoke import run_virtual_session_protocol_smoke
+from smokes_config import SMOKES_CONFIG
 
 
 TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "core-full-flow-smoke"
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
-CORE_A_PORT = 19201
-CORE_B_PORT = 19202
-DEFAULT_CLUSTER_NODES = 5
+CORE_A_PORT = SMOKES_CONFIG.core_full_flow_core_a_port
+CORE_B_PORT = SMOKES_CONFIG.core_full_flow_core_b_port
+DEFAULT_CLUSTER_NODES = SMOKES_CONFIG.core_full_flow_cluster_nodes
 
 
 async def main() -> None:

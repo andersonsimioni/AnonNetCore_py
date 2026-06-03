@@ -13,7 +13,6 @@ if str(APP_ROOT) not in sys.path:
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
-    MIN_CLUSTER_NODES,
     create_local_virtual_node,
     create_test_core,
     reset_cluster,
@@ -27,12 +26,13 @@ from smoke_helpers import (
     wait_for_runtime_route_active,
     wait_for_virtual_session_active,
 )
+from smokes_config import SMOKES_CONFIG
 
 
 TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "virtual-message-smoke"
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
-CORE_A_PORT = 19301
-CORE_B_PORT = 19302
+CORE_A_PORT = SMOKES_CONFIG.virtual_message_core_a_port
+CORE_B_PORT = SMOKES_CONFIG.virtual_message_core_b_port
 APP_MESSAGE_TYPE = "integration.virtual-message.echo"
 APP_REPLY_MESSAGE_TYPE = "integration.virtual-message.echo.reply"
 
@@ -138,7 +138,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Smoke test: VirtualMessageProtocolHandler entrega e responde mensagens virtuais.",
     )
-    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=SMOKES_CONFIG.min_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     return parser.parse_args()
 

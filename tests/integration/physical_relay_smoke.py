@@ -16,7 +16,6 @@ if str(APP_ROOT) not in sys.path:
 from core.network import detect_local_network_host  # noqa: E402
 from core_helpers import create_isolated_core, reset_core_data_dir, stop_cores  # noqa: E402
 from smoke_helpers import (  # noqa: E402
-    MIN_CLUSTER_NODES,
     request_known_nodes_from_active_peers,
     reset_cluster,
     resolve_required_ready_nodes,
@@ -27,15 +26,16 @@ from smoke_helpers import (  # noqa: E402
     wait_for_cluster_to_reach_local_core_ports,
     wait_for_network_ready,
 )
+from smokes_config import SMOKES_CONFIG  # noqa: E402
 
 
 DATA_DIR = PROJECT_ROOT / "data" / "local" / "integration" / "physical-relay-smoke"
 LOG_DIR = DATA_DIR / "logs"
 LISTEN_HOST = "0.0.0.0"
 LOCAL_CONNECT_HOST = "127.0.0.1"
-RELAY_PORT = 19301
-REQUESTER_PORT = 19302
-PRIVATE_NODE_PORT = 19303
+RELAY_PORT = SMOKES_CONFIG.physical_relay_relay_port
+REQUESTER_PORT = SMOKES_CONFIG.physical_relay_requester_port
+PRIVATE_NODE_PORT = SMOKES_CONFIG.physical_relay_private_node_port
 
 
 def main() -> None:
@@ -147,7 +147,7 @@ async def _run(args: argparse.Namespace) -> None:
             raise RuntimeError(f"Expected private node session over relay_tcp, got {private_session.transport}.")
 
         await requester.services.protocol_clients.physical.session.send_keepalive(session_id=session_id)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(SMOKES_CONFIG.physical_relay_medium_poll_seconds)
         print(
             "relay physical session validated: "
             f"requester={requester_node.id} private={private_b_node.id} relay={relay_node.id}"
@@ -179,7 +179,7 @@ async def _assert_private_tcp_listener_is_closed(port: int) -> None:
 
 
 async def _wait_until_knows_node(engine, remote_node_id: str, label: str) -> None:
-    deadline = asyncio.get_running_loop().time() + 60.0
+    deadline = asyncio.get_running_loop().time() + SMOKES_CONFIG.drt_entry_timeout_seconds
     while asyncio.get_running_loop().time() < deadline:
         remote_node = engine.services.identity_service.get_remote_physical_node_by_id(remote_node_id)
         endpoints = engine.services.identity_service.list_remote_physical_node_endpoints(remote_node_id)
@@ -187,29 +187,29 @@ async def _wait_until_knows_node(engine, remote_node_id: str, label: str) -> Non
             return
 
         await request_known_nodes_from_active_peers(engine)
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(SMOKES_CONFIG.physical_relay_registration_poll_seconds)
 
     raise TimeoutError(f"Timed out waiting for {label}.")
 
 
 async def _wait_for_relay_registration(relay, private_node_id: str) -> None:
-    deadline = asyncio.get_running_loop().time() + 10.0
+    deadline = asyncio.get_running_loop().time() + SMOKES_CONFIG.virtual_session_active_timeout_seconds
     while asyncio.get_running_loop().time() < deadline:
         registration = relay.services.relay_service.get_active_registration(private_node_id)
         if registration is not None:
             return
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(SMOKES_CONFIG.physical_relay_short_poll_seconds)
     raise TimeoutError("Relay did not keep the private node registration.")
 
 
 async def _wait_until_requester_knows_private_node(requester, private_node_id: str) -> None:
-    deadline = asyncio.get_running_loop().time() + 10.0
+    deadline = asyncio.get_running_loop().time() + SMOKES_CONFIG.virtual_session_active_timeout_seconds
     while asyncio.get_running_loop().time() < deadline:
         remote_node = requester.services.identity_service.get_remote_physical_node_by_id(private_node_id)
         endpoints = requester.services.identity_service.list_remote_physical_node_endpoints(private_node_id)
         if remote_node is not None and any(endpoint.transport == "relay_tcp" for endpoint in endpoints):
             return
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(SMOKES_CONFIG.physical_relay_short_poll_seconds)
     raise TimeoutError("Requester did not learn the private node relay endpoint from R.")
 
 
@@ -219,7 +219,7 @@ async def _wait_for_active_session(
     *,
     expected_transport: str | None = None,
 ):
-    deadline = asyncio.get_running_loop().time() + 10.0
+    deadline = asyncio.get_running_loop().time() + SMOKES_CONFIG.virtual_session_active_timeout_seconds
     while asyncio.get_running_loop().time() < deadline:
         sessions = engine.services.session_manager.list_sessions()
         for session in sessions:
@@ -230,7 +230,7 @@ async def _wait_for_active_session(
             if expected_transport is not None and session.transport != expected_transport:
                 continue
             return session
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(SMOKES_CONFIG.physical_relay_short_poll_seconds)
 
     transport_suffix = f" over {expected_transport}" if expected_transport is not None else ""
     raise TimeoutError(f"Private node did not activate the physical session{transport_suffix}.")
@@ -240,7 +240,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Real relay smoke: usa cluster Docker, relay publico local e node privado sem listener TCP.",
     )
-    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=SMOKES_CONFIG.min_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     return parser.parse_args()
 

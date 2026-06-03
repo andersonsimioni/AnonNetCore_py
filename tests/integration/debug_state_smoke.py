@@ -11,17 +11,16 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+INTEGRATION_ROOT = PROJECT_ROOT / "tests" / "integration"
+if str(INTEGRATION_ROOT) not in sys.path:
+    sys.path.insert(0, str(INTEGRATION_ROOT))
 
 from scripts.debug_console import DebugNodeRegistry
+from smokes_config import SMOKES_CONFIG
 
 
-CLUSTER_NODE_COUNT = 4
+CLUSTER_NODE_COUNT = SMOKES_CONFIG.debug_cluster_nodes
 DOCKER_FILTER = "anonnet-node-"
-STARTUP_TIMEOUT_SECONDS = 120.0
-STABILIZATION_SECONDS = 35.0
-POLL_SECONDS = 2.0
-MAX_ACTIVE_SESSIONS_PER_NODE = 12
-MAX_TOTAL_SESSIONS_PER_NODE = 20
 
 
 def main() -> int:
@@ -59,23 +58,23 @@ def stop_cluster() -> None:
 
 
 def wait_for_running_containers(*, expected_count: int) -> None:
-    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+    deadline = time.monotonic() + SMOKES_CONFIG.debug_startup_timeout_seconds
     while time.monotonic() < deadline:
         running_count = count_running_containers()
         print(f"waiting cluster containers: running={running_count} expected={expected_count}")
         if running_count == expected_count:
             return
-        time.sleep(POLL_SECONDS)
+        time.sleep(SMOKES_CONFIG.debug_poll_seconds)
     raise TimeoutError("Timed out waiting for debug smoke cluster containers.")
 
 
 def wait_for_stable_debug_snapshot() -> dict[str, Any]:
-    deadline = time.monotonic() + STABILIZATION_SECONDS
+    deadline = time.monotonic() + SMOKES_CONFIG.debug_stabilization_seconds
     last_snapshot: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         last_snapshot = collect_debug_snapshot()
         print_snapshot_summary(last_snapshot)
-        time.sleep(POLL_SECONDS)
+        time.sleep(SMOKES_CONFIG.debug_poll_seconds)
 
     if last_snapshot is None:
         raise RuntimeError("No debug snapshot was collected.")
@@ -87,7 +86,7 @@ def collect_debug_snapshot() -> dict[str, Any]:
         api_urls=[],
         include_docker=True,
         docker_filter=DOCKER_FILTER,
-        timeout_seconds=5.0,
+        timeout_seconds=SMOKES_CONFIG.debug_node_timeout_seconds,
         cache_ttl_seconds=0.0,
         max_workers=4,
     )
@@ -126,9 +125,9 @@ def validate_node_state(source: str, state: dict[str, Any]) -> list[str]:
 
     if peer_count > CLUSTER_NODE_COUNT - 1:
         failures.append(f"{source}: route_ready_nodes inflated: {peer_count}")
-    if active_sessions > MAX_ACTIVE_SESSIONS_PER_NODE:
+    if active_sessions > SMOKES_CONFIG.debug_max_active_sessions_per_node:
         failures.append(f"{source}: too many active sessions: {active_sessions}")
-    if total_sessions > MAX_TOTAL_SESSIONS_PER_NODE:
+    if total_sessions > SMOKES_CONFIG.debug_max_total_sessions_per_node:
         failures.append(f"{source}: too many total sessions: {total_sessions}")
     if duplicate_key_count:
         failures.append(f"{source}: duplicate DHT keys: {duplicate_key_count}")

@@ -21,15 +21,10 @@ from identity import VirtualNodeIdentityCreateInput
 from sessions import VirtualSessionMessageReply
 
 from core_helpers import create_isolated_core
+from smokes_config import SMOKES_CONFIG
 
 
-MIN_CLUSTER_NODES = 8
-DEFAULT_READY_CLUSTER_RATIO = 0.6
-NETWORK_READY_TIMEOUT_SECONDS = 180.0
-FORCED_EXCHANGE_INTERVAL_SECONDS = 15.0
-CLUSTER_NETWORK_MATURITY_SECONDS = 25.0
-CLUSTER_NETWORK_MATURITY_TICK_SECONDS = 2.0
-CLUSTER_NETWORK_MATURITY_STABLE_TICKS = 3
+MIN_CLUSTER_NODES = SMOKES_CONFIG.min_cluster_nodes
 
 
 def resolve_required_ready_nodes(
@@ -40,7 +35,7 @@ def resolve_required_ready_nodes(
     if minimum_remote_nodes is not None:
         return max(1, minimum_remote_nodes)
 
-    return max(1, math.ceil(cluster_nodes * DEFAULT_READY_CLUSTER_RATIO))
+    return max(1, math.ceil(cluster_nodes * SMOKES_CONFIG.ready_cluster_ratio))
 
 
 def resolve_cluster_node_count(node_count: int) -> int:
@@ -72,7 +67,7 @@ def start_cluster(*, node_count: int) -> None:
 def wait_for_cluster_containers(
     *,
     expected_count: int,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = SMOKES_CONFIG.cluster_container_timeout_seconds,
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
 
@@ -83,7 +78,7 @@ def wait_for_cluster_containers(
             return
 
         print(f"waiting docker cluster: running={running_count} expected={expected_count}")
-        time.sleep(2.0)
+        time.sleep(SMOKES_CONFIG.cluster_container_poll_seconds)
 
     raise TimeoutError("Timed out waiting for docker cluster containers.")
 
@@ -110,7 +105,7 @@ def wait_for_cluster_to_reach_local_core_ports(
     *ports: int,
     host: str = "host.docker.internal",
     probe_container: str = "anonnet-node-001",
-    timeout_seconds: float = 45.0,
+    timeout_seconds: float = SMOKES_CONFIG.cluster_reachability_timeout_seconds,
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     last_error = ""
@@ -138,7 +133,7 @@ def wait_for_cluster_to_reach_local_core_ports(
             f"host={host} failed_ports={failed_ports} last_error={last_error}",
             flush=True,
         )
-        time.sleep(1.0)
+        time.sleep(SMOKES_CONFIG.cluster_reachability_poll_seconds)
 
     raise TimeoutError(
         f"Docker cluster cannot reach local core ports {list(ports)} through {host}. "
@@ -172,9 +167,13 @@ def create_test_core(
     log_dir: Path,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
-    virtual_route_expected_round_trip_ttl_ms: int = 1000,
-    virtual_route_pending_timeout_seconds: float = 90.0,
-    virtual_route_min_online_routes: int = 2,
+    virtual_route_expected_round_trip_ttl_ms: int = (
+        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
+    ),
+    virtual_route_pending_timeout_seconds: float = (
+        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
+    ),
+    virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
 ):
     return create_isolated_core(
         data_dir=data_dir,
@@ -206,7 +205,7 @@ async def wait_for_network_ready(
     engine,
     *,
     minimum_remote_nodes: int,
-    timeout_seconds: float = NETWORK_READY_TIMEOUT_SECONDS,
+    timeout_seconds: float = SMOKES_CONFIG.network_ready_timeout_seconds,
 ) -> None:
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     last_ready_count = -1
@@ -214,7 +213,7 @@ async def wait_for_network_ready(
 
     while asyncio.get_running_loop().time() < deadline:
         now = asyncio.get_running_loop().time()
-        if now - last_forced_exchange_at >= FORCED_EXCHANGE_INTERVAL_SECONDS:
+        if now - last_forced_exchange_at >= SMOKES_CONFIG.forced_exchange_interval_seconds:
             await request_known_nodes_from_active_peers(engine)
             last_forced_exchange_at = now
 
@@ -235,7 +234,7 @@ async def wait_for_network_ready(
             )
             last_ready_count = ready_count
 
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(SMOKES_CONFIG.network_ready_poll_seconds)
 
     raise TimeoutError(
         f"Timed out waiting for network ready: required_ready_nodes={minimum_remote_nodes}."
@@ -245,8 +244,8 @@ async def wait_for_network_ready(
 async def wait_for_cluster_network_maturity(
     *engines,
     required_ready_nodes: int | None = None,
-    warmup_seconds: float = CLUSTER_NETWORK_MATURITY_SECONDS,
-    tick_seconds: float = CLUSTER_NETWORK_MATURITY_TICK_SECONDS,
+    warmup_seconds: float = SMOKES_CONFIG.cluster_network_maturity_seconds,
+    tick_seconds: float = SMOKES_CONFIG.cluster_network_maturity_tick_seconds,
 ) -> None:
     if not engines:
         return
@@ -274,11 +273,11 @@ async def wait_for_cluster_network_maturity(
             "waiting cluster network maturity: "
             f"ready_route_candidates={ready_counts} "
             f"required={minimum_ready_nodes} "
-            f"stable_ticks={stable_ticks}/{CLUSTER_NETWORK_MATURITY_STABLE_TICKS} "
+            f"stable_ticks={stable_ticks}/{SMOKES_CONFIG.cluster_network_maturity_stable_ticks} "
             f"remaining_seconds={max(0.0, deadline - asyncio.get_running_loop().time()):.1f}"
         )
 
-        if stable_ticks >= CLUSTER_NETWORK_MATURITY_STABLE_TICKS:
+        if stable_ticks >= SMOKES_CONFIG.cluster_network_maturity_stable_ticks:
             return
 
         await asyncio.sleep(tick_seconds)
@@ -295,14 +294,14 @@ async def _refresh_engine_network_context(engine) -> NetworkMaturitySnapshot:
     await request_known_nodes_from_active_peers(engine)
     await refresh_route_candidate_rtts(engine)
     candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
-        limit=32,
+        limit=SMOKES_CONFIG.route_candidate_query_limit,
     )
     return NetworkMaturitySnapshot(ready_route_candidates=len(candidates))
 
 
 async def request_known_nodes_from_active_peers(engine) -> None:
     exchange_candidates = engine.services.identity_service.list_remote_physical_nodes_for_info_exchange(
-        limit=16,
+        limit=SMOKES_CONFIG.node_info_exchange_candidate_limit,
     )
     for candidate in exchange_candidates:
         try:
@@ -325,9 +324,11 @@ async def request_known_nodes_from_active_peers(engine) -> None:
 
 
 async def refresh_route_candidate_rtts(engine) -> None:
-    ping_candidates = engine.services.identity_service.list_remote_physical_nodes_for_ping(limit=32)
+    ping_candidates = engine.services.identity_service.list_remote_physical_nodes_for_ping(
+        limit=SMOKES_CONFIG.route_candidate_ping_limit
+    )
     route_candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
-        limit=32,
+        limit=SMOKES_CONFIG.route_candidate_query_limit,
     )
     route_candidate_ids = {candidate.node_id for candidate in route_candidates}
     missing_rtt_candidates = [
@@ -335,7 +336,7 @@ async def refresh_route_candidate_rtts(engine) -> None:
         for candidate in ping_candidates
         if candidate.node_id not in route_candidate_ids
     ]
-    semaphore = asyncio.Semaphore(8)
+    semaphore = asyncio.Semaphore(SMOKES_CONFIG.route_candidate_rtt_concurrency)
 
     async def refresh_candidate(candidate) -> None:
         try:
@@ -360,7 +361,7 @@ async def wait_for_runtime_route_active(
     engine,
     *,
     local_virtual_node_id: str,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = SMOKES_CONFIG.route_active_timeout_seconds,
 ):
     async def load_active_route():
         return engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
@@ -379,7 +380,7 @@ async def wait_for_drt_entry(
     *,
     virtual_node_public_key: str,
     expected_final_path_id: str | None = None,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = SMOKES_CONFIG.drt_entry_timeout_seconds,
 ) -> dict[str, object]:
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
@@ -419,7 +420,7 @@ async def wait_for_drt_online_route_count(
     *,
     virtual_node_public_key: str,
     minimum_routes: int,
-    timeout_seconds: float = 180.0,
+    timeout_seconds: float = SMOKES_CONFIG.drt_online_route_count_timeout_seconds,
 ) -> dict[str, object]:
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
@@ -471,8 +472,8 @@ async def wait_for_stable_drt_online_route_count(
     *,
     virtual_node_public_key: str,
     minimum_routes: int,
-    stable_reads: int = 3,
-    timeout_seconds: float = 180.0,
+    stable_reads: int = SMOKES_CONFIG.drt_stable_reads,
+    timeout_seconds: float = SMOKES_CONFIG.drt_online_route_count_timeout_seconds,
 ) -> dict[str, object]:
     """Wait until DRT routes are visible in consecutive reads.
 
@@ -491,7 +492,7 @@ async def wait_for_stable_drt_online_route_count(
                 engine,
                 virtual_node_public_key=virtual_node_public_key,
                 minimum_routes=minimum_routes,
-                timeout_seconds=min(10.0, remaining_seconds),
+                timeout_seconds=min(SMOKES_CONFIG.drt_stable_single_read_timeout_seconds, remaining_seconds),
             )
         except TimeoutError:
             consecutive_reads = 0
@@ -506,7 +507,7 @@ async def wait_for_stable_drt_online_route_count(
         if consecutive_reads >= stable_reads:
             return last_result
 
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(SMOKES_CONFIG.stable_drt_poll_seconds)
 
     raise TimeoutError("Timed out waiting for stable DRT online route count.")
 
@@ -515,7 +516,7 @@ async def wait_for_virtual_session_active(
     engine,
     session_id: str,
     *,
-    timeout_seconds: float = 15.0,
+    timeout_seconds: float = SMOKES_CONFIG.virtual_session_active_timeout_seconds,
 ) -> None:
     async def is_active() -> bool:
         session = engine.services.session_manager.get_session_by_session_id(session_id)
@@ -528,7 +529,7 @@ async def wait_for_virtual_keepalive_ack(
     engine,
     session_id: str,
     *,
-    timeout_seconds: float = 70.0,
+    timeout_seconds: float = SMOKES_CONFIG.virtual_keepalive_ack_timeout_seconds,
 ) -> None:
     observed_after = datetime.now(timezone.utc)
 
@@ -553,7 +554,7 @@ async def validate_virtual_message_roundtrip(
     app_message_type: str = "integration.virtual.message",
     reply_message_type: str = "integration.virtual.message.reply",
     payload: dict[str, object] | None = None,
-    timeout_seconds: float = 20.0,
+    timeout_seconds: float = SMOKES_CONFIG.virtual_message_timeout_seconds,
 ) -> None:
     """Valida entrega e resposta via VIRTUAL_SESSION_DATA sobre sessao virtual ativa."""
 
@@ -637,6 +638,6 @@ async def wait_until_value(loader, *, timeout_seconds: float, label: str):
         value = await loader()
         if value is not None:
             return value
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(SMOKES_CONFIG.generic_wait_poll_seconds)
 
     raise TimeoutError(f"Timed out waiting for {label}.")

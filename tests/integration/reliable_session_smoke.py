@@ -21,9 +21,10 @@ from core.runtime.session_runtime import SessionRuntime  # noqa: E402
 from core_helpers import create_isolated_core, reset_core_data_dir, stop_cores  # noqa: E402
 from sessions import SessionCreateInput, SessionManager  # noqa: E402
 from smoke_helpers import create_local_virtual_node, validate_virtual_message_roundtrip  # noqa: E402
+from smokes_config import SMOKES_CONFIG  # noqa: E402
 
 
-RANDOM_SEED = 742_931
+RANDOM_SEED = SMOKES_CONFIG.reliable_seed
 REAL_PROTOCOL_DATA_DIR = PROJECT_ROOT / "data" / "test" / "reliable_session_smoke"
 
 
@@ -53,7 +54,7 @@ def main() -> None:
     manager = SessionManager()
     runtime = _build_session_runtime(
         manager,
-        route_rtt_by_id={"route-from-service": 9000.0},
+        route_rtt_by_id={"route-from-service": SMOKES_CONFIG.reliable_route_service_rtt_ms},
     )
 
     _verify_ack_cleanup(manager)
@@ -136,7 +137,7 @@ def _verify_randomized_out_of_order_delivery(manager: SessionManager) -> None:
     session_id = _create_virtual_session(manager, "session-random-order")
     messages = [
         _prepare_virtual_message(manager, session_id, f"value-{index:02d}")
-        for index in range(1, 41)
+        for index in range(1, SMOKES_CONFIG.reliable_random_message_count + 1)
     ]
     shuffled_messages = messages[:]
     random.Random(RANDOM_SEED).shuffle(shuffled_messages)
@@ -149,7 +150,10 @@ def _verify_randomized_out_of_order_delivery(manager: SessionManager) -> None:
         )
         delivered_values.extend(delivery.inner_payload["value"] for delivery in result.deliveries)
 
-    expected_values = [f"value-{index:02d}" for index in range(1, 41)]
+    expected_values = [
+        f"value-{index:02d}"
+        for index in range(1, SMOKES_CONFIG.reliable_random_message_count + 1)
+    ]
     if delivered_values != expected_values:
         raise RuntimeError("Randomized reliable delivery did not preserve sequence order.")
 
@@ -204,7 +208,7 @@ def _verify_virtual_retry_uses_metadata_route_rtt(
         manager,
         "session-virtual-metadata-rtt",
         bound_route_id="route-from-metadata",
-        metadata_json='{"entry_point_rtt":6000}',
+        metadata_json=f'{{"entry_point_rtt":{SMOKES_CONFIG.reliable_metadata_route_rtt_ms}}}',
     )
     message = _prepare_virtual_message(manager, session_id, "virtual-metadata-rtt")
     _mark_sent_at(manager, message, seconds_ago=6)
@@ -324,13 +328,13 @@ def _prepare_virtual_message(
     session_id: str,
     value: str,
     *,
-    max_attempts: int = 5,
+    max_attempts: int = SMOKES_CONFIG.reliable_default_max_attempts,
 ):
     return manager.prepare_reliable_outbound(
         session_id=session_id,
         inner_message_type="VIRTUAL_SESSION_DATA",
         inner_payload={"value": value},
-        retry_after_seconds=5.0,
+        retry_after_seconds=SMOKES_CONFIG.reliable_virtual_retry_fallback_seconds,
         max_attempts=max_attempts,
     )
 
@@ -340,13 +344,13 @@ def _prepare_physical_message(
     session_id: str,
     value: str,
     *,
-    max_attempts: int = 5,
+    max_attempts: int = SMOKES_CONFIG.reliable_default_max_attempts,
 ):
     return manager.prepare_reliable_outbound(
         session_id=session_id,
         inner_message_type="PHYSICAL_TEST_DATA",
         inner_payload={"value": value},
-        retry_after_seconds=2.0,
+        retry_after_seconds=SMOKES_CONFIG.reliable_physical_retry_seconds,
         max_attempts=max_attempts,
     )
 
@@ -368,11 +372,21 @@ def _build_session_runtime(
     runtime.engine = SimpleNamespace(
         services=SimpleNamespace(
             config=SimpleNamespace(
-                physical_session_reliable_retry_after_seconds=2.0,
-                virtual_session_reliable_retry_fallback_seconds=5.0,
-                virtual_session_reliable_retry_rtt_multiplier=2.0,
-                virtual_session_reliable_retry_min_seconds=2.0,
-                virtual_session_reliable_retry_max_seconds=30.0,
+                physical_session_reliable_retry_after_seconds=(
+                    SMOKES_CONFIG.reliable_physical_retry_seconds
+                ),
+                virtual_session_reliable_retry_fallback_seconds=(
+                    SMOKES_CONFIG.reliable_virtual_retry_fallback_seconds
+                ),
+                virtual_session_reliable_retry_rtt_multiplier=(
+                    SMOKES_CONFIG.reliable_virtual_retry_rtt_multiplier
+                ),
+                virtual_session_reliable_retry_min_seconds=(
+                    SMOKES_CONFIG.reliable_virtual_retry_min_seconds
+                ),
+                virtual_session_reliable_retry_max_seconds=(
+                    SMOKES_CONFIG.reliable_virtual_retry_max_seconds
+                ),
             ),
             session_manager=manager,
             route_service=_RouteRttService(route_rtt_by_id),
@@ -386,14 +400,14 @@ async def _verify_real_virtual_protocol_roundtrip() -> None:
     reset_core_data_dir(REAL_PROTOCOL_DATA_DIR)
     sender_engine = create_isolated_core(
         data_dir=REAL_PROTOCOL_DATA_DIR / "sender",
-        listen_port=19701,
+        listen_port=SMOKES_CONFIG.reliable_real_sender_port,
         log_dir=REAL_PROTOCOL_DATA_DIR / "logs" / "sender",
         bootstrap_public_endpoints=[],
         bootstrap_dns_seeds=[],
     )
     receiver_engine = create_isolated_core(
         data_dir=REAL_PROTOCOL_DATA_DIR / "receiver",
-        listen_port=19702,
+        listen_port=SMOKES_CONFIG.reliable_real_receiver_port,
         log_dir=REAL_PROTOCOL_DATA_DIR / "logs" / "receiver",
         bootstrap_public_endpoints=[],
         bootstrap_dns_seeds=[],
@@ -442,7 +456,7 @@ async def _verify_real_virtual_protocol_roundtrip() -> None:
             receiver_engine=receiver_engine,
             session_id=virtual_session_id,
             payload={"value": "real-reliable-protocol-path"},
-            timeout_seconds=5.0,
+            timeout_seconds=SMOKES_CONFIG.reliable_short_timeout_seconds,
         )
         if sender_engine.services.session_manager.count_pending_reliable_outbound(virtual_session_id) != 0:
             raise RuntimeError("Real virtual reliable roundtrip did not clear outbound pending state.")
@@ -479,7 +493,7 @@ def _create_real_physical_session_pair(
             session_state="active",
             transport="direct",
             remote_host="127.0.0.1",
-            remote_port=19702,
+            remote_port=SMOKES_CONFIG.reliable_real_receiver_port,
         )
     )
     receiver_manager.create_session(
@@ -496,7 +510,7 @@ def _create_real_physical_session_pair(
             session_state="active",
             transport="direct",
             remote_host="127.0.0.1",
-            remote_port=19701,
+            remote_port=SMOKES_CONFIG.reliable_real_sender_port,
         )
     )
 
@@ -522,7 +536,7 @@ def _create_real_virtual_session_pair(
             handshake_state="ready",
             session_state="active",
             bound_route_id="direct-route-sender-to-receiver",
-            metadata_json='{"entry_point_rtt":50}',
+            metadata_json=f'{{"entry_point_rtt":{SMOKES_CONFIG.reliable_direct_route_rtt_ms}}}',
         )
     )
     receiver_manager.create_session(
@@ -538,7 +552,7 @@ def _create_real_virtual_session_pair(
             handshake_state="ready",
             session_state="active",
             bound_route_id="direct-route-receiver-to-sender",
-            metadata_json='{"entry_point_rtt":50}',
+            metadata_json=f'{{"entry_point_rtt":{SMOKES_CONFIG.reliable_direct_route_rtt_ms}}}',
         )
     )
 
@@ -556,9 +570,9 @@ async def _verify_real_physical_protocol_roundtrip(
             transport_name=message.transport_name,
             payload=message.payload,
             remote_host="127.0.0.1",
-            remote_port=19701,
+            remote_port=SMOKES_CONFIG.reliable_real_sender_port,
             local_host="127.0.0.1",
-            local_port=19702,
+            local_port=SMOKES_CONFIG.reliable_real_receiver_port,
         )
         receiver_result = await receiver_engine.process_received_packet(receiver_context)
         if not receiver_result.handled:
@@ -572,9 +586,9 @@ async def _verify_real_physical_protocol_roundtrip(
             transport_name=message.transport_name,
             payload=receiver_result.response_payload,
             remote_host="127.0.0.1",
-            remote_port=19702,
+            remote_port=SMOKES_CONFIG.reliable_real_receiver_port,
             local_host="127.0.0.1",
-            local_port=19701,
+            local_port=SMOKES_CONFIG.reliable_real_sender_port,
         )
         sender_result = await sender_engine.process_received_packet(sender_context)
         if not sender_result.handled:

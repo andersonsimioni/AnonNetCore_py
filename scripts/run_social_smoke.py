@@ -32,6 +32,7 @@ from smoke_helpers import (
     wait_for_network_ready,
     wait_for_runtime_route_active,
 )
+from smokes_config import SMOKES_CONFIG
 
 
 TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "poc-social-js-smoke"
@@ -54,9 +55,9 @@ async def main() -> int:
 
     core_a = create_api_core(
         data_dir=TEST_DATA_ROOT / "core-a",
-        listen_port=19601,
-        api_port=18180,
-        websocket_port=18181,
+        listen_port=SMOKES_CONFIG.social_core_listen_port,
+        api_port=SMOKES_CONFIG.social_api_port,
+        websocket_port=SMOKES_CONFIG.social_websocket_port,
         log_dir=TEST_LOG_ROOT / "core-a",
     )
     try:
@@ -86,10 +87,18 @@ async def main() -> int:
         )
 
         active_route_local_a_task = asyncio.create_task(
-            wait_for_runtime_route_active(core_a, local_virtual_node_id=local_vn_a.id, timeout_seconds=300.0)
+            wait_for_runtime_route_active(
+                core_a,
+                local_virtual_node_id=local_vn_a.id,
+                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds,
+            )
         )
         active_route_local_b_task = asyncio.create_task(
-            wait_for_runtime_route_active(core_a, local_virtual_node_id=local_vn_b.id, timeout_seconds=300.0)
+            wait_for_runtime_route_active(
+                core_a,
+                local_virtual_node_id=local_vn_b.id,
+                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds,
+            )
         )
         active_route_local_a, active_route_local_b = await asyncio.gather(
             active_route_local_a_task,
@@ -124,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Executa o smoke JS da PoC social com dois cores reais.",
     )
-    parser.add_argument("cluster_nodes", type=int, nargs="?", default=8)
+    parser.add_argument("cluster_nodes", type=int, nargs="?", default=SMOKES_CONFIG.social_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     parser.add_argument("--skip-cluster", action="store_true")
     return parser.parse_args()
@@ -152,10 +161,16 @@ def create_api_core(
     config.api_websocket_host = "127.0.0.1"
     config.api_websocket_port = websocket_port
     config.content_storage_dir = data_dir / "content"
-    config.virtual_route_maintenance_runtime_interval_seconds = 1.0
-    config.virtual_route_maintenance_pending_route_timeout_seconds = 90.0
-    config.virtual_route_maintenance_expected_round_trip_ttl_ms = 1000
-    config.virtual_route_maintenance_candidate_limit = 16
+    config.virtual_route_maintenance_runtime_interval_seconds = (
+        SMOKES_CONFIG.test_core_route_runtime_interval_seconds
+    )
+    config.virtual_route_maintenance_pending_route_timeout_seconds = (
+        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
+    )
+    config.virtual_route_maintenance_expected_round_trip_ttl_ms = (
+        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
+    )
+    config.virtual_route_maintenance_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
 
     services = EngineServices(
         config=config,
@@ -170,7 +185,7 @@ def create_api_core(
 async def run_js_smoke(*, local_vn_a, local_vn_b) -> None:
     env = os.environ.copy()
     env["SOCIAL_SMOKE_MODE"] = "same-core"
-    env["CORE_A_HTTP"] = "http://127.0.0.1:18180"
+    env["CORE_A_HTTP"] = f"http://127.0.0.1:{SMOKES_CONFIG.social_api_port}"
     env["CORE_A_LOCAL_VN_A_ID"] = local_vn_a.id
     env["CORE_A_LOCAL_VN_A_PUBLIC_KEY"] = local_vn_a.public_key
     env["CORE_A_LOCAL_VN_B_ID"] = local_vn_b.id

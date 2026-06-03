@@ -16,7 +16,6 @@ from storage.models import ContentAdvertisement, ContentObject
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
-    MIN_CLUSTER_NODES,
     create_local_virtual_node,
     create_test_core,
     reset_cluster,
@@ -30,12 +29,13 @@ from smoke_helpers import (
     wait_for_virtual_session_active,
     wait_until_value,
 )
+from smokes_config import SMOKES_CONFIG
 
 
 TEST_DATA_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "virtual-content-smoke"
 TEST_LOG_ROOT = TEST_DATA_ROOT / "logs"
-CORE_A_PORT = 19401
-CORE_B_PORT = 19402
+CORE_A_PORT = SMOKES_CONFIG.virtual_content_core_a_port
+CORE_B_PORT = SMOKES_CONFIG.virtual_content_core_b_port
 
 
 async def main() -> None:
@@ -169,7 +169,7 @@ async def run_virtual_content_protocol_smoke(
 
 def build_test_content() -> bytes:
     line = b"AnonNetCore virtual content smoke payload.\n"
-    return line * 4096
+    return line * SMOKES_CONFIG.virtual_content_line_repetitions
 
 
 def register_local_content(engine, content_bytes: bytes) -> str:
@@ -203,7 +203,7 @@ async def wait_for_downloaded_content(engine, *, content_hash: str):
 
     content_info = await wait_until_value(
         load_content,
-        timeout_seconds=30.0,
+        timeout_seconds=SMOKES_CONFIG.virtual_content_info_timeout_seconds,
         label="virtual content download completed",
     )
     if content_info.storage_path is None:
@@ -232,7 +232,7 @@ async def wait_for_ddt_provider_advertisement(engine, *, content_hash: str):
 
     return await wait_until_value(
         load_advertisement,
-        timeout_seconds=20.0,
+        timeout_seconds=SMOKES_CONFIG.virtual_content_download_timeout_seconds,
         label="downloaded content ddt provider advertisement",
     )
 
@@ -241,7 +241,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Smoke test: VirtualContentProtocolHandler baixa conteudo por byte ranges.",
     )
-    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=SMOKES_CONFIG.min_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     return parser.parse_args()
 

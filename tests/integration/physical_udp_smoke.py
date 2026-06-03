@@ -20,7 +20,6 @@ from core.protocols.physical import PhysicalNodeInfoProtocolHandler  # noqa: E40
 from core_helpers import create_isolated_core, reset_core_data_dir, stop_cores  # noqa: E402
 from dht import DpntRecordPayload, parse_record, serialize_record  # noqa: E402
 from smoke_helpers import (  # noqa: E402
-    MIN_CLUSTER_NODES,
     reset_cluster,
     resolve_required_ready_nodes,
     resolve_cluster_node_count,
@@ -31,19 +30,20 @@ from smoke_helpers import (  # noqa: E402
     wait_until,
     wait_until_value,
 )
+from smokes_config import SMOKES_CONFIG  # noqa: E402
 
 
 DATA_DIR = PROJECT_ROOT / "data" / "local" / "integration" / "physical-udp-smoke"
 LOG_DIR = DATA_DIR / "logs"
 LISTEN_HOST = "0.0.0.0"
 LOCAL_CONNECT_HOST = "127.0.0.1"
-CORE_A_TCP_PORT = 19801
-CORE_B_TCP_PORT = 19802
-CORE_A_UDP_PORT = 29801
-CORE_B_UDP_PORT = 29802
-UDP_CHUNK_PAYLOAD_SIZE = 384
-RANDOM_SEED = 517_009
-MAX_STRESS_PAYLOAD_SIZE = 384_000
+CORE_A_TCP_PORT = SMOKES_CONFIG.physical_udp_core_a_tcp_port
+CORE_B_TCP_PORT = SMOKES_CONFIG.physical_udp_core_b_tcp_port
+CORE_A_UDP_PORT = SMOKES_CONFIG.physical_udp_core_a_udp_port
+CORE_B_UDP_PORT = SMOKES_CONFIG.physical_udp_core_b_udp_port
+UDP_CHUNK_PAYLOAD_SIZE = SMOKES_CONFIG.physical_udp_chunk_payload_size
+RANDOM_SEED = SMOKES_CONFIG.physical_udp_seed
+MAX_STRESS_PAYLOAD_SIZE = SMOKES_CONFIG.physical_udp_max_stress_payload_size
 
 
 def main() -> None:
@@ -163,9 +163,11 @@ async def _run(args: argparse.Namespace) -> None:
 
 def _tune_udp_for_fragmentation(engine) -> None:
     engine.services.config.udp_chunk_payload_size = UDP_CHUNK_PAYLOAD_SIZE
-    engine.services.config.udp_max_datagram_size = 1200
-    engine.services.config.udp_reassembly_timeout_seconds = 45.0
-    engine.services.config.udp_max_frame_size = 2 * 1024 * 1024
+    engine.services.config.udp_max_datagram_size = SMOKES_CONFIG.physical_udp_datagram_size
+    engine.services.config.udp_reassembly_timeout_seconds = (
+        SMOKES_CONFIG.physical_udp_reassembly_timeout_seconds
+    )
+    engine.services.config.udp_max_frame_size = SMOKES_CONFIG.physical_udp_max_frame_size
 
 
 def _restore_env(name: str, previous_value: str | None) -> None:
@@ -264,7 +266,7 @@ async def _wait_for_udp_only_dpnt(engine, physical_node_id: str) -> dict[str, ob
 
     return await wait_until_value(
         query_dpnt,
-        timeout_seconds=60.0,
+        timeout_seconds=SMOKES_CONFIG.physical_udp_dpnt_timeout_seconds,
         label="UDP-only DPNT record",
     )
 
@@ -300,7 +302,7 @@ async def _wait_for_active_udp_session(engine, remote_physical_node_id: str) -> 
 
     return await wait_until_value(
         load_udp_session_id,
-        timeout_seconds=15.0,
+        timeout_seconds=SMOKES_CONFIG.physical_udp_session_timeout_seconds,
         label="inbound UDP physical session",
     )
 
@@ -333,7 +335,7 @@ async def _run_concurrent_fragmentation_stress(
     udp_only_b,
     udp_only_b_session_id: str,
 ) -> None:
-    batch_sizes = [4096, 8192, 16_384, 32_768, 65_536, 131_072]
+    batch_sizes = SMOKES_CONFIG.physical_udp_concurrent_batch_sizes
     tasks = []
     for index, size in enumerate(batch_sizes, start=1):
         tasks.append(
@@ -365,25 +367,16 @@ async def _run_concurrent_fragmentation_stress(
 
 def _build_stress_payload_sizes(random_source: random.Random, max_payload_size: int) -> list[int]:
     boundary_sizes = [
-        1,
-        128,
+        *SMOKES_CONFIG.physical_udp_boundary_payload_sizes,
         UDP_CHUNK_PAYLOAD_SIZE - 1,
         UDP_CHUNK_PAYLOAD_SIZE,
         UDP_CHUNK_PAYLOAD_SIZE + 1,
-        1199,
-        1200,
-        1201,
-        1300,
-        2048,
-        4096,
-        8192,
-        16_384,
-        32_768,
-        65_536,
-        131_072,
         max_payload_size,
     ]
-    random_sizes = [random_source.randint(1500, max_payload_size) for _ in range(16)]
+    random_sizes = [
+        random_source.randint(SMOKES_CONFIG.physical_udp_random_payload_min_size, max_payload_size)
+        for _ in range(SMOKES_CONFIG.physical_udp_random_payload_count)
+    ]
     return sorted({size for size in [*boundary_sizes, *random_sizes] if 0 < size <= max_payload_size})
 
 
@@ -417,7 +410,11 @@ async def _wait_for_reliable_pending_empty(engine, session_id: str) -> None:
     async def is_empty() -> bool:
         return engine.services.session_manager.count_pending_reliable_outbound(session_id) == 0
 
-    await wait_until(is_empty, timeout_seconds=90.0, label="UDP reliable ACK")
+    await wait_until(
+        is_empty,
+        timeout_seconds=SMOKES_CONFIG.physical_udp_reliable_ack_timeout_seconds,
+        label="UDP reliable ACK",
+    )
 
 
 async def _wait_for_keepalive_ack(engine, session_id: str) -> None:
@@ -430,14 +427,18 @@ async def _wait_for_keepalive_ack(engine, session_id: str) -> None:
         current = engine.services.session_manager.get_session_by_session_id(session_id)
         return current is not None and current.last_activity_at > observed_activity
 
-    await wait_until(has_new_activity, timeout_seconds=10.0, label="UDP keepalive ack")
+    await wait_until(
+        has_new_activity,
+        timeout_seconds=SMOKES_CONFIG.physical_udp_keepalive_ack_timeout_seconds,
+        label="UDP keepalive ack",
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Real UDP smoke: cluster Docker, UDP-only peer, fragmented reliable traffic.",
     )
-    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=SMOKES_CONFIG.min_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     parser.add_argument("--max-payload-size", type=int, default=MAX_STRESS_PAYLOAD_SIZE)
     return parser.parse_args()

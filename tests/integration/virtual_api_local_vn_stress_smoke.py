@@ -18,7 +18,6 @@ if str(APP_ROOT) not in sys.path:
 
 from core_helpers import reset_core_data_dir, stop_cores
 from smoke_helpers import (
-    MIN_CLUSTER_NODES,
     create_test_core,
     reset_cluster,
     resolve_cluster_node_count,
@@ -30,6 +29,7 @@ from smoke_helpers import (
     wait_for_network_ready,
     wait_until_value,
 )
+from smokes_config import SMOKES_CONFIG
 from virtual_api_stress_smoke import (
     JsonApiClient,
     find_free_tcp_port,
@@ -45,7 +45,7 @@ from virtual_api_stress_smoke import (
 
 TEST_DATA_BASE_ROOT = PROJECT_ROOT / "data" / "local" / "integration" / "virtual-api-local-vn-stress-smoke"
 APP_MESSAGE_TYPE = "integration.virtual-api-local-vn-stress.message"
-DEFAULT_LOCAL_CORE_PORT = 19511
+DEFAULT_LOCAL_CORE_PORT = SMOKES_CONFIG.virtual_api_local_core_port
 
 
 async def main() -> None:
@@ -67,16 +67,20 @@ async def main() -> None:
         f"core={ports.core} api={ports.api}",
         flush=True,
     )
-    await run_sync_step("reset docker cluster", reset_cluster, timeout_seconds=60.0)
+    await run_sync_step(
+        "reset docker cluster",
+        reset_cluster,
+        timeout_seconds=SMOKES_CONFIG.virtual_api_step_reset_cluster_timeout_seconds,
+    )
     await run_sync_step(
         f"start docker cluster: nodes={cluster_nodes}",
         lambda: start_cluster(node_count=cluster_nodes),
-        timeout_seconds=180.0,
+        timeout_seconds=SMOKES_CONFIG.virtual_api_step_start_cluster_timeout_seconds,
     )
     await run_sync_step(
         "wait docker cluster containers",
         lambda: wait_for_cluster_containers(expected_count=cluster_nodes),
-        timeout_seconds=120.0,
+        timeout_seconds=SMOKES_CONFIG.virtual_api_step_wait_cluster_timeout_seconds,
     )
 
     core = create_test_core(
@@ -88,18 +92,21 @@ async def main() -> None:
         virtual_route_pending_timeout_seconds=args.route_pending_timeout_seconds,
         virtual_route_min_online_routes=args.min_online_routes,
     )
-    api = JsonApiClient(f"http://127.0.0.1:{ports.api}", timeout_seconds=150.0)
+    api = JsonApiClient(
+        f"http://127.0.0.1:{ports.api}",
+        timeout_seconds=SMOKES_CONFIG.virtual_api_client_timeout_seconds,
+    )
 
     try:
         await run_async_step(
             "checkpoint 1: start single API core",
             core.start(),
-            timeout_seconds=45.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_start_core_timeout_seconds,
         )
         await run_sync_step(
             "checkpoint 1b: docker can reach local core TCP port",
             lambda: wait_for_cluster_to_reach_local_core_ports(ports.core),
-            timeout_seconds=45.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_reachability_timeout_seconds,
         )
 
         vn_a, vn_b = await run_async_step(
@@ -120,7 +127,7 @@ async def main() -> None:
                     },
                 ),
             ),
-            timeout_seconds=30.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_create_nodes_timeout_seconds,
         )
         print(
             f"checkpoint 2 details: vn_a={vn_a['id']} vn_b={vn_b['id']}",
@@ -130,7 +137,7 @@ async def main() -> None:
         await run_async_step(
             f"checkpoint 3a: wait network ready: required_ready_nodes={required_ready_nodes}",
             wait_for_network_ready(core, minimum_remote_nodes=required_ready_nodes),
-            timeout_seconds=240.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_network_ready_timeout_seconds,
         )
         await run_async_step(
             "checkpoint 3b: wait cluster network maturity",
@@ -138,7 +145,7 @@ async def main() -> None:
                 core,
                 required_ready_nodes=required_ready_nodes,
             ),
-            timeout_seconds=120.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_maturity_timeout_seconds,
         )
 
         route_inventory = await run_async_step(
@@ -157,7 +164,10 @@ async def main() -> None:
                     timeout_seconds=args.route_inventory_timeout_seconds,
                 ),
             ),
-            timeout_seconds=args.route_inventory_timeout_seconds + 15.0,
+            timeout_seconds=(
+                args.route_inventory_timeout_seconds
+                + SMOKES_CONFIG.virtual_api_step_route_inventory_extra_seconds
+            ),
         )
         print(
             "checkpoint 4 details: "
@@ -175,7 +185,7 @@ async def main() -> None:
                     "remote_virtual_node_id": vn_b["id"],
                 },
             ),
-            timeout_seconds=120.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_local_session_timeout_seconds,
         )
         session_b_to_a = await run_async_step(
             "checkpoint 5b: start local VN session B->A through standard DRT path",
@@ -186,7 +196,7 @@ async def main() -> None:
                     "remote_virtual_node_id": vn_a["id"],
                 },
             ),
-            timeout_seconds=120.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_local_session_timeout_seconds,
         )
         print(
             "checkpoint 5 details: "
@@ -197,7 +207,7 @@ async def main() -> None:
         await run_async_step(
             "checkpoint 6a: subscribe local API virtual inbox",
             api.post("/v1/messages/virtual/subscribe", {"app_message_type": APP_MESSAGE_TYPE}),
-            timeout_seconds=30.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_subscribe_timeout_seconds,
         )
         await run_async_step(
             "checkpoint 6b: concurrent local VN message stress",
@@ -209,7 +219,10 @@ async def main() -> None:
                 concurrency=args.message_concurrency,
                 random_source=random_source,
             ),
-            timeout_seconds=max(90.0, args.message_rounds * 10.0),
+            timeout_seconds=max(
+                SMOKES_CONFIG.virtual_api_local_message_timeout_min_seconds,
+                args.message_rounds * SMOKES_CONFIG.virtual_api_local_message_timeout_per_round_seconds,
+            ),
         )
 
         await run_async_step(
@@ -221,7 +234,10 @@ async def main() -> None:
                 downloads=args.content_downloads,
                 random_source=random_source,
             ),
-            timeout_seconds=max(120.0, args.content_downloads * 90.0),
+            timeout_seconds=max(
+                SMOKES_CONFIG.virtual_api_local_content_timeout_min_seconds,
+                args.content_downloads * SMOKES_CONFIG.virtual_api_local_content_timeout_per_download_seconds,
+            ),
         )
 
         await run_async_step(
@@ -233,7 +249,7 @@ async def main() -> None:
                     str(session_b_to_a["session_id"]),
                 },
             ),
-            timeout_seconds=30.0,
+            timeout_seconds=SMOKES_CONFIG.virtual_api_step_identity_timeout_seconds,
         )
 
         print("OK virtual API local VN stress smoke passed", flush=True)
@@ -275,7 +291,11 @@ async def exercise_concurrent_local_messages(
             )
             request_id = str(result["request_id"])
             expected_messages[request_id] = payload
-            if index == 1 or index % 10 == 0 or index == rounds:
+            if (
+                index == 1
+                or index % SMOKES_CONFIG.virtual_api_local_message_progress_interval == 0
+                or index == rounds
+            ):
                 print(
                     "local message sent: "
                     f"index={index}/{rounds} direction={direction} request_id={request_id}",
@@ -286,7 +306,10 @@ async def exercise_concurrent_local_messages(
     await wait_for_expected_messages(
         api=api,
         expected_messages=expected_messages,
-        timeout_seconds=max(60.0, rounds * 3.0),
+        timeout_seconds=max(
+            SMOKES_CONFIG.virtual_api_local_wait_messages_min_seconds,
+            rounds * SMOKES_CONFIG.virtual_api_local_wait_messages_per_round_seconds,
+        ),
     )
 
 
@@ -340,7 +363,10 @@ async def exercise_local_content_loops(
     random_source: random.Random,
 ) -> None:
     for index in range(1, downloads + 1):
-        size_bytes = random_source.randint(4096, 192 * 1024)
+        size_bytes = random_source.randint(
+            SMOKES_CONFIG.virtual_api_local_content_min_bytes,
+            SMOKES_CONFIG.virtual_api_local_content_max_bytes,
+        )
         content_bytes = random_source.randbytes(size_bytes)
         stored = await api.post(
             "/v1/content",
@@ -422,16 +448,44 @@ def parse_args() -> argparse.Namespace:
             "usando DRT/route execute, sem atalho local."
         ),
     )
-    parser.add_argument("--cluster-nodes", type=int, default=MIN_CLUSTER_NODES)
+    parser.add_argument("--cluster-nodes", type=int, default=SMOKES_CONFIG.min_cluster_nodes)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
-    parser.add_argument("--min-online-routes", type=int, default=1)
-    parser.add_argument("--route-inventory-timeout-seconds", type=float, default=180.0)
-    parser.add_argument("--route-rtt-ms", type=int, default=30000)
-    parser.add_argument("--route-pending-timeout-seconds", type=float, default=45.0)
-    parser.add_argument("--message-rounds", type=int, default=80)
-    parser.add_argument("--message-concurrency", type=int, default=12)
-    parser.add_argument("--content-downloads", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=2026052102)
+    parser.add_argument(
+        "--min-online-routes",
+        type=int,
+        default=SMOKES_CONFIG.virtual_api_min_online_routes,
+    )
+    parser.add_argument(
+        "--route-inventory-timeout-seconds",
+        type=float,
+        default=SMOKES_CONFIG.virtual_api_local_route_inventory_timeout_seconds,
+    )
+    parser.add_argument(
+        "--route-rtt-ms",
+        type=int,
+        default=SMOKES_CONFIG.virtual_api_route_expected_round_trip_ttl_ms,
+    )
+    parser.add_argument(
+        "--route-pending-timeout-seconds",
+        type=float,
+        default=SMOKES_CONFIG.virtual_api_local_route_pending_timeout_seconds,
+    )
+    parser.add_argument(
+        "--message-rounds",
+        type=int,
+        default=SMOKES_CONFIG.virtual_api_local_message_rounds,
+    )
+    parser.add_argument(
+        "--message-concurrency",
+        type=int,
+        default=SMOKES_CONFIG.virtual_api_local_message_concurrency,
+    )
+    parser.add_argument(
+        "--content-downloads",
+        type=int,
+        default=SMOKES_CONFIG.virtual_api_local_content_downloads,
+    )
+    parser.add_argument("--seed", type=int, default=SMOKES_CONFIG.virtual_api_local_seed)
     parser.add_argument("--run-id", default=f"run-{int(time.time())}")
     parser.add_argument("--core-port", type=int, default=None)
     parser.add_argument("--api-port", type=int, default=None)

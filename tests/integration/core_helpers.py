@@ -16,6 +16,7 @@ from dht import DhtService
 from identity import IdentityService
 from route import RouteService
 from storage import DatabaseConfig, DatabaseManager
+from smokes_config import SMOKES_CONFIG
 
 
 def create_isolated_core(
@@ -30,9 +31,13 @@ def create_isolated_core(
     log_dir: Path | None = None,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
-    virtual_route_expected_round_trip_ttl_ms: int = 1000,
-    virtual_route_pending_timeout_seconds: float = 90.0,
-    virtual_route_min_online_routes: int = 2,
+    virtual_route_expected_round_trip_ttl_ms: int = (
+        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
+    ),
+    virtual_route_pending_timeout_seconds: float = (
+        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
+    ),
+    virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
     bootstrap_public_endpoints: Iterable[BootstrapEndpoint] | None = None,
     bootstrap_dns_seeds: Iterable[DnsSeed] | None = None,
     reset_database: bool = False,
@@ -67,13 +72,19 @@ def create_isolated_core(
     else:
         config.api_websocket_enabled = False
     config.content_storage_dir = data_dir / "content"
-    config.virtual_route_maintenance_runtime_interval_seconds = 1.0
+    config.virtual_route_maintenance_runtime_interval_seconds = (
+        SMOKES_CONFIG.test_core_route_runtime_interval_seconds
+    )
     config.virtual_route_maintenance_route_min_online_routes = max(1, virtual_route_min_online_routes)
-    config.virtual_route_maintenance_drt_check_interval_seconds = 1.0
+    config.virtual_route_maintenance_drt_check_interval_seconds = (
+        SMOKES_CONFIG.test_core_route_drt_check_interval_seconds
+    )
     config.virtual_route_maintenance_pending_route_timeout_seconds = virtual_route_pending_timeout_seconds
     config.virtual_route_maintenance_expected_round_trip_ttl_ms = virtual_route_expected_round_trip_ttl_ms
-    config.virtual_route_maintenance_candidate_limit = 16
-    config.virtual_session_drt_lookup_timeout_seconds = 90.0
+    config.virtual_route_maintenance_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
+    config.virtual_session_drt_lookup_timeout_seconds = (
+        SMOKES_CONFIG.test_core_virtual_session_drt_lookup_timeout_seconds
+    )
     if bootstrap_public_endpoints is not None:
         config.bootstrap_public_endpoints = list(bootstrap_public_endpoints)
     if bootstrap_dns_seeds is not None:
