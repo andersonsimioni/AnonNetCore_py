@@ -224,7 +224,7 @@ class CoreEngine:
             self.services.api_service,
             host=config.api_host,
             port=config.api_port,
-            cors_allow_origin=config.api_cors_allow_origin,
+            cors_allow_origin="*",
         )
         await self._api_http_server.start()
         self.services.log_service.info(
@@ -236,17 +236,17 @@ class CoreEngine:
         if config.api_websocket_enabled:
             self._api_websocket_server = CoreWebSocketApiServer(
                 self.services.api_service,
-                host=config.api_websocket_host,
+                host=config.api_host,
                 port=config.api_websocket_port,
-                path=config.api_websocket_path,
+                path="/v1/events",
             )
             await self._api_websocket_server.start()
             self.services.log_service.info(
                 "core_api",
                 "websocket api server started",
-                host=config.api_websocket_host,
+                host=config.api_host,
                 port=config.api_websocket_port,
-                path=config.api_websocket_path,
+                path="/v1/events",
             )
 
     async def _stop_api_server(self) -> None:
@@ -269,17 +269,17 @@ class CoreEngine:
         transport_service.register_adapter(
             TcpTransportAdapter(
                 TcpTransportConfig(
-                    listen_host=config.listen_host,
-                    listen_port=config.listen_port,
-                    listen_enabled=config.physical_tcp_listen_enabled and not self.is_private_physical_node(),
+                    listen_host=config.physical_listen_host,
+                    listen_port=config.physical_tcp_listen_port,
+                    listen_enabled=config.tcp_transport_enabled and not self.is_private_physical_node(),
                 )
             )
         )
-        if config.udp_enabled:
+        if config.udp_transport_enabled:
             transport_service.register_adapter(
                 UdpTransportAdapter(
                     UdpTransportConfig(
-                        listen_host=config.udp_listen_host,
+                        listen_host=config.physical_listen_host,
                         listen_port=self.get_configured_udp_listen_port(),
                         listen_enabled=not self.is_private_physical_node(),
                         max_datagram_size=config.udp_max_datagram_size,
@@ -298,7 +298,7 @@ class CoreEngine:
     def _configure_log_service(self) -> None:
         node_name = self.get_runtime_node_name()
         log_file_path = Path(self.services.config.log_dir) / (
-            f"{node_name}-{self.services.config.listen_port}.log"
+            f"{node_name}-{self.services.config.physical_tcp_listen_port}.log"
         )
         self.services.log_service.configure(
             node_name=node_name,
@@ -325,8 +325,6 @@ class CoreEngine:
         bootstrap_endpoints = self._get_bootstrap_endpoints()
         if not bootstrap_endpoints:
             return
-
-        await asyncio.sleep(self.services.config.bootstrap_warmup_seconds)
 
         for attempt in range(1, self.services.config.bootstrap_request_retries + 1):
             for endpoint in bootstrap_endpoints:
@@ -415,15 +413,15 @@ class CoreEngine:
         node_name = self.get_runtime_node_name().lower()
         match = re.fullmatch(r"node-(\d{3})", node_name)
         if match is None:
-            return self.services.config.listen_port
+            return self.services.config.physical_tcp_listen_port
 
         node_index = int(match.group(1))
         return 19001 + node_index - 1
 
     def get_configured_udp_listen_port(self) -> int:
-        if self.services.config.udp_listen_port is not None:
-            return self.services.config.udp_listen_port
-        return self.services.config.listen_port + 10000
+        if self.services.config.physical_udp_listen_port is not None:
+            return self.services.config.physical_udp_listen_port
+        return self.services.config.physical_tcp_listen_port + 10000
 
     def get_advertised_udp_host(self) -> str:
         advertised_host_from_env = os.getenv("ANONNET_ADVERTISED_UDP_HOST")
@@ -441,14 +439,14 @@ class CoreEngine:
         return self.get_configured_udp_listen_port()
 
     def is_private_physical_node(self) -> bool:
-        return self.services.config.physical_node_reachability.lower() == "private"
+        return self.services.config.node_reachability.lower() == "private"
 
     def can_act_as_physical_relay(self) -> bool:
         config = self.services.config
         return (
-            config.physical_relay_enabled
+            config.relay_service_enabled
             and not self.is_private_physical_node()
-            and config.physical_tcp_listen_enabled
+            and config.tcp_transport_enabled
         )
 
     def build_local_physical_endpoints(self, transport_name: str | None = None) -> list[dict[str, object]]:
@@ -456,7 +454,7 @@ class CoreEngine:
             return []
 
         endpoints: list[dict[str, object]] = []
-        if self.services.config.physical_tcp_listen_enabled and transport_name in {None, "tcp"}:
+        if self.services.config.tcp_transport_enabled and transport_name in {None, "tcp"}:
             endpoints.append(
                 {
                     "transport": "tcp",
@@ -465,7 +463,7 @@ class CoreEngine:
                     "priority": 0,
                 }
             )
-        if self.services.config.udp_enabled and transport_name in {None, "udp"}:
+        if self.services.config.udp_transport_enabled and transport_name in {None, "udp"}:
             endpoints.append(
                 {
                     "transport": "udp",

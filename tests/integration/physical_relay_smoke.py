@@ -77,7 +77,7 @@ async def _run(args: argparse.Namespace) -> None:
         listen_host=LISTEN_HOST,
         listen_port=PRIVATE_NODE_PORT,
         log_dir=LOG_DIR / "private-b",
-        physical_node_reachability="private",
+        node_reachability="private",
     )
 
     try:

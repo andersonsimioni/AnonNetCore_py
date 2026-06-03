@@ -25,11 +25,11 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
     def __init__(self, engine) -> None:
         super().__init__(
             engine,
-            loop_interval_seconds=engine.services.config.dht_maintenance_runtime_interval_seconds,
+            loop_interval_seconds=engine.services.config.dht_maintenance_interval_seconds,
             task_name="dht-maintenance-runtime",
         )
         self._publish_backoff_seconds = (
-            self.engine.services.config.dht_maintenance_publish_backoff_seconds
+            self.engine.services.config.dht_republish_interval_seconds
         )
         self._last_publish_by_record_key: dict[str, float] = {}
 

@@ -495,7 +495,7 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
         advertisement = services.content_transfer_service.build_provider_advertisement(
             content_id=download_state.content_id,
             local_virtual_node_id=session.local_identity_id,
-            ttl_seconds=services.config.content_provider_advertisement_ttl_seconds,
+            ttl_seconds=services.config.content_provider_record_ttl_seconds,
         )
         if advertisement is None:
             services.log_service.warning(

@@ -13,7 +13,7 @@ async def run_node(engine: CoreEngine) -> None:
     engine.services.log_service.info(
         "node_runtime",
         "core started",
-        listen_port=engine.services.config.listen_port,
+        listen_port=engine.services.config.physical_tcp_listen_port,
         physical_node_id=local_node.id if local_node else "unknown",
     )
 
@@ -51,7 +51,7 @@ async def _wait_for_shutdown_signal() -> None:
 def build_engine_from_args() -> CoreEngine:
     args = parse_args()
     engine = CoreEngine()
-    engine.services.config.listen_port = args.listen_port
+    engine.services.config.physical_tcp_listen_port = args.listen_port
     return engine
 
 
@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--listen-port",
         type=int,
-        default=default_config.listen_port,
+        default=default_config.physical_tcp_listen_port,
         help="Porta TCP local do node.",
     )
     return parser.parse_args()

@@ -23,24 +23,20 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
     def __init__(self, engine) -> None:
         super().__init__(
             engine,
-            loop_interval_seconds=engine.services.config.virtual_route_maintenance_runtime_interval_seconds,
+            loop_interval_seconds=engine.services.config.virtual_route_maintenance_interval_seconds,
             task_name="virtual-route-maintenance-runtime",
         )
         self._route_min_online_routes = max(
             1,
-            int(self.engine.services.config.virtual_route_maintenance_route_min_online_routes),
-        )
-        self._drt_check_interval_seconds = (
-            self.engine.services.config.virtual_route_maintenance_drt_check_interval_seconds
+            int(self.engine.services.config.virtual_route_min_published_routes),
         )
         self._pending_route_timeout_seconds = (
-            self.engine.services.config.virtual_route_maintenance_pending_route_timeout_seconds
+            self.engine.services.config.virtual_route_build_timeout_seconds
         )
-        self._candidate_limit = self.engine.services.config.virtual_route_maintenance_candidate_limit
+        self._candidate_limit = self.engine.services.config.random_walk_candidate_limit
         self._expected_round_trip_ttl_ms = (
-            self.engine.services.config.virtual_route_maintenance_expected_round_trip_ttl_ms
+            self.engine.services.config.default_random_walk_ttl_ms
         )
-        self._last_drt_check_by_virtual_node_id: dict[str, float] = {}
         self._pending_seen_at_by_initial_path_id: dict[str, float] = {}
 
     async def _run_once(self) -> None:
@@ -159,10 +155,6 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
         initial_path_id: str | None,
         final_path_id: str | None,
     ) -> "DrtRouteHealth | None":
-        if not self._should_check_drt(local_virtual_node_id):
-            return None
-
-        self._last_drt_check_by_virtual_node_id[local_virtual_node_id] = monotonic()
         result = await self.engine.services.protocol_clients.physical.dht.query(
             namespace="drt",
             logical_key=local_virtual_node_id,
@@ -226,24 +218,6 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             active_final_path_is_visible=final_path_is_visible,
             should_build_more=False,
         )
-
-    def _should_check_drt(self, local_virtual_node_id: str) -> bool:
-        last_checked_at = self._last_drt_check_by_virtual_node_id.get(local_virtual_node_id)
-        if last_checked_at is None:
-            return True
-
-        elapsed_seconds = monotonic() - last_checked_at
-        if elapsed_seconds >= self._drt_check_interval_seconds:
-            return True
-
-        self.engine.services.log_service.debug(
-            "virtual_route_maintenance_runtime",
-            "virtual node drt health check interval not reached",
-            local_virtual_node_id=local_virtual_node_id,
-            elapsed_seconds=round(elapsed_seconds, 3),
-            drt_check_interval_seconds=self._drt_check_interval_seconds,
-        )
-        return False
 
     def _extract_valid_drt_final_path_ids(
         self,

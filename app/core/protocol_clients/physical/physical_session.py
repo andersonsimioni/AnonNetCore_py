@@ -24,17 +24,18 @@ from ..helpers import (
 )
 
 
+SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS = 0.25
+
+
 class PhysicalSessionClient:
     """Inicia e mantem sessoes fisicas entre peers adjacentes."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
         self._handshake_timeout_seconds = (
-            self.engine.services.config.physical_session_handshake_timeout_seconds
+            self.engine.services.config.session_handshake_timeout_seconds
         )
-        self._handshake_poll_interval_seconds = (
-            self.engine.services.config.physical_session_handshake_poll_interval_seconds
-        )
+        self._handshake_poll_interval_seconds = SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS
 
     async def start_session(
         self,
@@ -356,8 +357,8 @@ class PhysicalSessionClient:
             session_id=session.session_id,
             inner_message_type=inner_message_type,
             inner_payload=inner_payload,
-            retry_after_seconds=self.engine.services.config.physical_session_reliable_retry_after_seconds,
-            max_attempts=self.engine.services.config.session_reliable_max_attempts,
+            retry_after_seconds=self.engine.services.config.physical_reliable_retry_seconds,
+            max_attempts=self.engine.services.config.reliable_delivery_max_attempts,
         )
         await self.resend_reliable_message(reliable_message)
         self.engine.services.log_service.info(
@@ -423,7 +424,7 @@ class PhysicalSessionClient:
         remote_public_key: str,
         endpoint: TransportEndpoint,
     ) -> str | None:
-        keepalive_interval_seconds = self.engine.services.config.physical_session_keepalive_seconds
+        keepalive_interval_seconds = self.engine.services.config.session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_physical_session(
             local_physical_node_id=local_physical_node_id,
             remote_physical_node_id=remote_physical_node_id,

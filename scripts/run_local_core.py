@@ -23,7 +23,7 @@ def main() -> int:
         reset_local_demo_state()
     print(f"Iniciando core local na porta TCP {args.listen_port}...")
     engine = CoreEngine()
-    engine.services.config.listen_port = args.listen_port
+    engine.services.config.physical_tcp_listen_port = args.listen_port
     asyncio.run(run_node(engine))
     return 0
 

@@ -75,16 +75,16 @@ async def _run(args: argparse.Namespace) -> None:
         listen_host=LISTEN_HOST,
         listen_port=CORE_A_TCP_PORT,
         udp_enabled=True,
-        udp_listen_port=CORE_A_UDP_PORT,
+        physical_udp_listen_port=CORE_A_UDP_PORT,
         log_dir=LOG_DIR / "core-a",
     )
     udp_only_b = create_isolated_core(
         data_dir=DATA_DIR / "udp-only-b",
         listen_host=LISTEN_HOST,
         listen_port=CORE_B_TCP_PORT,
-        physical_tcp_listen_enabled=False,
+        tcp_transport_enabled=False,
         udp_enabled=True,
-        udp_listen_port=CORE_B_UDP_PORT,
+        physical_udp_listen_port=CORE_B_UDP_PORT,
         log_dir=LOG_DIR / "udp-only-b",
     )
     _tune_udp_for_fragmentation(core_a)

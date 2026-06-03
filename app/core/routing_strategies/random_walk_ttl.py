@@ -87,7 +87,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         route_create = self._parse_route_create(envelope.payload)
         if not _is_valid_route_pow(
             route_create=route_create,
-            difficulty_bits=services.config.route_pow_difficulty_bits,
+            difficulty_bits=services.config.network_pow_difficulty_bits,
         ):
             return self._build_invalid_result(envelope, reason="invalid_route_create_pow")
 
@@ -788,7 +788,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             )
             return self._build_invalid_result(envelope, reason="missing_expected_round_trip_ttl_ms")
 
-        route_error_ms = services.config.random_walk_ttl_route_error_ms
+        route_error_ms = services.config.random_walk_ttl_acceptance_error_ms
         lower = float(expected_round_trip_ttl_ms - route_error_ms)
         upper = float(expected_round_trip_ttl_ms + route_error_ms)
         is_within_expected_ttl = observed_round_trip_ms <= upper
@@ -1199,7 +1199,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         remaining_ttl_ms: int,
     ) -> "RandomWalkTtlRouteCandidateSelection":
         route_candidates = services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
-            limit=services.config.random_walk_ttl_route_candidate_limit,
+            limit=services.config.random_walk_candidate_limit,
         )
 
         eligible_intermediaries = [
@@ -1252,7 +1252,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 selection_reason="previous_hop_revisit",
             )
 
-        fallback_previous_hop_rtt_ms = services.config.random_walk_ttl_previous_hop_fallback_rtt_ms
+        fallback_previous_hop_rtt_ms = services.config.random_walk_previous_hop_fallback_rtt_ms
         if previous_physical_node_id != final_physical_node_id and fallback_previous_hop_rtt_ms < remaining_ttl_ms:
             return RandomWalkTtlRouteCandidateSelection(
                 node_id=previous_physical_node_id,

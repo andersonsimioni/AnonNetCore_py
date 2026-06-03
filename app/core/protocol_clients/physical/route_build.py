@@ -36,7 +36,7 @@ class RouteBuildClient(EngineBoundComponent):
         if route_nonce is None:
             route_nonce = strategy.find_valid_nonce(
                 pk_final_physical_node=final_physical_node_public_key,
-                difficulty_bits=self.engine.services.config.route_pow_difficulty_bits,
+                difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
             )
 
         self.engine.services.route_service.create_initiator_resolution(

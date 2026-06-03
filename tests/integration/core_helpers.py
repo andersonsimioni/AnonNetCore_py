@@ -24,10 +24,10 @@ def create_isolated_core(
     data_dir: Path,
     listen_port: int,
     listen_host: str = "0.0.0.0",
-    physical_node_reachability: str = "public",
-    physical_tcp_listen_enabled: bool = True,
+    node_reachability: str = "public",
+    tcp_transport_enabled: bool = True,
     udp_enabled: bool | None = None,
-    udp_listen_port: int | None = None,
+    physical_udp_listen_port: int | None = None,
     log_dir: Path | None = None,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
@@ -51,15 +51,15 @@ def create_isolated_core(
 
     database = DatabaseManager(DatabaseConfig(db_path=db_path))
     config = CoreConfig(
-        physical_node_reachability=physical_node_reachability,
-        physical_tcp_listen_enabled=physical_tcp_listen_enabled,
-        listen_host=listen_host,
-        listen_port=listen_port,
-        udp_listen_port=udp_listen_port,
+        node_reachability=node_reachability,
+        tcp_transport_enabled=tcp_transport_enabled,
+        physical_listen_host=listen_host,
+        physical_tcp_listen_port=listen_port,
+        physical_udp_listen_port=physical_udp_listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
     if udp_enabled is not None:
-        config.udp_enabled = udp_enabled
+        config.udp_transport_enabled = udp_enabled
     config.api_enabled = False
     if api_port is not None:
         config.api_enabled = True
@@ -67,21 +67,17 @@ def create_isolated_core(
         config.api_port = api_port
     if api_websocket_port is not None:
         config.api_websocket_enabled = True
-        config.api_websocket_host = "127.0.0.1"
         config.api_websocket_port = api_websocket_port
     else:
         config.api_websocket_enabled = False
     config.content_storage_dir = data_dir / "content"
-    config.virtual_route_maintenance_runtime_interval_seconds = (
+    config.virtual_route_maintenance_interval_seconds = (
         SMOKES_CONFIG.test_core_route_runtime_interval_seconds
     )
-    config.virtual_route_maintenance_route_min_online_routes = max(1, virtual_route_min_online_routes)
-    config.virtual_route_maintenance_drt_check_interval_seconds = (
-        SMOKES_CONFIG.test_core_route_drt_check_interval_seconds
-    )
-    config.virtual_route_maintenance_pending_route_timeout_seconds = virtual_route_pending_timeout_seconds
-    config.virtual_route_maintenance_expected_round_trip_ttl_ms = virtual_route_expected_round_trip_ttl_ms
-    config.virtual_route_maintenance_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
+    config.virtual_route_min_published_routes = max(1, virtual_route_min_online_routes)
+    config.virtual_route_build_timeout_seconds = virtual_route_pending_timeout_seconds
+    config.default_random_walk_ttl_ms = virtual_route_expected_round_trip_ttl_ms
+    config.random_walk_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
     config.virtual_session_drt_lookup_timeout_seconds = (
         SMOKES_CONFIG.test_core_virtual_session_drt_lookup_timeout_seconds
     )

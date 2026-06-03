@@ -16,6 +16,9 @@ from ..helpers import (
 )
 
 
+SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS = 0.25
+
+
 class VirtualSessionClient:
     """Estabelece e mantem sessoes virtuais sobre uma rota ja criada."""
 
@@ -28,11 +31,9 @@ class VirtualSessionClient:
             self.engine.services.config.virtual_session_drt_lookup_retry_seconds
         )
         self._handshake_timeout_seconds = (
-            self.engine.services.config.physical_session_handshake_timeout_seconds
+            self.engine.services.config.session_handshake_timeout_seconds
         )
-        self._handshake_poll_interval_seconds = (
-            self.engine.services.config.physical_session_handshake_poll_interval_seconds
-        )
+        self._handshake_poll_interval_seconds = SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS
 
     async def start_session_to_virtual_node(
         self,
@@ -104,7 +105,7 @@ class VirtualSessionClient:
             remote_virtual_node_id
         )
 
-        keepalive_seconds = self.engine.services.config.physical_session_keepalive_seconds
+        keepalive_seconds = self.engine.services.config.session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
@@ -165,7 +166,7 @@ class VirtualSessionClient:
         if local_virtual_node is None:
             raise ValueError("O virtual node local informado nao existe.")
 
-        keepalive_seconds = self.engine.services.config.physical_session_keepalive_seconds
+        keepalive_seconds = self.engine.services.config.session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
             remote_virtual_node_id=remote_virtual_node_id,
@@ -280,8 +281,8 @@ class VirtualSessionClient:
                 "request_id": message_request_id,
                 "payload": payload or {},
             },
-            retry_after_seconds=self.engine.services.config.virtual_session_reliable_retry_fallback_seconds,
-            max_attempts=self.engine.services.config.session_reliable_max_attempts,
+            retry_after_seconds=self.engine.services.config.virtual_reliable_retry_fallback_seconds,
+            max_attempts=self.engine.services.config.reliable_delivery_max_attempts,
         )
         await self._send_reliable_outbound_message(reliable_message)
         self.engine.services.log_service.info(

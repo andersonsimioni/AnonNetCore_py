@@ -150,27 +150,26 @@ def create_api_core(
     data_dir.mkdir(parents=True, exist_ok=True)
     database = DatabaseManager(DatabaseConfig(db_path=data_dir / "anonnetcore.db"))
     config = CoreConfig(
-        listen_host="0.0.0.0",
-        listen_port=listen_port,
+        physical_listen_host="0.0.0.0",
+        physical_tcp_listen_port=listen_port,
         log_dir=log_dir,
     )
     config.api_enabled = True
     config.api_host = "127.0.0.1"
     config.api_port = api_port
     config.api_websocket_enabled = True
-    config.api_websocket_host = "127.0.0.1"
     config.api_websocket_port = websocket_port
     config.content_storage_dir = data_dir / "content"
-    config.virtual_route_maintenance_runtime_interval_seconds = (
+    config.virtual_route_maintenance_interval_seconds = (
         SMOKES_CONFIG.test_core_route_runtime_interval_seconds
     )
-    config.virtual_route_maintenance_pending_route_timeout_seconds = (
+    config.virtual_route_build_timeout_seconds = (
         SMOKES_CONFIG.test_core_route_pending_timeout_seconds
     )
-    config.virtual_route_maintenance_expected_round_trip_ttl_ms = (
+    config.default_random_walk_ttl_ms = (
         SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
     )
-    config.virtual_route_maintenance_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
+    config.random_walk_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
 
     services = EngineServices(
         config=config,

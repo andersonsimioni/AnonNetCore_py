@@ -372,20 +372,14 @@ def _build_session_runtime(
     runtime.engine = SimpleNamespace(
         services=SimpleNamespace(
             config=SimpleNamespace(
-                physical_session_reliable_retry_after_seconds=(
+                physical_reliable_retry_seconds=(
                     SMOKES_CONFIG.reliable_physical_retry_seconds
                 ),
-                virtual_session_reliable_retry_fallback_seconds=(
+                virtual_reliable_retry_fallback_seconds=(
                     SMOKES_CONFIG.reliable_virtual_retry_fallback_seconds
                 ),
-                virtual_session_reliable_retry_rtt_multiplier=(
+                virtual_reliable_retry_rtt_multiplier=(
                     SMOKES_CONFIG.reliable_virtual_retry_rtt_multiplier
-                ),
-                virtual_session_reliable_retry_min_seconds=(
-                    SMOKES_CONFIG.reliable_virtual_retry_min_seconds
-                ),
-                virtual_session_reliable_retry_max_seconds=(
-                    SMOKES_CONFIG.reliable_virtual_retry_max_seconds
                 ),
             ),
             session_manager=manager,

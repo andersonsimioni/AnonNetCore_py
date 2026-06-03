@@ -51,8 +51,8 @@ class CoreApiService:
         sessions = self.engine.services.session_manager.list_sessions()
         return {
             "node_name": self.engine.get_runtime_node_name(),
-            "listen_host": self.engine.services.config.listen_host,
-            "listen_port": self.engine.services.config.listen_port,
+            "listen_host": self.engine.services.config.physical_listen_host,
+            "listen_port": self.engine.services.config.physical_tcp_listen_port,
             "physical_node_id": local_node.id if local_node else None,
             "session_count": len(sessions),
             "active_session_count": len(
@@ -543,7 +543,7 @@ class CoreApiService:
         ttl_seconds: int | None = None,
         async_publish: bool = False,
     ) -> dict[str, object]:
-        ttl = ttl_seconds or self.engine.services.config.content_provider_advertisement_ttl_seconds
+        ttl = ttl_seconds or self.engine.services.config.content_provider_record_ttl_seconds
         advertisement = self.engine.services.content_transfer_service.build_provider_advertisement(
             content_id=content_id,
             local_virtual_node_id=local_virtual_node_id,

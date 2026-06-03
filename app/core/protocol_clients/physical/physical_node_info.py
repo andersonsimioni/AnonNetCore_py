@@ -80,7 +80,7 @@ class PhysicalNodeInfoClient(EngineBoundComponent):
             return None
 
         protocol_version = "1"
-        reachability_class = self.engine.services.config.physical_node_reachability
+        reachability_class = self.engine.services.config.node_reachability
         relay_capable = self.engine.can_act_as_physical_relay()
         hole_punch_capable = False
         feature_flags: list[str] = []

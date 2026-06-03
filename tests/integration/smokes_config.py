@@ -53,8 +53,10 @@ class SmokesConfig:
 
     virtual_session_core_a_port: int = 19101
     virtual_session_core_b_port: int = 19102
+
     virtual_message_core_a_port: int = 19301
     virtual_message_core_b_port: int = 19302
+
     virtual_content_core_a_port: int = 19401
     virtual_content_core_b_port: int = 19402
 
@@ -161,6 +163,7 @@ class SmokesConfig:
     virtual_api_publish_job_timeout_seconds: float = 60.0
     virtual_api_download_timeout_seconds: float = 60.0
     virtual_api_default_client_timeout_seconds: float = 60.0
+
     virtual_api_content_min_bytes: int = 8192
     virtual_api_content_max_bytes: int = 128 * 1024
 
@@ -178,6 +181,7 @@ class SmokesConfig:
     virtual_api_local_content_timeout_per_download_seconds: float = 90.0
     virtual_api_local_wait_messages_min_seconds: float = 60.0
     virtual_api_local_wait_messages_per_round_seconds: float = 3.0
+
     virtual_api_local_content_min_bytes: int = 4096
     virtual_api_local_content_max_bytes: int = 192 * 1024
     virtual_api_local_message_progress_interval: int = 10

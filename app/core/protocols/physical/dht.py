@@ -172,7 +172,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             key_hex=key_hex,
             record_json=record_json,
             nonce=pow_nonce,
-            difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
+            difficulty_bits=services.config.network_pow_difficulty_bits,
         ):
             services.log_service.warning(
                 "dht",
@@ -181,7 +181,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 namespace=namespace,
                 logical_key=logical_key,
                 pow_nonce=pow_nonce,
-                pow_difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
+                pow_difficulty_bits=services.config.network_pow_difficulty_bits,
             )
             return self._build_invalid_result(envelope, "invalid_dht_publish_pow")
 
@@ -202,7 +202,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             stored_count=len(stored_by),
             required_stored_count=required_stored_count,
             pow_nonce=pow_nonce,
-            pow_difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
+            pow_difficulty_bits=services.config.network_pow_difficulty_bits,
         )
 
         if not closest_nodes_result["local_node_is_responsible"]:
@@ -494,7 +494,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             if required_stored_count is not None
             else len(responsible_nodes)
         )
-        ttl = _read_ttl(payload, services.config.dht_client_max_hops)
+        ttl = _read_ttl(payload, services.config.dht_request_max_forward_hops)
         if ttl <= 0:
             services.log_service.warning(
                 "dht",

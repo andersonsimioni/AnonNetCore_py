@@ -18,13 +18,13 @@ class PhysicalDhtClient:
         self.engine = engine
         self._pending_results: dict[str, asyncio.Future[dict[str, object]]] = {}
         self._response_timeout_seconds = (
-            self.engine.services.config.dht_client_response_timeout_seconds
+            self.engine.services.config.dht_request_timeout_seconds
         )
         self._publish_attempt_timeout_seconds = self._response_timeout_seconds
         self._publish_attempt_count = 3
         self._query_attempt_timeout_seconds = self._response_timeout_seconds
         self._query_attempt_count = 6
-        self._request_ttl = self.engine.services.config.dht_client_max_hops
+        self._request_ttl = self.engine.services.config.dht_request_max_forward_hops
 
     async def publish(
         self,
@@ -38,7 +38,7 @@ class PhysicalDhtClient:
         pow_nonce = self.engine.services.dht_service.find_publish_pow_nonce(
             key_hex=key_hex,
             record_json=record_json,
-            difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
         )
         self.engine.services.log_service.info(
             "physical_dht_client",
@@ -47,7 +47,7 @@ class PhysicalDhtClient:
             logical_key=logical_key,
             key=key_hex,
             pow_nonce=pow_nonce,
-            pow_difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+            pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
         )
         local_publish_result = self._publish_locally_if_responsible(
             key_hex=key_hex,
@@ -453,14 +453,14 @@ class PhysicalDhtClient:
             key_hex=key_hex,
             record_json=record_json,
             nonce=pow_nonce,
-            difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
         ):
             self.engine.services.log_service.warning(
                 "physical_dht_client",
                 "local dht publish proof of work is invalid",
                 key=key_hex,
                 pow_nonce=pow_nonce,
-                pow_difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+                pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
             )
             return {
                 "status": "not_routable",

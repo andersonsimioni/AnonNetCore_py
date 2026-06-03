@@ -183,7 +183,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         initiator_physical_node_id = payload.get("initiator_physical_node_id")
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
         local_node = services.identity_service.get_local_physical_node_result()
 
@@ -290,7 +290,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         signature_hex = payload.get("signature_hex")
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
 
         if (
@@ -450,7 +450,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         session_id = _read_session_id(envelope)
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
 
         if not session_id:
@@ -949,7 +949,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         fallback_host: str | None,
         fallback_port: int | None,
     ) -> tuple[str, str | None, int | None, str]:
-        if services.config.physical_node_reachability == "private" and fallback_transport == "relay_tcp":
+        if services.config.node_reachability == "private" and fallback_transport == "relay_tcp":
             return fallback_transport, fallback_host, fallback_port, "relay"
 
         known_endpoints = services.identity_service.list_remote_physical_node_endpoints(remote_physical_node_id)

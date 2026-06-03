@@ -2321,7 +2321,7 @@ Before a DHT publication is accepted, the publisher must include a lightweight p
 The publication is accepted only when the proof hash satisfies the configured number of leading zero bits:
 
 \begin{equation}
-    leading\_zero\_bits(proof) \geq dht\_publish\_pow\_difficulty\_bits
+    leading\_zero\_bits(proof) \geq network\_pow\_difficulty\_bits
 \end{equation}
 
 This mechanism does not provide a complete anti-abuse system, but it introduces a measurable computational cost before records can be inserted or refreshed in the distributed tables. Responsible nodes can verify the proof cheaply before storing the record, while publishers must search for a valid nonce.

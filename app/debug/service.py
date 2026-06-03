@@ -30,8 +30,8 @@ class DebugSnapshotService(EngineBoundComponent):
             "node": {
                 "name": self.engine.get_runtime_node_name(),
                 "physical_node_id": local_node.id if local_node else None,
-                "listen_host": self.engine.services.config.listen_host,
-                "listen_port": self.engine.services.config.listen_port,
+                "listen_host": self.engine.services.config.physical_listen_host,
+                "listen_port": self.engine.services.config.physical_tcp_listen_port,
                 "advertised_tcp_host": self.engine.get_advertised_tcp_host(),
                 "advertised_tcp_port": self.engine.get_advertised_tcp_port(),
             },

@@ -7,13 +7,17 @@ from sessions import is_observed_only_physical_endpoint
 from .base import PeriodicRuntime
 
 
+VIRTUAL_RELIABLE_RETRY_MIN_SECONDS = 2.0
+VIRTUAL_RELIABLE_RETRY_MAX_SECONDS = 30.0
+
+
 class SessionRuntime(PeriodicRuntime):
     """Executa manutencao periodica para sessoes fisicas e virtuais."""
 
     def __init__(self, engine) -> None:
         super().__init__(
             engine,
-            loop_interval_seconds=engine.services.config.physical_session_runtime_interval_seconds,
+            loop_interval_seconds=engine.services.config.session_runtime_interval_seconds,
             task_name="session-runtime",
         )
 
@@ -150,7 +154,7 @@ class SessionRuntime(PeriodicRuntime):
 
     def _resolve_reliable_retry_after_seconds(self, session, message) -> float:
         if session is None or message.session_scope == "physical":
-            return float(self.engine.services.config.physical_session_reliable_retry_after_seconds)
+            return float(self.engine.services.config.physical_reliable_retry_seconds)
 
         if message.session_scope != "virtual":
             return float(message.retry_after_seconds)
@@ -158,7 +162,7 @@ class SessionRuntime(PeriodicRuntime):
         route_rtt_ms = self._resolve_virtual_session_route_rtt_ms(session)
         if route_rtt_ms is None:
             fallback_seconds = float(
-                self.engine.services.config.virtual_session_reliable_retry_fallback_seconds
+                self.engine.services.config.virtual_reliable_retry_fallback_seconds
             )
             self.engine.services.log_service.debug(
                 "session_runtime",
@@ -173,13 +177,13 @@ class SessionRuntime(PeriodicRuntime):
         raw_retry_seconds = (
             route_rtt_ms
             / 1000.0
-            * float(self.engine.services.config.virtual_session_reliable_retry_rtt_multiplier)
+            * float(self.engine.services.config.virtual_reliable_retry_rtt_multiplier)
         )
         retry_after_seconds = max(
-            float(self.engine.services.config.virtual_session_reliable_retry_min_seconds),
+            VIRTUAL_RELIABLE_RETRY_MIN_SECONDS,
             min(
                 raw_retry_seconds,
-                float(self.engine.services.config.virtual_session_reliable_retry_max_seconds),
+                VIRTUAL_RELIABLE_RETRY_MAX_SECONDS,
             ),
         )
         self.engine.services.log_service.debug(

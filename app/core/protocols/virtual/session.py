@@ -83,7 +83,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         target_virtual_node_id = payload.get("target_virtual_node_id")
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
 
         if (
@@ -168,7 +168,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         signature_hex = payload.get("signature_hex")
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
 
         if (
@@ -297,7 +297,7 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
         session_id = _read_virtual_session_id(envelope)
         keepalive_interval_seconds = _read_keepalive_interval(
             payload,
-            services.config.physical_session_keepalive_seconds,
+            services.config.session_keepalive_seconds,
         )
 
         if not session_id:
