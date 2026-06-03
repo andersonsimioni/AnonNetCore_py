@@ -180,7 +180,11 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
         )
         protocol_version = str(envelope.header.get("version", 1))
         reachability_class = "direct"
-        relay_capable = False
+        relay_capable = (
+            services.engine.can_act_as_physical_relay()
+            if services.engine is not None
+            else False
+        )
         hole_punch_capable = False
         feature_flags: list[str] = []
         dpnt_signature = self.sign_dpnt_descriptor(

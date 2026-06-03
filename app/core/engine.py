@@ -443,6 +443,14 @@ class CoreEngine:
     def is_private_physical_node(self) -> bool:
         return self.services.config.physical_node_reachability.lower() == "private"
 
+    def can_act_as_physical_relay(self) -> bool:
+        config = self.services.config
+        return (
+            config.physical_relay_enabled
+            and not self.is_private_physical_node()
+            and config.physical_tcp_listen_enabled
+        )
+
     def build_local_physical_endpoints(self, transport_name: str | None = None) -> list[dict[str, object]]:
         if self.is_private_physical_node():
             return []

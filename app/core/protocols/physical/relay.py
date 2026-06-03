@@ -62,6 +62,15 @@ class PhysicalRelayProtocolHandler(ProtocolMessageHandler):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
+        if not _can_act_as_relay(services):
+            return self._invalid_with_log(
+                envelope,
+                services,
+                "relay register request rejected because local node is not relay capable",
+                reason="local_node_not_relay_capable",
+                transport_name=context.transport_name,
+            )
+
         payload = as_payload_dict(envelope)
         target_physical_node_id = read_string_or_none(payload, "target_physical_node_id")
         target_session_id = read_physical_session_id(envelope)
@@ -111,6 +120,15 @@ class PhysicalRelayProtocolHandler(ProtocolMessageHandler):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
+        if not _can_act_as_relay(services):
+            return self._invalid_with_log(
+                envelope,
+                services,
+                "relay register proof rejected because local node is not relay capable",
+                reason="local_node_not_relay_capable",
+                transport_name=context.transport_name,
+            )
+
         payload = as_payload_dict(envelope)
         target_session_id = read_physical_session_id(envelope)
         target_physical_node_id = read_string_or_none(payload, "target_physical_node_id")
@@ -230,6 +248,15 @@ class PhysicalRelayProtocolHandler(ProtocolMessageHandler):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
+        if not _can_act_as_relay(services):
+            services.log_service.warning(
+                "physical_relay",
+                "relay open rejected because local node is not relay capable",
+                reason="local_node_not_relay_capable",
+                transport_name=context.transport_name,
+            )
+            return self._build_open_fail(envelope, "local_node_not_relay_capable")
+
         payload = as_payload_dict(envelope)
         requester_session_id = read_physical_session_id(envelope)
         target_physical_node_id = read_string_or_none(payload, "target_physical_node_id")
@@ -490,6 +517,12 @@ def build_register_signature_payload(
 
 def _packet_bytes(*, header: dict[str, object], payload: dict[str, object]) -> bytes:
     return compact_json_bytes({"header": header, "payload": payload})
+
+
+def _can_act_as_relay(services: EngineServices) -> bool:
+    if services.engine is None:
+        return False
+    return services.engine.can_act_as_physical_relay()
 
 
 def _build_relay_endpoint(services: EngineServices) -> dict[str, object]:

@@ -81,7 +81,7 @@ class PhysicalNodeInfoClient(EngineBoundComponent):
 
         protocol_version = "1"
         reachability_class = self.engine.services.config.physical_node_reachability
-        relay_capable = False
+        relay_capable = self.engine.can_act_as_physical_relay()
         hole_punch_capable = False
         feature_flags: list[str] = []
         dpnt_signature = PhysicalNodeInfoProtocolHandler.sign_dpnt_descriptor(

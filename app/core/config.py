@@ -32,6 +32,7 @@ def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
 class CoreConfig:
     physical_node_reachability: str = "public"
     physical_tcp_listen_enabled: bool = True
+    physical_relay_enabled: bool = True
     listen_host: str = "0.0.0.0"
     listen_port: int = 19001
     udp_enabled: bool = True
