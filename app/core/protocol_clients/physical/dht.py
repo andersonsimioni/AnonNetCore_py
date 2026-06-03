@@ -35,12 +35,19 @@ class PhysicalDhtClient:
         expires_at: str | None = None,
     ) -> dict[str, object]:
         key_hex = self.engine.services.dht_service.build_key(namespace, logical_key)
+        pow_nonce = self.engine.services.dht_service.find_publish_pow_nonce(
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+        )
         self.engine.services.log_service.info(
             "physical_dht_client",
             "starting dht publish",
             namespace=namespace,
             logical_key=logical_key,
             key=key_hex,
+            pow_nonce=pow_nonce,
+            pow_difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
         )
         local_publish_result = self._publish_locally_if_responsible(
             key_hex=key_hex,
@@ -48,6 +55,7 @@ class PhysicalDhtClient:
             logical_key=logical_key,
             record_json=record_json,
             expires_at=expires_at,
+            pow_nonce=pow_nonce,
         )
         stored_by = self._read_stored_by(local_publish_result)
         if local_publish_result.get("status") == "stored":
@@ -87,6 +95,7 @@ class PhysicalDhtClient:
                 record_json=record_json,
                 expires_at=expires_at,
                 stored_by=stored_by,
+                pow_nonce=pow_nonce,
                 timeout_seconds=self._publish_attempt_timeout_seconds,
             )
             stored_by = self._merge_stored_by(stored_by, self._read_stored_by(result))
@@ -236,6 +245,7 @@ class PhysicalDhtClient:
         record_json: str,
         expires_at: str | None,
         stored_by: list[str],
+        pow_nonce: int,
         timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         session = self._get_active_session(session_id)
@@ -253,6 +263,7 @@ class PhysicalDhtClient:
             expires_at=expires_at,
             ttl=self._request_ttl,
             stored_by=stored_by,
+            pow_nonce=pow_nonce,
         )
         return await self._send_and_wait_result(
             message_id=header["message_id"],
@@ -417,6 +428,7 @@ class PhysicalDhtClient:
         logical_key: str,
         record_json: str,
         expires_at: str | None,
+        pow_nonce: int,
     ) -> dict[str, object]:
         closest_nodes_result = self.engine.services.dht_service.select_k_closest_nodes(key_hex)
         responsible_nodes = closest_nodes_result.get("nodes", [])
@@ -430,6 +442,29 @@ class PhysicalDhtClient:
             )
             return {
                 "status": "not_routable",
+                "key": key_hex,
+                "responsible_nodes": [],
+                "stored_by": [],
+                "stored_count": 0,
+                "required_stored_count": required_stored_count,
+            }
+
+        if not self.engine.services.dht_service.validate_publish_pow(
+            key_hex=key_hex,
+            record_json=record_json,
+            nonce=pow_nonce,
+            difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+        ):
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "local dht publish proof of work is invalid",
+                key=key_hex,
+                pow_nonce=pow_nonce,
+                pow_difficulty_bits=self.engine.services.config.dht_publish_pow_difficulty_bits,
+            )
+            return {
+                "status": "not_routable",
+                "reason": "invalid_dht_publish_pow",
                 "key": key_hex,
                 "responsible_nodes": [],
                 "stored_by": [],

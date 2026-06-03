@@ -151,7 +151,7 @@ Decentralized communication systems have emerged as an alternative to traditiona
 
 This work proposes a modular architecture for decentralized peer-to-peer overlay networks designed to support secure and anonymous communication, data persistence, and decentralized applications. The proposed design separates the networking, persistence, and security concerns into modular components, allowing the system to support different connection strategies, storage models, and cryptographic schemes without requiring changes to the overall architecture.
 
-To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows over TCP in local and Docker-based environments, while the broader architecture discusses NAT traversal mechanisms such as UDP hole punching, relay-assisted communication, and future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
+To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows in local and Docker-based environments using TCP, an experimental UDP transport with packet fragmentation, and relay-assisted physical connectivity. The broader architecture still treats complete NAT traversal mechanisms such as UDP hole punching, STUN/TURN integration, and QUIC as future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
 
 The results indicate that the modular architecture can support heterogeneous networking environments while preserving secure and privacy-oriented communication between peers, as well as providing a foundation for persistent decentralized services. The proposed approach contributes to the design of future decentralized systems by enabling flexible integration of emerging networking, storage, and cryptographic technologies.
 \end{abstracten}
@@ -163,7 +163,7 @@ Sistemas de comunicação descentralizados têm emergido como uma alternativa à
 
 Este trabalho propõe uma arquitetura modular para redes overlay peer-to-peer descentralizadas projetada para suportar comunicação segura e anônima, persistência de dados e aplicações descentralizadas. O projeto proposto separa os componentes de rede, persistência e segurança em módulos independentes, permitindo que o sistema suporte diferentes estratégias de conexão, modelos de armazenamento e esquemas criptográficos sem necessidade de modificar a arquitetura geral.
 
-Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay sobre TCP em ambientes locais e baseados em Docker, enquanto a arquitetura mais ampla discute mecanismos de travessia de NAT, como UDP hole punching, comunicação assistida por relays e extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
+Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay em ambientes locais e baseados em Docker usando TCP, transporte UDP experimental com fragmentação de pacotes e conectividade física assistida por relays. A arquitetura mais ampla ainda trata mecanismos completos de travessia de NAT, como UDP hole punching, integração STUN/TURN e QUIC, como extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
 
 Os resultados indicam que a arquitetura modular pode suportar ambientes de rede heterogêneos mantendo comunicação segura e orientada à privacidade entre pares, além de fornecer uma base para serviços descentralizados com persistência de dados. A abordagem proposta contribui para o desenvolvimento de futuros sistemas descentralizados ao permitir a integração flexível de novas tecnologias de rede, armazenamento e criptografia.
 \end{resumopt}
@@ -2127,9 +2127,9 @@ The methodology adopted in the implementation can be summarized as follows:
     \item \textbf{Debug-oriented development}: the prototype includes logs, a debug state endpoint, WebSocket events, and a Debug Console to make distributed state observable during experiments.
 \end{enumerate}
 
-The implementation was intentionally optimized for clarity, protocol validation, and observability. As a result, some decisions were simplified when compared to a production network. For example, the prototype currently uses TCP transport, local or Docker-based clusters, SQLite persistence, and a simplified DHT routing model. More advanced features such as complete NAT traversal, QUIC transport, full Kademlia routing tables, formal anti-abuse mechanisms, and security auditing are treated as future work.
+The implementation was intentionally optimized for clarity, protocol validation, and observability. As a result, some decisions were simplified when compared to a production network. For example, the prototype currently uses local or Docker-based clusters, SQLite persistence, TCP transport, experimental UDP transport, relay-assisted physical connectivity, and a simplified DHT routing model. More advanced features such as complete NAT traversal, QUIC transport, full Kademlia routing tables, mature anti-abuse mechanisms, and security auditing are treated as future work.
 
-Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, and earlier cryptographic choices such as Kyber-1024 and SHA3-512, the experimental implementation prioritizes validation of the architectural model in a controlled environment. Therefore, the MVP adopts Python, TCP transport, SQLite persistence, SHA-512-based identifiers, ML-KEM/ML-DSA through the selected cryptographic backend, AES-256-GCM-SIV for authenticated symmetric encryption, AAD binding for selected public protocol metadata, and a lightweight reliable-session wrapper for ordered delivery and acknowledgments. This distinction separates the proposed architecture from the current proof-of-concept implementation and avoids presenting the MVP as a production-ready public network.
+Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, and earlier cryptographic choices such as Kyber-1024 and SHA3-512, the experimental implementation prioritizes validation of the architectural model in a controlled environment. Therefore, the MVP adopts Python, TCP transport, experimental UDP datagram transport with JSON fragmentation, relay-assisted physical forwarding, SQLite persistence, SHA-512-based identifiers, ML-KEM/ML-DSA through the selected cryptographic backend, AES-256-GCM-SIV for authenticated symmetric encryption, AAD binding for selected public protocol metadata, DHT publication proof-of-work, and a lightweight reliable-session wrapper for ordered delivery and acknowledgments. This distinction separates the proposed architecture from the current proof-of-concept implementation and avoids presenting the MVP as a production-ready public network.
 
 \subsection{Implementation Scope}
 \label{sec:implementation-scope}
@@ -2137,12 +2137,12 @@ Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, a
 The implemented MVP validates the following architectural capabilities:
 
 \begin{itemize}
-    \item creation of physical nodes connected through TCP;
+    \item creation of physical nodes connected through TCP, experimental UDP, or relay-assisted transport;
     \item bootstrap from known physical endpoints;
     \item exchange and validation of physical node information;
     \item physical sessions with key exchange, signatures, keepalive, and reliable payload acknowledgments;
     \item generic DHT records with multiple namespaces;
-    \item replicated DHT publication based on XOR proximity;
+    \item replicated DHT publication based on XOR proximity and lightweight publication proof-of-work;
     \item automatic route creation for local virtual nodes;
     \item publication of virtual node routes in the DRT;
     \item virtual end-to-end sessions over physical routes with reliable ordered payload delivery;
@@ -2169,7 +2169,7 @@ Table~\ref{tab:implementation-stack} summarizes the main implementation choices.
 \toprule
 \textbf{Component} & \textbf{Implementation choice} \\
 \midrule
-Transport & TCP sockets with length-prefixed frames. \\
+Transport & TCP sockets with length-prefixed frames, experimental UDP datagrams with JSON fragmentation, and relay-assisted TCP forwarding. \\
 Protocol envelope & JSON-based protocol envelope for physical and virtual messages. \\
 Local persistence & SQLite through SQLAlchemy. \\
 Content storage & Filesystem storage, with metadata persisted in the local database. \\
@@ -2259,6 +2259,8 @@ The physical layer implements the following responsibilities:
 
 \begin{itemize}
     \item TCP listener initialization and frame parsing;
+    \item experimental UDP listener initialization, datagram fragmentation, and reassembly;
+    \item relay-assisted physical forwarding through registered public relay nodes;
     \item direct peer communication through physical envelopes;
     \item bootstrap from known endpoints;
     \item exchange of physical node descriptors;
@@ -2268,7 +2270,7 @@ The physical layer implements the following responsibilities:
     \item route construction and route execution.
 \end{itemize}
 
-The MVP currently uses TCP as the only transport. UDP hole punching, QUIC, and relay mechanisms remain future implementation targets.
+The MVP no longer uses TCP as the only transport. TCP remains the primary validated transport, but the implementation also includes an experimental UDP transport and a relay-assisted TCP transport. UDP hole punching, STUN/TURN integration, QUIC, and mature Internet-scale NAT traversal remain future implementation targets.
 
 \subsubsection{Virtual Layer}
 \label{subsec:virtual-layer-implementation}
@@ -2309,6 +2311,20 @@ The $K$ physical nodes with the lowest distances are considered responsible for 
 \begin{equation}
     K = 3
 \end{equation}
+
+Before a DHT publication is accepted, the publisher must include a lightweight proof-of-work nonce. The implemented proof is intentionally simple and is computed over the physical DHT key, the canonical record JSON, and the nonce:
+
+\begin{equation}
+    proof = SHA512(dht\_key \parallel record\_json \parallel nonce)
+\end{equation}
+
+The publication is accepted only when the proof hash satisfies the configured number of leading zero bits:
+
+\begin{equation}
+    leading\_zero\_bits(proof) \geq dht\_publish\_pow\_difficulty\_bits
+\end{equation}
+
+This mechanism does not provide a complete anti-abuse system, but it introduces a measurable computational cost before records can be inserted or refreshed in the distributed tables. Responsible nodes can verify the proof cheaply before storing the record, while publishers must search for a valid nonce.
 
 Table~\ref{tab:dht-namespaces-implementation} summarizes the implemented namespaces.
 
@@ -3157,11 +3173,11 @@ The MVP validates the core architecture, but several components require further 
 \toprule
 \textbf{Area} & \textbf{Current limitation} & \textbf{Future work} \\
 \midrule
-NAT traversal & The MVP uses TCP in local or Docker-based tests and does not implement complete NAT traversal. & Implement UDP hole punching, STUN/TURN support, relay fallback, and later QUIC-based transport. \\
+NAT traversal & The MVP includes TCP, experimental UDP transport, and relay-assisted physical forwarding, but it does not implement complete NAT traversal. & Implement UDP hole punching, STUN/TURN support, relay hardening, and later QUIC-based transport. \\
 
 DHT routing & The DHT uses XOR proximity and replication but does not yet include a complete Kademlia-style routing table. & Implement buckets, iterative lookup, routing table refresh, churn handling, and more complete proximity search. \\
 
-Anti-abuse & There is no mature defense against Sybil attacks, flooding, spam, or coordinated malicious peers. & Add publication proof-of-work, peer scoring, rate limits per peer and namespace, invalid signature penalties, and origin concentration detection. \\
+Anti-abuse & The MVP includes lightweight DHT publication proof-of-work, but there is no mature defense against Sybil attacks, flooding, spam, or coordinated malicious peers. & Add adaptive proof-of-work, peer scoring, rate limits per peer and namespace, invalid signature penalties, and origin concentration detection. \\
 
 Scalability & Tests currently focus on local processes and Docker clusters. & Execute long-running experiments with larger clusters, churn, latency, packet loss, and heterogeneous nodes. \\
 
@@ -3224,7 +3240,7 @@ However, the implementation must be understood as an experimental MVP rather tha
 
 Even with these limitations, the project contributes a concrete and extensible architecture for decentralized overlay networks. Its main contribution is not only the implementation of individual mechanisms, but the integration of physical nodes, virtual nodes, distributed tables, route construction, virtual sessions, content transfer, local APIs, and application-level proof of concept into a single coherent experimental system. This integration demonstrates that the proposed model can serve as a foundation for future research and development in secure decentralized applications.
 
-Future work should focus on hardening the prototype and extending it toward real-world deployment conditions. The most relevant directions include implementing UDP hole punching and relay fallback, adding QUIC support, replacing the simplified DHT behavior with a complete Kademlia-like routing layer, introducing publication proof-of-work and peer scoring, improving protection against Sybil and flooding attacks, executing larger-scale experiments with churn and packet loss, strengthening local key protection, separating media objects from social profile state, and performing a formal security review.
+Future work should focus on hardening the prototype and extending it toward real-world deployment conditions. The most relevant directions include implementing UDP hole punching, hardening relay fallback, adding QUIC support, replacing the simplified DHT behavior with a complete Kademlia-like routing layer, evolving publication proof-of-work and peer scoring, improving protection against Sybil and flooding attacks, executing larger-scale experiments with churn and packet loss, strengthening local key protection, separating media objects from social profile state, and performing a formal security review.
 
 In conclusion, this work showed that it is feasible to design and implement a modular decentralized overlay architecture that supports secure communication, distributed discovery, persistent content references, virtual identities, and decentralized application integration. The resulting MVP validates the core architectural hypothesis of the project and establishes a practical foundation for future iterations aimed at scalability, robustness, stronger anonymity, and production-grade security.
 

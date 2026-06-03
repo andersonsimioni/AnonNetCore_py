@@ -46,6 +46,44 @@ class DhtService:
 
         return int(left_hex, 16) ^ int(right_hex, 16)
 
+    @staticmethod
+    def find_publish_pow_nonce(
+        *,
+        key_hex: str,
+        record_json: str,
+        difficulty_bits: int,
+    ) -> int:
+        if difficulty_bits <= 0:
+            return 0
+
+        nonce = 0
+        while True:
+            if DhtService.validate_publish_pow(
+                key_hex=key_hex,
+                record_json=record_json,
+                nonce=nonce,
+                difficulty_bits=difficulty_bits,
+            ):
+                return nonce
+            nonce += 1
+
+    @staticmethod
+    def validate_publish_pow(
+        *,
+        key_hex: str,
+        record_json: str,
+        nonce: int,
+        difficulty_bits: int,
+    ) -> bool:
+        if difficulty_bits <= 0:
+            return True
+        if nonce < 0:
+            return False
+
+        proof_material = f"{key_hex}|{record_json}|{nonce}".encode("utf-8")
+        proof_bits = bin(int(sha512(proof_material).hexdigest(), 16))[2:].zfill(512)
+        return proof_bits.startswith("0" * difficulty_bits)
+
     def select_k_closest_nodes(self, key_hex: str) -> dict[str, object]:
         if not key_hex:
             raise ValueError("key_hex e obrigatorio.")

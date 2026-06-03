@@ -83,6 +83,7 @@ class CoreConfig:
     physical_relay_registration_ttl_seconds: int = 30 * 60
     physical_relay_channel_ttl_seconds: int = 10 * 60
     dht_replication_factor: int = 3
+    dht_publish_pow_difficulty_bits: int = 16
     dht_maintenance_runtime_interval_seconds: float = 5.0
     dht_maintenance_publish_backoff_seconds: float = 600.0
     dht_client_response_timeout_seconds: float = 8.0

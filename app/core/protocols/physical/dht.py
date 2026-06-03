@@ -62,6 +62,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at: str | None,
         ttl: int | None = None,
         stored_by: list[str] | None = None,
+        pow_nonce: int | None = None,
     ) -> bytes:
         return json.dumps(
             {
@@ -73,6 +74,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "expires_at": expires_at,
                     "ttl": ttl,
                     "stored_by": stored_by or [],
+                    "pow_nonce": pow_nonce,
                 },
             },
             separators=(",", ":"),
@@ -154,6 +156,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         record_json = _read_required_string(payload, "record_json")
         expires_at = _read_optional_datetime(payload, "expires_at")
         stored_by = _read_string_list(payload, "stored_by")
+        pow_nonce = _read_optional_int(payload, "pow_nonce")
 
         if namespace is None or logical_key is None or record_json is None:
             services.log_service.warning(
@@ -165,6 +168,23 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             return self._build_invalid_result(envelope, "invalid_dht_publish_payload")
 
         key_hex = services.dht_service.build_key(namespace, logical_key)
+        if pow_nonce is None or not services.dht_service.validate_publish_pow(
+            key_hex=key_hex,
+            record_json=record_json,
+            nonce=pow_nonce,
+            difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
+        ):
+            services.log_service.warning(
+                "dht",
+                "received dht publish with invalid proof of work",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                pow_nonce=pow_nonce,
+                pow_difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
+            )
+            return self._build_invalid_result(envelope, "invalid_dht_publish_pow")
+
         closest_nodes_result = services.dht_service.select_k_closest_nodes(key_hex)
         responsible_nodes = closest_nodes_result["nodes"]
         required_stored_count = len(responsible_nodes)
@@ -181,6 +201,8 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             stored_by=stored_by,
             stored_count=len(stored_by),
             required_stored_count=required_stored_count,
+            pow_nonce=pow_nonce,
+            pow_difficulty_bits=services.config.dht_publish_pow_difficulty_bits,
         )
 
         if not closest_nodes_result["local_node_is_responsible"]:
