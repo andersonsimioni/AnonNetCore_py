@@ -24,9 +24,6 @@ from ..helpers import (
 )
 
 
-SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS = 0.25
-
-
 class PhysicalSessionClient:
     """Inicia e mantem sessoes fisicas entre peers adjacentes."""
 
@@ -35,7 +32,9 @@ class PhysicalSessionClient:
         self._handshake_timeout_seconds = (
             self.engine.services.config.session_handshake_timeout_seconds
         )
-        self._handshake_poll_interval_seconds = SESSION_HANDSHAKE_POLL_INTERVAL_SECONDS
+        self._handshake_poll_interval_seconds = (
+            self.engine.services.config.session_handshake_poll_interval_seconds
+        )
 
     async def start_session(
         self,

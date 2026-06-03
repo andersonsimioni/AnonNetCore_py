@@ -7,10 +7,6 @@ from sessions import is_observed_only_physical_endpoint
 from .base import PeriodicRuntime
 
 
-VIRTUAL_RELIABLE_RETRY_MIN_SECONDS = 2.0
-VIRTUAL_RELIABLE_RETRY_MAX_SECONDS = 30.0
-
-
 class SessionRuntime(PeriodicRuntime):
     """Executa manutencao periodica para sessoes fisicas e virtuais."""
 
@@ -180,10 +176,10 @@ class SessionRuntime(PeriodicRuntime):
             * float(self.engine.services.config.virtual_reliable_retry_rtt_multiplier)
         )
         retry_after_seconds = max(
-            VIRTUAL_RELIABLE_RETRY_MIN_SECONDS,
+            float(self.engine.services.config.virtual_reliable_retry_min_seconds),
             min(
                 raw_retry_seconds,
-                VIRTUAL_RELIABLE_RETRY_MAX_SECONDS,
+                float(self.engine.services.config.virtual_reliable_retry_max_seconds),
             ),
         )
         self.engine.services.log_service.debug(

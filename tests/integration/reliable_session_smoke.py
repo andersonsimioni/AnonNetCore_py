@@ -381,6 +381,12 @@ def _build_session_runtime(
                 virtual_reliable_retry_rtt_multiplier=(
                     SMOKES_CONFIG.reliable_virtual_retry_rtt_multiplier
                 ),
+                virtual_reliable_retry_min_seconds=(
+                    SMOKES_CONFIG.reliable_virtual_retry_min_seconds
+                ),
+                virtual_reliable_retry_max_seconds=(
+                    SMOKES_CONFIG.reliable_virtual_retry_max_seconds
+                ),
             ),
             session_manager=manager,
             route_service=_RouteRttService(route_rtt_by_id),

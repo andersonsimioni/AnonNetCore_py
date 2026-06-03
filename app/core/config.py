@@ -74,8 +74,11 @@ class CoreConfig:
     physical_reliable_retry_seconds: float = 2.0
     virtual_reliable_retry_fallback_seconds: float = 5.0
     virtual_reliable_retry_rtt_multiplier: float = 2.0
+    virtual_reliable_retry_min_seconds: float = 2.0
+    virtual_reliable_retry_max_seconds: float = 30.0
     reliable_delivery_max_attempts: int = 5
     session_handshake_timeout_seconds: float = 15.0
+    session_handshake_poll_interval_seconds: float = 0.25
 
     physical_node_validation_runtime_interval_seconds: float = 3.0
     physical_node_validation_backoff_seconds: int = 300
@@ -101,9 +104,11 @@ class CoreConfig:
     api_enabled: bool = True
     api_host: str = "127.0.0.1"
     api_port: int = 18080
+    api_cors_allow_origin: str = "*"
     debug_api_enabled: bool = True
     api_websocket_enabled: bool = True
     api_websocket_port: int = 18081
+    api_websocket_path: str = "/v1/events"
 
     content_storage_dir: str | Path = "data/local/content"
     content_download_range_size: int = 64 * 1024

@@ -224,7 +224,7 @@ class CoreEngine:
             self.services.api_service,
             host=config.api_host,
             port=config.api_port,
-            cors_allow_origin="*",
+            cors_allow_origin=config.api_cors_allow_origin,
         )
         await self._api_http_server.start()
         self.services.log_service.info(
@@ -238,7 +238,7 @@ class CoreEngine:
                 self.services.api_service,
                 host=config.api_host,
                 port=config.api_websocket_port,
-                path="/v1/events",
+                path=config.api_websocket_path,
             )
             await self._api_websocket_server.start()
             self.services.log_service.info(
@@ -246,7 +246,7 @@ class CoreEngine:
                 "websocket api server started",
                 host=config.api_host,
                 port=config.api_websocket_port,
-                path="/v1/events",
+                path=config.api_websocket_path,
             )
 
     async def _stop_api_server(self) -> None:
