@@ -183,7 +183,8 @@ def run_smoke(
         )
         assert process.stdout is not None
         for line in process.stdout:
-            print(line, end="")
+            if should_echo_smoke_line(line):
+                print(line, end="")
             log_file.write(line)
         exit_code = process.wait()
 
@@ -233,6 +234,25 @@ def print_header(title: str) -> None:
     print(line)
     print(title)
     print(line)
+
+
+def should_echo_smoke_line(line: str) -> bool:
+    important_fragments = (
+        "checkpoint ",
+        " OK",
+        " PASS",
+        " FAIL",
+        "failed:",
+        "Traceback",
+        "Timed out",
+        "Run directory:",
+        "reset test data:",
+        "docker cluster running:",
+        "starting docker cluster:",
+        "Seed de transporte:",
+        "profile=",
+    )
+    return any(fragment in line for fragment in important_fragments)
 
 
 def format_command(command: list[str]) -> str:

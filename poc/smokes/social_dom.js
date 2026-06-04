@@ -24,7 +24,7 @@ async function main() {
 
   await submit("#profile-form", {
     displayName: "Alice DOM",
-    bio: "Perfil criado pelo smoke DOM",
+  bio: "Profile created by the DOM smoke",
   });
   assert.equal(serviceCalls.some((call) => call.name === "background_run_once"), true);
 
@@ -32,7 +32,7 @@ async function main() {
   assert.equal(document.querySelector("#active-profile-select").value, "vn-local-b");
   await submit("#profile-form", {
     displayName: "Bob DOM",
-    bio: "Segundo perfil local do smoke DOM",
+  bio: "Second local profile from the DOM smoke",
   });
 
   const selector = document.querySelector("#active-profile-select");

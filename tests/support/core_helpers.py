@@ -162,7 +162,7 @@ def reset_core_data_dir(data_dir: Path) -> None:
 
 
 async def stop_cores(*engines: CoreEngine) -> None:
-    """Para engines ignorando erros de cleanup para nao esconder o erro real do teste."""
+    """Stops engines while ignoring cleanup errors so the real test error stays visible."""
 
     for engine in engines:
         try:

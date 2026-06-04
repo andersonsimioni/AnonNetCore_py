@@ -36,14 +36,14 @@ def main() -> int:
             open_debug_console(args.debug_host, args.debug_port)
 
         print("")
-        print("PoC pronta.")
+        print("PoC ready.")
         print(f"- Core TCP local: 0.0.0.0:{args.core_listen_port}")
         print("- Core HTTP API: http://127.0.0.1:18080")
         print("- Core WebSocket: ws://127.0.0.1:18081/v1/events")
         print(f"- Front PoC local: {POC_INDEX}")
         print(f"- Debug Console: http://{args.debug_host}:{args.debug_port}")
         print("")
-        print("Pressione Ctrl+C para parar o core local e o debug console.")
+        print("Press Ctrl+C to stop the local core and debug console.")
 
         wait_until_interrupted(processes)
         return 0
@@ -53,72 +53,72 @@ def main() -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sobe cluster Docker, core local e abre a PoC como HTML local.",
+        description="Starts the Docker cluster, local core, and opens the PoC as local HTML.",
     )
     parser.add_argument(
         "cluster_nodes",
         type=int,
         nargs="?",
         default=10,
-        help="Quantidade de nodes no cluster Docker.",
+        help="Number of nodes in the Docker cluster.",
     )
     parser.add_argument(
         "--core-listen-port",
         type=int,
         default=19101,
-        help="Porta TCP do core local fora do cluster.",
+        help="TCP port for the local core outside the cluster.",
     )
     parser.add_argument(
         "--local-core-delay-seconds",
         type=float,
         default=8.0,
-        help="Tempo de espera apos subir o cluster antes de iniciar o core local.",
+        help="Delay after starting the cluster before starting the local core.",
     )
     parser.add_argument(
         "--debug-delay-seconds",
         type=float,
         default=2.0,
-        help="Tempo de espera apos iniciar o core local antes de iniciar o debug console.",
+        help="Delay after starting the local core before starting the debug console.",
     )
     parser.add_argument(
         "--debug-host",
         default="127.0.0.1",
-        help="Host HTTP do debug console.",
+        help="Debug console HTTP host.",
     )
     parser.add_argument(
         "--debug-port",
         type=int,
         default=19888,
-        help="Porta HTTP do debug console.",
+        help="Debug console HTTP port.",
     )
     parser.add_argument(
         "--core-debug-url",
         default="http://127.0.0.1:18080/debug/state",
-        help="URL /debug/state do core local da PoC.",
+        help="PoC local core /debug/state URL.",
     )
     parser.add_argument(
         "--skip-cluster",
         action="store_true",
-        help="Nao sobe o cluster Docker; inicia apenas o core local.",
+        help="Do not start the Docker cluster; start only the local core.",
     )
     parser.add_argument(
         "--no-open",
         action="store_true",
-        help="Nao abre o HTML/debug automaticamente.",
+        help="Do not open HTML/debug automatically.",
     )
     parser.add_argument(
         "--no-docker-debug",
         action="store_true",
-        help="Debug console nao descobre containers anonnet-node-*.",
+        help="Debug console does not discover anonnet-node-* containers.",
     )
     args = parser.parse_args()
     if args.cluster_nodes < 2 and not args.skip_cluster:
-        raise SystemExit("Use pelo menos 2 nodes no cluster.")
+        raise SystemExit("Use at least 2 nodes in the cluster.")
     return args
 
 
 def start_cluster(node_count: int) -> None:
-    print(f"Subindo cluster Docker com {node_count} nodes...")
+    print(f"Starting Docker cluster with {node_count} nodes...")
     run_command(
         [
             sys.executable,
@@ -133,7 +133,7 @@ def wait_before_local_core(delay_seconds: float) -> None:
     if delay_seconds <= 0:
         return
 
-    print(f"Aguardando {delay_seconds:.1f}s antes de iniciar o core local...")
+    print(f"Waiting {delay_seconds:.1f}s before starting the local core...")
     time.sleep(delay_seconds)
 
 
@@ -141,12 +141,12 @@ def wait_before_debug_console(delay_seconds: float) -> None:
     if delay_seconds <= 0:
         return
 
-    print(f"Aguardando {delay_seconds:.1f}s antes de iniciar o debug console...")
+    print(f"Waiting {delay_seconds:.1f}s before starting the debug console...")
     time.sleep(delay_seconds)
 
 
 def start_local_core(listen_port: int) -> subprocess.Popen:
-    print(f"Iniciando core local na porta TCP {listen_port}...")
+    print(f"Starting local core on TCP port {listen_port}...")
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     return subprocess.Popen(
         [
@@ -176,21 +176,21 @@ def start_debug_console(args: argparse.Namespace) -> subprocess.Popen:
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(APP_ROOT)
-    print(f"Iniciando debug console em http://{args.debug_host}:{args.debug_port}...")
+    print(f"Starting debug console at http://{args.debug_host}:{args.debug_port}...")
     return subprocess.Popen(command, cwd=PROJECT_ROOT, env=env)
 
 
 def open_poc_html() -> None:
     if not POC_INDEX.exists():
-        raise FileNotFoundError(f"PoC HTML nao encontrado: {POC_INDEX}")
+        raise FileNotFoundError(f"PoC HTML not found: {POC_INDEX}")
 
-    print(f"Abrindo PoC local: {POC_INDEX}")
+    print(f"Opening local PoC: {POC_INDEX}")
     webbrowser.open(POC_INDEX.as_uri())
 
 
 def open_debug_console(host: str, port: int) -> None:
     debug_url = f"http://{host}:{port}"
-    print(f"Abrindo Debug Console: {debug_url}")
+    print(f"Opening Debug Console: {debug_url}")
     webbrowser.open(debug_url)
 
 
@@ -199,7 +199,7 @@ def wait_until_interrupted(processes: list[subprocess.Popen]) -> None:
         for process in processes:
             exit_code = process.poll()
             if exit_code is not None:
-                raise SystemExit(f"Processo encerrou antes da hora com exit code {exit_code}.")
+                raise SystemExit(f"Process exited earlier than expected with exit code {exit_code}.")
         time.sleep(0.5)
 
 

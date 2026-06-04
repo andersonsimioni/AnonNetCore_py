@@ -11,10 +11,10 @@ COMPOSE_FILE = CLUSTER_ROOT / "docker-compose.generated.yml"
 
 def main() -> int:
     if not COMPOSE_FILE.exists():
-        raise SystemExit(f"Compose gerado nao encontrado em: {COMPOSE_FILE}")
+        raise SystemExit(f"Generated compose file not found at: {COMPOSE_FILE}")
 
     verify_docker_is_available()
-    print("Derrubando containers do cluster...")
+    print("Stopping cluster containers...")
     subprocess.run(
         [
             "docker",

@@ -8,7 +8,7 @@ from ...components import EngineBoundComponent
 
 
 class RouteExecuteClient(EngineBoundComponent):
-    """Envia payloads por uma rota ja construida."""
+    """Sends payloads through an already built route."""
 
     async def send_from_initiator(
         self,
@@ -22,9 +22,9 @@ class RouteExecuteClient(EngineBoundComponent):
             initial_path_id=initial_path_id,
         )
         if initiator_resolution is None:
-            raise ValueError("A rota informada nao existe no estado local do initiator.")
+            raise ValueError("The provided route does not exist in the local initiator state.")
         if not initiator_resolution.first_hop_physical_node_id:
-            raise ValueError("A rota informada nao possui first hop associado.")
+            raise ValueError("The provided route has no associated first hop.")
 
         route_data_payload = self._build_route_data_payload(
             virtual_session_id=virtual_session_id,
@@ -167,7 +167,7 @@ class RouteExecuteClient(EngineBoundComponent):
 
         session = self.engine.services.session_manager.get_session_by_session_id(virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
-            raise ValueError("A virtual session informada nao esta ativa para cifrar o envelope.")
+            raise ValueError("The provided virtual session is not active for encrypting the envelope.")
 
         plaintext_hex = json.dumps(
             virtual_envelope,
@@ -213,7 +213,7 @@ class RouteExecuteClient(EngineBoundComponent):
                 "target_remote_physical_node_id": endpoint_resolution.previous_physical_node_id,
             }
 
-        raise ValueError("A rota local informada nao existe ou nao possui proximo hop associado.")
+            raise ValueError("The provided local route does not exist or has no associated next hop.")
 
     def _resolve_local_entry_point_target(
         self,

@@ -149,7 +149,7 @@ class DhtService:
     def _deduplicate_node_candidates(
         node_candidates: list[dict[str, object]],
     ) -> list[dict[str, object]]:
-        """Mantem um unico candidato por node_id e prefere a identidade local."""
+        """Keeps one candidate per node_id and prefers the local identity."""
 
         candidates_by_node_id: dict[str, dict[str, object]] = {}
         for node_candidate in node_candidates:

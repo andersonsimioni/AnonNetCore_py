@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ($NodeCount -lt 2) {
-    throw "Use pelo menos 2 nodes para manter os bootstraps fixos."
+    throw "Use at least 2 nodes to keep fixed bootstrap nodes."
 }
 
 $clusterRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -18,19 +18,19 @@ $composeFile = Join-Path $clusterRoot "docker-compose.generated.yml"
 $clusterStateRoot = Join-Path $clusterRoot "state"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw "Python nao encontrado no PATH."
+    throw "Python not found in PATH."
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "Docker nao encontrado no PATH."
+    throw "Docker not found in PATH."
 }
 
 & docker info *> $null
 if ($LASTEXITCODE -ne 0) {
-    throw "O Docker Desktop/Linux Engine nao esta acessivel. Inicie o Docker Desktop e confirme que o contexto 'desktop-linux' esta disponivel."
+    throw "Docker Desktop/Linux Engine is not accessible. Start Docker Desktop and confirm the 'desktop-linux' context is available."
 }
 
-Write-Host "Gerando cluster com $NodeCount nodes..."
+Write-Host "Generating cluster with $NodeCount nodes..."
 Push-Location $projectRoot
 try {
     & python $generatorScript --nodes $NodeCount --output-dir $clusterRoot
@@ -39,7 +39,7 @@ finally {
     Pop-Location
 }
 
-Write-Host "Limpando bancos e logs locais do cluster..."
+Write-Host "Cleaning local cluster databases and logs..."
 if (Test-Path $clusterStateRoot) {
     Get-ChildItem -Path $clusterStateRoot -Directory -Filter "node-*" | ForEach-Object {
         $databaseFile = Join-Path $_.FullName "anonnetcore.db"
@@ -67,7 +67,7 @@ if ($Detach.IsPresent) {
     $dockerArgs += "-d"
 }
 
-Write-Host "Subindo containers..."
+Write-Host "Starting containers..."
 Push-Location $projectRoot
 try {
     & docker @dockerArgs

@@ -141,7 +141,7 @@ class CoreHttpApiServer:
                 or self._match_dht_publish_job_getter(request.path)
             )
         if handler is None:
-            raise CoreApiError("route_not_found", "Rota da API nao encontrada.", status_code=404)
+            raise CoreApiError("route_not_found", "API route not found.", status_code=404)
 
         result = handler(request)
         if isinstance(result, Awaitable):

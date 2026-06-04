@@ -24,7 +24,7 @@ class PhysicalRelayClient:
     async def register_local_node_at_relay(self, *, relay_physical_node_id: str) -> dict[str, object]:
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
         if local_node is None:
-            raise ValueError("A identidade fisica local ainda nao foi inicializada.")
+            raise ValueError("The local physical identity has not been initialized yet.")
 
         challenge = await self._send_request_and_wait(
             relay_physical_node_id=relay_physical_node_id,
@@ -243,7 +243,7 @@ class PhysicalRelayClient:
         )
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise RuntimeError("A physical session com o relay nao esta ativa.")
+            raise RuntimeError("The physical session with the relay is not active.")
 
         endpoint = build_remote_endpoint_from_session(session)
         header = dict(header or self.engine.build_message_header(message_type=message_type))

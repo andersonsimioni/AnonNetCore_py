@@ -1656,7 +1656,7 @@ def _read_required_nonce(payload: dict[str, object], field_name: str) -> int:
 def _require_non_empty_string(value: object, *, field_name: str) -> str:
     if isinstance(value, str) and value:
         return value
-    raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser uma string nao vazia.")
+        raise ValueError(f"The '{field_name}' field is required and must be a non-empty string.")
 
 
 def _require_positive_int(value: object, *, field_name: str) -> int:
@@ -1668,7 +1668,7 @@ def _require_positive_int(value: object, *, field_name: str) -> int:
 def _require_non_negative_int(value: object, *, field_name: str) -> int:
     if isinstance(value, int) and value >= 0:
         return value
-    raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser um inteiro nao negativo.")
+        raise ValueError(f"The '{field_name}' field is required and must be a non-negative integer.")
 
 
 def _is_valid_route_pow(

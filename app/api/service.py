@@ -205,7 +205,7 @@ class CoreApiService:
     def get_dht_publish_job(self, *, job_id: str) -> dict[str, object]:
         job = self._dht_publish_jobs.get(job_id)
         if job is None:
-            raise CoreApiError("dht_publish_job_not_found", "Job DHT nao encontrado.", status_code=404)
+            raise CoreApiError("dht_publish_job_not_found", "DHT job not found.", status_code=404)
         return self._serialize_dht_publish_job(job)
 
     def _create_dht_publish_job(
@@ -363,7 +363,7 @@ class CoreApiService:
             local_virtual_node_id,
         )
         if virtual_node is None:
-            raise CoreApiError("local_virtual_node_not_found", "Virtual node local nao encontrado.")
+            raise CoreApiError("local_virtual_node_not_found", "Local virtual node not found.")
 
         payload_hex = canonical_payload_hex(payload)
         return {
@@ -411,7 +411,7 @@ class CoreApiService:
             )
         except RuntimeError as error:
             message = str(error)
-            if "Nenhuma rota DRT valida foi encontrada" in message:
+            if "No valid DRT route was found" in message:
                 self.engine.services.log_service.warning(
                     "core_api",
                     "api virtual session start failed because drt route was not found",
@@ -423,7 +423,7 @@ class CoreApiService:
             raise
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise CoreApiError("session_not_found", "A virtual session nao ficou disponivel.")
+            raise CoreApiError("session_not_found", "The virtual session did not become available.")
         self.engine.services.log_service.info(
             "core_api",
             "api virtual session ready",
@@ -471,7 +471,7 @@ class CoreApiService:
             close_reason=close_reason,
         )
         if session is None:
-            raise CoreApiError("session_not_found", "Virtual session nao encontrada.", status_code=404)
+            raise CoreApiError("session_not_found", "Virtual session not found.", status_code=404)
         return self._serialize_session(session)
 
     def store_content(
@@ -506,7 +506,7 @@ class CoreApiService:
     def get_content_info(self, *, content_id: str) -> dict[str, object]:
         content = self.engine.services.content_transfer_service.get_content_info(content_id)
         if content is None:
-            raise CoreApiError("content_not_found", "Conteudo nao encontrado.", status_code=404)
+            raise CoreApiError("content_not_found", "Content not found.", status_code=404)
         return self._serialize_content_info(content)
 
     def read_content_range(
@@ -523,7 +523,7 @@ class CoreApiService:
                 end_byte=end_byte,
             )
         except FileNotFoundError as error:
-            raise CoreApiError("content_not_found", "Conteudo nao encontrado.", status_code=404) from error
+            raise CoreApiError("content_not_found", "Content not found.", status_code=404) from error
         except ValueError as error:
             raise CoreApiError("invalid_content_range", str(error)) from error
 
@@ -552,7 +552,7 @@ class CoreApiService:
         if advertisement is None:
             raise CoreApiError(
                 "provider_advertisement_not_available",
-                "Nao foi possivel montar o anuncio DDT para esse conteudo/VN.",
+                "Could not build the DDT advertisement for this content/VN.",
             )
 
         async def _mark_provider_published(_result: dict[str, object]) -> None:
@@ -667,7 +667,7 @@ class CoreApiService:
             content_id=content_id,
         )
         if state is None:
-            raise CoreApiError("download_not_found", "Download nao encontrado.", status_code=404)
+            raise CoreApiError("download_not_found", "Download not found.", status_code=404)
         return self._serialize_download_state(state)
 
     def subscribe_virtual_messages(self, *, app_message_type: str) -> dict[str, object]:

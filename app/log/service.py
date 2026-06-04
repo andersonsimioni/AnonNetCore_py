@@ -7,7 +7,7 @@ from threading import Lock
 
 
 class LogService:
-    """Escreve logs estruturados no stdout e, opcionalmente, em arquivo local."""
+    """Writes structured logs to stdout and, optionally, to a local file."""
 
     def __init__(self) -> None:
         self.node_name: str | None = None

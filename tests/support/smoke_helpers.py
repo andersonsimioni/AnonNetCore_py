@@ -641,7 +641,7 @@ async def validate_virtual_message_roundtrip(
     cluster_nodes: int | None = None,
     timeout_seconds: float | None = None,
 ) -> None:
-    """Valida entrega e resposta via VIRTUAL_SESSION_DATA sobre sessao virtual ativa."""
+    """Validates delivery and response through VIRTUAL_SESSION_DATA over an active virtual session."""
 
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_message_timeout_seconds(
         cluster_nodes or MIN_CLUSTER_NODES

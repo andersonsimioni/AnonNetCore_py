@@ -35,7 +35,7 @@ class SessionManager:
         handler: VirtualSessionMessageHandler,
     ) -> None:
         if not app_message_type:
-            raise ValueError("app_message_type nao pode ser vazio.")
+            raise ValueError("app_message_type cannot be empty.")
         if not callable(handler):
             raise TypeError("handler precisa ser chamavel.")
         self._virtual_message_handlers[app_message_type] = handler

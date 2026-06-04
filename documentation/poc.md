@@ -1,167 +1,74 @@
-# PoC Social
+# Social PoC
 
-A PoC social demonstra uma aplicacao externa usando o core por API local. Ela e
-intencionalmente simples, mas exercita os fluxos principais do MVP:
+The social PoC demonstrates an external application using the local core API. It
+is intentionally simple: one local HTML file, local JavaScript, and no required
+web server.
 
-- perfis baseados em virtual nodes;
-- publicacao de estado em DPT/DDT;
-- leitura de estado de amigos;
-- feed de posts;
-- mensagens diretas por sessao virtual;
-- eventos WebSocket.
+## Features
 
-## Execucao
+- multiple local social profiles;
+- one virtual node per profile;
+- profile picture, display name, bio, friends, and posts;
+- profile publication through DDT and signed DPT;
+- friend feed built by resolving each friend's DPT/DDT state;
+- direct messages through virtual sessions;
+- WebSocket event handling for incoming messages.
 
-Na raiz do projeto:
+## Running
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-Sem abrir navegador automaticamente:
+The command starts the Docker cluster, local core, Debug Console, and opens the
+local HTML PoC unless `--no-open` is used.
 
-```powershell
-.\.venv\Scripts\python.exe scripts\run_poc.py 10 --no-open
-```
+## Profile State
 
-O `run_poc.py` tambem sobe o Debug Console.
-
-O HTML da PoC fica em:
+The model is:
 
 ```text
-poc/index.html
+1 virtual node = 1 social profile
 ```
 
-Ele pode ser aberto diretamente como arquivo local, sem servidor web.
-
-## Modelo Social
-
-Regra principal:
+The full profile state is stored as content. The profile DPT logical key is:
 
 ```text
-1 virtual node = 1 perfil
+dpt|anonnet.social|<virtual_node_id>
 ```
 
-O estado de um perfil contem:
+The DPT `target_ref` points to the latest DDT/content key for that profile state.
 
-- nome;
-- bio;
-- foto em `photo_data_url`;
-- lista de amigos por VN ID;
-- posts;
-- metadados locais.
+## Publication Flow
 
-Para demo, a foto e salva como data URL dentro do estado do perfil. Isso
-simplifica a PoC, mas nao e o modelo ideal para producao.
+1. Store the full profile state as local content.
+2. Publish in DDT that the local VN holds that content.
+3. Publish or update the signed DPT pointer to the latest content id.
 
-## Publicacao de Perfil
+## Friend Feed Flow
 
-A PoC publica o estado do usuario em duas etapas:
+For each friend virtual-node id:
 
-1. Salva o estado completo como conteudo local.
-2. Publica na DDT que o VN local e holder desse conteudo.
-3. Atualiza a DPT do perfil para apontar para o `content_id` mais recente.
+1. Query the friend's DPT.
+2. Validate the DPT signature.
+3. Resolve the DPT `target_ref`.
+4. Query DDT holders for that content.
+5. Start or reuse a virtual session with a holder.
+6. Download the profile state file.
+7. Render profile data and posts.
 
-Chave DPT:
+The MVP uses temporal ordering only. There is no ranking algorithm.
 
-```text
-namespace = dpt
-logical_key = anonnet.social|virtual_node_id
-```
+## Direct Message Flow
 
-O registro DPT contem:
+1. The user chooses a friend by VN id.
+2. The app asks the core to start a virtual session.
+3. The core resolves DRT and DPNT.
+4. The virtual session is established over `ROUTE_DATA`.
+5. The app sends a virtual application message.
+6. The friend receives the message through WebSocket.
 
-```text
-target_ref = content_id do estado social mais recente
-```
+## Local Storage
 
-Como o DPT e assinado pelo VN dono, outros peers conseguem validar se o ponteiro
-realmente pertence ao perfil consultado.
-
-## Sincronizacao
-
-Ao carregar a pagina, a PoC:
-
-1. carrega perfis locais do cache do navegador;
-2. consulta a DPT do perfil local;
-3. compara estado local com o estado publicado;
-4. se o local estiver mais novo ou divergente, publica DDT e atualiza DPT;
-5. consulta DPTs dos amigos;
-6. baixa os estados apontados por DDT;
-7. monta o feed.
-
-Um servico background JS repete essa logica periodicamente para manter o perfil
-e o feed sincronizados.
-
-## Amigos
-
-A lista de amigos e uma lista simples de VN IDs.
-
-Para ler o perfil de um amigo:
-
-1. calcular `logical_key = anonnet.social|friend_virtual_node_id`;
-2. consultar DPT;
-3. validar assinatura do ponteiro;
-4. ler `target_ref`;
-5. resolver DDT;
-6. baixar o arquivo de estado;
-7. renderizar posts e dados do perfil.
-
-## Feed
-
-O feed e construido a partir dos posts presentes no estado baixado de cada
-amigo. O MVP nao possui algoritmo de ranking; a ordenacao e temporal.
-
-Posts do proprio usuario ficam no mesmo arquivo de estado do perfil.
-
-## Mensagens Diretas
-
-Mensagens diretas usam sessoes virtuais.
-
-Fluxo:
-
-1. usuario escolhe amigo por VN ID;
-2. app solicita ao core uma sessao virtual;
-3. core resolve DRT do amigo;
-4. core resolve DPNT do entry point;
-5. core estabelece `VIRTUAL_SESSION_*` sobre `ROUTE_DATA`;
-6. app envia `VIRTUAL_SESSION_DATA` com `app_message_type`;
-7. amigo recebe evento via WebSocket.
-
-Tipo usado pela PoC:
-
-```text
-social.direct_message
-```
-
-## Cache Local
-
-A PoC usa armazenamento local do navegador para:
-
-- perfis locais;
-- perfil selecionado;
-- estado social em edicao;
-- cache de amigos;
-- mensagens recebidas.
-
-Existe botao de limpar dados/cache do site para facilitar a demo.
-
-## Arquivos Principais
-
-- `poc/index.html`: estrutura da pagina.
-- `poc/assets/css/`: estilos.
-- `poc/assets/js/app.js`: coordenacao da UI.
-- `poc/assets/js/anonnet-api.js`: cliente da API local.
-- `poc/assets/js/social-flow.js`: fluxos sociais compartilhados com smoke.
-- `poc/smokes/social_dom.js`: smoke de DOM.
-- `poc/smokes/social_flow.js`: smoke integrado da PoC.
-
-## Limites da PoC
-
-- Nao ha moderacao, bloqueio, privacidade avancada ou criptografia de dados de
-  perfil alem do que ja existe no transporte/sessao.
-- Foto como data URL e aceitavel para demo, mas deve virar conteudo separado em
-  uma versao real.
-- O feed baixa estado completo de amigos; isso e simples e didatico, mas nao e
-  eficiente para uma rede social grande.
-- O objetivo e demonstrar integracao com core, DHT, rotas e sessoes virtuais.
+The PoC stores browser-side state in local storage so profiles survive page
+reloads. A reset button clears the local site cache for demo purposes.

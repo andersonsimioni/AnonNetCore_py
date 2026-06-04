@@ -9,7 +9,7 @@ try:
     from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 except ModuleNotFoundError as error:
     raise ModuleNotFoundError(
-        "SQLAlchemy nao esta instalado. Instale a dependencia para usar o ORM local."
+        "SQLAlchemy is not installed. Install the dependency to use the local ORM."
     ) from error
 
 

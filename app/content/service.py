@@ -69,7 +69,7 @@ class ContentProviderAdvertisement:
 
 
 class ContentTransferService:
-    """Gerencia conteudo local e downloads remotos por byte ranges."""
+    """Manages local content and remote downloads by byte ranges."""
 
     def __init__(
         self,
@@ -121,7 +121,7 @@ class ContentTransferService:
         encryption_scheme: str | None = None,
     ) -> ContentInfo:
         if not data:
-            raise ValueError("Conteudo nao pode ser vazio.")
+            raise ValueError("Content cannot be empty.")
 
         now = datetime.now(timezone.utc)
         content_hash = sha512(data).hexdigest()
@@ -192,9 +192,9 @@ class ContentTransferService:
 
         content_info = self.get_content_info(content_id)
         if content_info is None or content_info.storage_path is None:
-            raise FileNotFoundError("Conteudo nao encontrado no storage local.")
+            raise FileNotFoundError("Content not found in local storage.")
         if end_byte > content_info.size_bytes:
-            raise ValueError("end_byte nao pode passar do tamanho do conteudo.")
+            raise ValueError("end_byte cannot exceed the content size.")
 
         file_path = Path(content_info.storage_path)
         with file_path.open("rb") as file:
@@ -279,7 +279,7 @@ class ContentTransferService:
             return state
         if end_byte != start_byte + len(data):
             state.status = "failed"
-            state.error_message = "Tamanho do range recebido nao bate com start/end."
+            state.error_message = "Received range size does not match start/end."
             return state
 
         with state.partial_path.open("ab") as file:
@@ -316,7 +316,7 @@ class ContentTransferService:
         local_virtual_node_id: str,
         ttl_seconds: int,
     ) -> ContentProviderAdvertisement | None:
-        """Monta um fragmento DDT assinado pelo VN local que possui o conteudo."""
+        """Builds a DDT fragment signed by the local VN that owns the content."""
         if not content_id or not local_virtual_node_id:
             return None
 
@@ -418,13 +418,13 @@ class ContentTransferService:
         state.final_path.parent.mkdir(parents=True, exist_ok=True)
         if state.partial_path.stat().st_size != state.size_bytes:
             state.status = "failed"
-            state.error_message = "Tamanho final do arquivo nao bate com metadata."
+            state.error_message = "Final file size does not match metadata."
             return
 
         actual_hash = sha512(state.partial_path.read_bytes()).hexdigest()
         if actual_hash != state.content_hash:
             state.status = "failed"
-            state.error_message = "Hash final do arquivo nao bate com content_hash."
+            state.error_message = "Final file hash does not match content_hash."
             return
 
         if state.final_path.exists():
@@ -504,7 +504,7 @@ class ContentTransferService:
     ) -> ContentDownloadState:
         state = self._downloads.get(self._download_key(session_id, content_id))
         if state is None:
-            raise ValueError("Download de conteudo nao foi iniciado.")
+            raise ValueError("Content download was not started.")
         return state
 
     @staticmethod
@@ -517,7 +517,7 @@ class ContentTransferService:
         if len(normalized_hash) <= 64:
             return self.storage_dir / normalized_hash
 
-        # Windows ainda falha em alguns ambientes com paths acima de 260 chars.
+        # Windows still fails in some environments with paths above 260 chars.
         # A subpasta preserva boa distribuicao e o nome curto evita MAX_PATH.
         return self.storage_dir / normalized_hash[:2] / normalized_hash[2:66]
 

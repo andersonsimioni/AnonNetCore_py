@@ -30,7 +30,7 @@ class MessageDefinition:
 
 
 class MessageRegistry:
-    """Fonte central das regras de roteamento e sessao de cada message_type."""
+    """Central source for routing and session rules for each message_type."""
 
     def __init__(self) -> None:
         physical_node_info = PhysicalNodeInfoProtocolHandler()

@@ -22,7 +22,7 @@ def build_remote_endpoint_from_session(session):
     from transport import TransportEndpoint
 
     if not session.transport or not session.remote_host or session.remote_port is None:
-        raise ValueError("A physical session nao possui endpoint remoto associado.")
+        raise ValueError("The physical session has no associated remote endpoint.")
 
     return TransportEndpoint(
         transport_name=session.transport,

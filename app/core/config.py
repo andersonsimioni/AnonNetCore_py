@@ -38,17 +38,40 @@ def _read_int_env(name: str, default: int) -> int:
         return default
 
 
+def _read_optional_int_env(name: str) -> int | None:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except ValueError:
+        return None
+
+
+def _read_bool_env(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    normalized_value = raw_value.strip().lower()
+    if normalized_value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized_value in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 @dataclass(slots=True)
 class CoreConfig:
-    node_reachability: str = "public"
+    node_reachability: str = os.getenv("ANONNET_NODE_REACHABILITY", "public")
 
-    tcp_transport_enabled: bool = True
-    udp_transport_enabled: bool = True
-    relay_service_enabled: bool = True
+    tcp_transport_enabled: bool = _read_bool_env("ANONNET_TCP_TRANSPORT_ENABLED", True)
+    udp_transport_enabled: bool = _read_bool_env("ANONNET_UDP_TRANSPORT_ENABLED", True)
+    relay_service_enabled: bool = _read_bool_env("ANONNET_RELAY_SERVICE_ENABLED", True)
 
     physical_listen_host: str = "0.0.0.0"
     physical_tcp_listen_port: int = 19001
-    physical_udp_listen_port: int | None = None
+    physical_udp_listen_port: int | None = _read_optional_int_env("ANONNET_PHYSICAL_UDP_LISTEN_PORT")
 
     udp_max_datagram_size: int = 1200
     udp_chunk_payload_size: int = 512
@@ -129,3 +152,5 @@ class CoreConfig:
     content_storage_dir: str | Path = "data/local/content"
     content_download_range_size: int = 64 * 1024
     content_provider_record_ttl_seconds: int = 30 * 24 * 60 * 60
+    content_provider_publish_retry_attempts: int = 4
+    content_provider_publish_retry_delay_seconds: float = 2.0

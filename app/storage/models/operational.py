@@ -7,7 +7,7 @@ try:
     from sqlalchemy.orm import Mapped, mapped_column
 except ModuleNotFoundError as error:
     raise ModuleNotFoundError(
-        "SQLAlchemy nao esta instalado. Instale a dependencia para usar o ORM local."
+        "SQLAlchemy is not installed. Install the dependency to use the local ORM."
     ) from error
 
 from .base import Base, IntegerPrimaryKeyMixin
@@ -81,7 +81,7 @@ class RttInfo(IntegerPrimaryKeyMixin, Base):
 
 
 class RouteResolution(IntegerPrimaryKeyMixin, Base):
-    """Tudo o que o node local precisa para resolver uma rota em qualquer papel."""
+    """Everything the local node needs to resolve a route in any role."""
 
     __tablename__ = "route_resolution"
 

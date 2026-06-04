@@ -5,19 +5,19 @@ $projectRoot = Split-Path -Parent $clusterRoot
 $composeFile = Join-Path $clusterRoot "docker-compose.generated.yml"
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "Docker nao encontrado no PATH."
+    throw "Docker not found in PATH."
 }
 
 if (-not (Test-Path $composeFile)) {
-    throw "Compose gerado nao encontrado em: $composeFile"
+    throw "Generated compose file not found at: $composeFile"
 }
 
 & docker info *> $null
 if ($LASTEXITCODE -ne 0) {
-    throw "O Docker Desktop/Linux Engine nao esta acessivel. Inicie o Docker Desktop e confirme que o contexto 'desktop-linux' esta disponivel."
+    throw "Docker Desktop/Linux Engine is not accessible. Start Docker Desktop and confirm the 'desktop-linux' context is available."
 }
 
-Write-Host "Derrubando containers do cluster..."
+Write-Host "Stopping cluster containers..."
 Push-Location $projectRoot
 try {
     & docker compose -f $composeFile down

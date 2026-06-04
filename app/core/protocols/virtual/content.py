@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
@@ -16,7 +17,7 @@ from ..helpers import (
 
 
 class VirtualContentProtocolHandler(ProtocolMessageHandler):
-    """Esqueleto do protocolo virtual de transferencia de conteudo por byte range."""
+    """Virtual content transfer protocol handler using byte ranges."""
 
     protocol_family = "content_transfer"
     supported_message_types = {
@@ -97,7 +98,7 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 payload=self.build_content_error_payload(
                     content_id=content_id,
                     error_code="content_not_found",
-                    error_message="Conteudo nao encontrado no node local.",
+                error_message="Content not found on the local node.",
                 ),
                 content_id=content_id,
                 ddt_key=ddt_key,
@@ -238,7 +239,7 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 payload=self.build_content_error_payload(
                     content_id=range_request.content_id,
                     error_code="content_not_found",
-                    error_message="Conteudo nao encontrado no node local.",
+                error_message="Content not found on the local node.",
                 ),
                 content_id=range_request.content_id,
             )
@@ -329,7 +330,7 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
                 error_message=download_state.error_message,
             )
         if download_state.status == "completed":
-            await self._publish_download_provider_to_ddt(
+            self._schedule_download_provider_publish_to_ddt(
                 envelope,
                 services,
                 download_state=download_state,
@@ -396,6 +397,31 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
         if api_service is None:
             return
         await api_service.emit_event(event_type, data)
+
+    def _schedule_download_provider_publish_to_ddt(
+        self,
+        envelope: ProtocolEnvelope,
+        services: EngineServices,
+        *,
+        download_state,
+        session_id: str,
+    ) -> None:
+        try:
+            asyncio.get_running_loop().create_task(
+                self._publish_download_provider_to_ddt(
+                    envelope,
+                    services,
+                    download_state=download_state,
+                    session_id=session_id,
+                )
+            )
+        except RuntimeError:
+            services.log_service.warning(
+                "content_transfer",
+                "download completed but provider ddt publish could not be scheduled",
+                session_id=session_id,
+                content_id=download_state.content_id,
+            )
 
     def _handle_content_not_found(
         self,
@@ -516,38 +542,63 @@ class VirtualContentProtocolHandler(ProtocolMessageHandler):
             )
             return
 
-        try:
-            publish_result = await services.protocol_clients.physical.dht.publish(
-                namespace=advertisement.namespace,
-                logical_key=advertisement.logical_key,
-                record_json=advertisement.record_json,
-                expires_at=advertisement.expires_at.isoformat(),
-            )
-        except Exception as error:
-            services.log_service.warning(
+        max_attempts = max(1, services.config.content_provider_publish_retry_attempts)
+        retry_delay = max(0.0, services.config.content_provider_publish_retry_delay_seconds)
+        publish_result: dict[str, object] = {"status": "not_started"}
+        for attempt in range(1, max_attempts + 1):
+            services.log_service.info(
                 "content_transfer",
-                "failed to publish downloaded content provider to ddt",
+                "publishing downloaded content provider to ddt",
                 session_id=session_id,
                 content_id=download_state.content_id,
                 ddt_key=advertisement.key,
-                error_type=type(error).__name__,
-                error=repr(error),
+                attempt=attempt,
+                max_attempts=max_attempts,
             )
-            return
+            try:
+                publish_result = await services.protocol_clients.physical.dht.publish(
+                    namespace=advertisement.namespace,
+                    logical_key=advertisement.logical_key,
+                    record_json=advertisement.record_json,
+                    expires_at=advertisement.expires_at.isoformat(),
+                )
+            except Exception as error:
+                services.log_service.warning(
+                    "content_transfer",
+                    "failed to publish downloaded content provider to ddt",
+                    session_id=session_id,
+                    content_id=download_state.content_id,
+                    ddt_key=advertisement.key,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error_type=type(error).__name__,
+                    error=repr(error),
+                )
+                if attempt < max_attempts:
+                    await asyncio.sleep(retry_delay)
+                continue
 
-        if publish_result.get("status") != "stored":
+            if publish_result.get("status") == "stored":
+                break
+
             services.log_service.warning(
                 "content_transfer",
                 "downloaded content provider ddt publish did not store record",
                 session_id=session_id,
                 content_id=download_state.content_id,
                 ddt_key=advertisement.key,
+                attempt=attempt,
+                max_attempts=max_attempts,
                 status=publish_result.get("status"),
                 reason=publish_result.get("reason"),
                 stored_count=publish_result.get("stored_count"),
                 required_stored_count=publish_result.get("required_stored_count"),
                 stored_by=publish_result.get("stored_by"),
             )
+            if attempt < max_attempts:
+                await asyncio.sleep(retry_delay)
+
+        if publish_result.get("status") != "stored":
             return
 
         services.content_transfer_service.mark_provider_advertisement_published(

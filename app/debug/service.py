@@ -394,7 +394,7 @@ class DebugSnapshotService(EngineBoundComponent):
                 {
                     "severity": "warning",
                     "area": "peers",
-                    "message": "Nenhum physical node remoto esta pronto para criar rotas.",
+                "message": "No remote physical node is ready to build routes.",
                 }
             )
 

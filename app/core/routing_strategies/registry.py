@@ -7,7 +7,7 @@ from .random_walk_ttl import RandomWalkTtlRouteStrategy
 
 
 class RouteStrategyRegistry:
-    """Registry central das estrategias de composicao de rota."""
+    """Central registry for route composition strategies."""
 
     def __init__(self) -> None:
         strategies = [
@@ -30,7 +30,7 @@ class RouteStrategyRegistry:
         if strategy is not None:
             return strategy
 
-        raise ValueError(f"Estrategia de rota nao suportada: {strategy_name}")
+        raise ValueError(f"Unsupported route strategy: {strategy_name}")
 
     def list_names(self) -> list[str]:
         return sorted(self._strategies.keys())

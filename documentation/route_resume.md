@@ -1,13 +1,13 @@
-# Resumo de Route Build
+# Route Build Summary
 
 ```text
-ROUTE_CREATE                         VN -> hops -> PN final
-ROUTE_CREATE_KEM_INFO                PN final -> hops -> VN
-ROUTE_CREATE_VALIDATE_AND_PUBLISH    VN -> hops -> PN final
-ROUTE_CREATE_PING                    PN final -> hops -> VN
-ROUTE_CREATE_PONG                    VN -> hops -> PN final
-ROUTE_CREATE_OK                      PN final -> hops -> VN
+ROUTE_CREATE                         VN -> hops -> final PN
+ROUTE_CREATE_KEM_INFO                final PN -> hops -> VN
+ROUTE_CREATE_VALIDATE_AND_PUBLISH    VN -> hops -> final PN
+ROUTE_CREATE_PING                    final PN -> hops -> VN
+ROUTE_CREATE_PONG                    VN -> hops -> final PN
+ROUTE_CREATE_OK                      final PN -> hops -> VN
 ```
 
-Depois do `ROUTE_CREATE_PONG`, o PN final valida o RTT, publica a entrada DRT e
-envia `ROUTE_CREATE_OK` ao VN.
+After `ROUTE_CREATE_PONG`, the final physical node validates the measured RTT,
+publishes the DRT entry, and sends `ROUTE_CREATE_OK` back to the virtual node.

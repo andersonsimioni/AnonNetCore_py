@@ -97,7 +97,7 @@ def parse_record(namespace: str, record_json: str) -> DhtPayload:
     try:
         payload = json.loads(record_json)
     except json.JSONDecodeError as error:
-        raise ValueError("record_json nao contem um JSON valido.") from error
+        raise ValueError("record_json does not contain valid JSON.") from error
 
     if not isinstance(payload, dict):
         raise ValueError("record_json precisa ser um objeto JSON.")
@@ -108,7 +108,7 @@ def parse_record(namespace: str, record_json: str) -> DhtPayload:
 def parse_record_dict(namespace: str, payload: dict[str, object]) -> DhtPayload:
     parser = _PARSERS.get(namespace.lower())
     if parser is None:
-        raise ValueError(f"Namespace DHT nao suportado: {namespace}")
+        raise ValueError(f"Unsupported DHT namespace: {namespace}")
     return parser(payload)
 
 
@@ -202,7 +202,7 @@ def _read_list_of_strings(payload: dict[str, object], field_name: str) -> list[s
 def _read_required_string(payload: dict[str, object], field_name: str) -> str:
     raw_value = payload.get(field_name)
     if not isinstance(raw_value, str) or not raw_value:
-        raise ValueError(f"O campo '{field_name}' precisa ser uma string nao vazia.")
+            raise ValueError(f"The '{field_name}' field must be a non-empty string.")
     return raw_value
 
 

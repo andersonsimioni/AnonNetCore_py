@@ -158,7 +158,7 @@ class RouteService:
             )
 
     def resolve_route_rtt_ms(self, *, route_id: str) -> float | None:
-        """Retorna o melhor RTT conhecido para uma rota local ou publicada na DRT."""
+        """Returns the best known RTT for a local route or a route published in DRT."""
 
         for resolution in (
             self.get_initiator_resolution_by_final_path_id(final_path_id=route_id),

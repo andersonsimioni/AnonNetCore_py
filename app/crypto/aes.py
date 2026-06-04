@@ -95,7 +95,7 @@ def decrypt_bytes(payload_hex: str, key_hex: str, aad: BytesLike | None = None) 
 
     validate_hex_length(nonce_hex, AES_GCM_SIV_NONCE_SIZE, field_name="nonce_hex")
     if not ciphertext_hex:
-        raise ValueError("payload_hex nao contem ciphertext.")
+        raise ValueError("payload_hex does not contain ciphertext.")
 
     key = hex_to_bytes(key_hex)
     nonce = hex_to_bytes(nonce_hex)
@@ -124,7 +124,7 @@ def _generate_unused_nonce_hex(key_hex: str) -> str:
         nonce_hex = generate_nonce_hex()
         if not _was_nonce_used(key_hex, nonce_hex):
             return nonce_hex
-    raise RuntimeError("nao foi possivel gerar nonce AES-GCM-SIV unico para esta chave.")
+    raise RuntimeError("could not generate a unique AES-GCM-SIV nonce for this key.")
 
 
 def _remember_nonce_use(key_hex: str, nonce_hex: str) -> None:

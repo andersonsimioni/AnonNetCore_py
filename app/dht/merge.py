@@ -39,7 +39,7 @@ def validate_and_merge(
     if normalized_namespace == "dpt":
         return validate_and_merge_dpt_fragment(key, parent, fragment)
 
-    raise ValueError(f"Namespace DHT nao suportado para merge: {namespace}")
+        raise ValueError(f"Unsupported DHT namespace for merge: {namespace}")
 
 
 def validate_and_merge_dpnt_fragment(
@@ -70,7 +70,7 @@ def validate_and_merge_drt_fragment(
 
     if parent.pk_virtual_node != fragment.pk_virtual_node:
         raise ValueError(
-            "Nao e possivel unir fragmentos DRT de virtual nodes diferentes."
+            "Cannot merge DRT fragments from different virtual nodes."
         )
 
     valid_fragment_entries = [
@@ -177,7 +177,7 @@ def _ensure_drt_key_matches_virtual_node(key: str, pk_virtual_node: str) -> None
     if key == expected_key:
         return
 
-    raise ValueError("A key DRT nao corresponde ao virtual_node_id informado.")
+        raise ValueError("The DRT key does not match the provided virtual_node_id.")
 
 
 def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> None:
@@ -186,7 +186,7 @@ def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> N
     if key == expected_key:
         return
 
-    raise ValueError("A key DPNT nao corresponde ao node_id derivado do pk_physical_node.")
+        raise ValueError("The DPNT key does not match the node_id derived from pk_physical_node.")
 
 
 def _ensure_dpt_key_matches_owner_and_title(
@@ -201,7 +201,7 @@ def _ensure_dpt_key_matches_owner_and_title(
         return
 
     raise ValueError(
-        "A key DPT nao corresponde ao pk_virtual_node_owner e title informados."
+            "The DPT key does not match the provided pk_virtual_node_owner and title."
     )
 
 
@@ -210,11 +210,11 @@ def _ensure_ddt_metadata_matches(
     fragment: DdtRecordPayload,
 ) -> None:
     if parent.title != fragment.title:
-        raise ValueError("Nao e possivel unir fragmentos DDT com title diferente.")
+        raise ValueError("Cannot merge DDT fragments with different titles.")
     if parent.type != fragment.type:
-        raise ValueError("Nao e possivel unir fragmentos DDT com type diferente.")
+        raise ValueError("Cannot merge DDT fragments with different types.")
     if parent.tags != fragment.tags:
-        raise ValueError("Nao e possivel unir fragmentos DDT com tags diferentes.")
+        raise ValueError("Cannot merge DDT fragments with different tags.")
 
 
 def _is_valid_drt_route_entry(

@@ -270,7 +270,7 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
                 signature="",
             )
 
-        raise ValueError(f"Namespace DHT nao suportado para parent inicial: {namespace}")
+            raise ValueError(f"Unsupported DHT namespace for initial parent: {namespace}")
 
     @staticmethod
     def _select_preferred_expires_at(
@@ -336,7 +336,7 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
         dht_record: "DhtPlacementRecord",
     ) -> dict[str, object]:
         if self.engine.services.protocol_clients is None:
-            raise RuntimeError("Protocol clients ainda nao foram inicializados.")
+            raise RuntimeError("Protocol clients have not been initialized yet.")
 
         return await self.engine.services.protocol_clients.physical.dht.publish(
             namespace=dht_record.namespace,

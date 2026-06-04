@@ -18,7 +18,7 @@ from ..helpers import (
 
 
 class VirtualSessionClient:
-    """Estabelece e mantem sessoes virtuais sobre uma rota ja criada."""
+    """Establishes and maintains virtual sessions over an existing route."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
@@ -45,7 +45,7 @@ class VirtualSessionClient:
             local_virtual_node_id
         )
         if local_virtual_node is None:
-            raise ValueError("O virtual node local informado nao existe.")
+            raise ValueError("The provided local virtual node does not exist.")
 
         remote_is_local = (
             self.engine.services.identity_service.get_local_virtual_node_by_id(
@@ -99,7 +99,7 @@ class VirtualSessionClient:
             local_virtual_node_id
         )
         if local_virtual_node is None:
-            raise ValueError("O virtual node local informado nao existe.")
+            raise ValueError("The provided local virtual node does not exist.")
 
         remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
             remote_virtual_node_id
@@ -133,7 +133,7 @@ class VirtualSessionClient:
             raise
 
         close_failed_handshake_session(self.engine, session.session_id)
-        raise RuntimeError("Nao foi possivel estabelecer a virtual session pela rota informada.")
+        raise RuntimeError("Could not establish the virtual session over the provided route.")
 
     async def _start_session_over_entry_point(
         self,
@@ -164,7 +164,7 @@ class VirtualSessionClient:
             local_virtual_node_id
         )
         if local_virtual_node is None:
-            raise ValueError("O virtual node local informado nao existe.")
+            raise ValueError("The provided local virtual node does not exist.")
 
         keepalive_seconds = self.engine.services.config.session_keepalive_seconds
         session = self.engine.services.session_manager.create_outbound_virtual_session(
@@ -234,7 +234,7 @@ class VirtualSessionClient:
             timeout_seconds=self._handshake_timeout_seconds,
         )
         close_failed_handshake_session(self.engine, session.session_id)
-        raise RuntimeError("Nao foi possivel estabelecer a virtual session via DRT.")
+        raise RuntimeError("Could not establish the virtual session through DRT.")
 
     async def send_keepalive(
         self,
@@ -267,9 +267,9 @@ class VirtualSessionClient:
         request_id: str | None = None,
     ) -> str:
         if not app_message_type:
-            raise ValueError("app_message_type nao pode ser vazio.")
+            raise ValueError("app_message_type cannot be empty.")
         if payload is not None and not isinstance(payload, dict):
-            raise ValueError("payload precisa ser um objeto.")
+            raise ValueError("payload must be an object.")
 
         session = self._require_active_session(session_id)
         message_request_id = request_id or str(uuid4())
@@ -339,9 +339,9 @@ class VirtualSessionClient:
         virtual_envelope_ciphered: bool = True,
     ) -> None:
         if not message_type:
-            raise ValueError("message_type nao pode ser vazio.")
+            raise ValueError("message_type cannot be empty.")
         if payload is not None and not isinstance(payload, dict):
-            raise ValueError("payload precisa ser um objeto.")
+            raise ValueError("payload must be an object.")
 
         session = self._require_active_session(session_id)
         await self._send_virtual_envelope(
@@ -385,7 +385,7 @@ class VirtualSessionClient:
         virtual_envelope_ciphered: bool,
     ) -> None:
         if not session.bound_route_id:
-            raise ValueError("A virtual session nao possui rota local associada.")
+            raise ValueError("The virtual session has no associated local route.")
 
         virtual_envelope = {
             "header": self.engine.build_message_header(
@@ -448,13 +448,13 @@ class VirtualSessionClient:
     def _require_active_session(self, session_id: str):
         session = self._require_session(session_id)
         if session.session_state != "active":
-            raise ValueError("A virtual session informada nao esta ativa.")
+            raise ValueError("The provided virtual session is not active.")
         return session
 
     def _require_session(self, session_id: str):
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None or session.session_scope != "virtual":
-            raise ValueError("A virtual session informada nao existe em memoria.")
+            raise ValueError("The provided virtual session does not exist in memory.")
         return session
 
     async def _resolve_entry_point(
@@ -494,8 +494,8 @@ class VirtualSessionClient:
             return entry_point
 
         raise RuntimeError(
-            "Nenhuma rota DRT valida foi encontrada para o virtual node remoto "
-            f"dentro de {self._drt_lookup_timeout_seconds:.1f}s. Ultimo estado: {last_error}."
+            "No valid DRT route was found for the remote virtual node "
+            f"within {self._drt_lookup_timeout_seconds:.1f}s. Last state: {last_error}."
         )
 
     def _get_active_virtual_session(
@@ -569,19 +569,19 @@ class VirtualSessionClient:
             logical_key=entry_point.physical_node_id,
         )
         if result.get("status") != "found":
-            raise RuntimeError("Nao foi possivel resolver o DPNT do entry point fisico.")
+            raise RuntimeError("Could not resolve the physical entry point DPNT.")
 
         record_json = result.get("record_json")
         if not isinstance(record_json, str) or not record_json:
-            raise RuntimeError("A resposta DPNT nao contem record_json valido.")
+            raise RuntimeError("The DPNT response does not contain a valid record_json.")
 
         record = parse_record("dpnt", record_json)
         if not isinstance(record, DpntRecordPayload):
-            raise RuntimeError("A resposta DPNT nao contem um payload DPNT valido.")
+            raise RuntimeError("The DPNT response does not contain a valid DPNT payload.")
         if record.pk_physical_node != entry_point.physical_node_public_key:
-            raise RuntimeError("O DPNT encontrado nao pertence ao entry point da DRT.")
+            raise RuntimeError("The resolved DPNT does not belong to the DRT entry point.")
         if not self._is_valid_dpnt_record(entry_point.physical_node_id, record):
-            raise RuntimeError("O DPNT do entry point possui assinatura invalida.")
+            raise RuntimeError("The entry point DPNT has an invalid signature.")
 
         self.engine.services.identity_service.upsert_discovered_remote_physical_node(
             node_id=entry_point.physical_node_id,

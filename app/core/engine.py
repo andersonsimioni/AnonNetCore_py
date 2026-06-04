@@ -810,13 +810,13 @@ class CoreEngine:
         )
         session = self.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise RuntimeError("A physical session foi criada, mas nao esta disponivel em memoria.")
+            raise RuntimeError("The physical session was created but is not available in memory.")
         return session
 
     @staticmethod
     def _build_session_remote_endpoint(session) -> TransportEndpoint:
         if not session.transport or not session.remote_host or session.remote_port is None:
-            raise ValueError("A physical session nao possui endpoint remoto associado.")
+            raise ValueError("The physical session has no associated remote endpoint.")
 
         return TransportEndpoint(
             transport_name=session.transport,
@@ -916,14 +916,14 @@ class CoreEngine:
     def _decode_json_packet(self, context: PacketContext) -> ProtocolEnvelope:
         packet = self._load_json_packet(context.payload)
         if packet is None:
-            raise ValueError("O payload recebido nao contem um pacote JSON valido.")
+            raise ValueError("The received payload does not contain a valid JSON packet.")
 
         if not isinstance(packet, dict):
-            raise ValueError("O pacote JSON precisa ser um objeto.")
+            raise ValueError("The JSON packet must be an object.")
 
         header = packet.get("header")
         if not isinstance(header, dict):
-            raise ValueError("O campo 'header' precisa ser um objeto JSON.")
+            raise ValueError("The 'header' field must be a JSON object.")
 
         payload = packet.get("payload")
         if payload is None:
@@ -931,7 +931,7 @@ class CoreEngine:
 
         message_type = header.get("message_type")
         if message_type is not None and not isinstance(message_type, str):
-            raise ValueError("O campo 'header.message_type' precisa ser uma string.")
+            raise ValueError("The 'header.message_type' field must be a string.")
 
         payload = self._restore_inbound_payload(header, payload)
         return ProtocolEnvelope(
@@ -953,18 +953,18 @@ class CoreEngine:
 
         session_id = header.get("physical_session_id")
         if not isinstance(session_id, str) or not session_id:
-            raise ValueError("Pacote cifrado sem physical_session_id.")
+            raise ValueError("Encrypted packet without physical_session_id.")
 
         session = self.services.session_manager.get_session_by_session_id(session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
-            raise ValueError("Pacote cifrado recebido para uma sessao fisica inativa ou desconhecida.")
+            raise ValueError("Encrypted packet received for an inactive or unknown physical session.")
 
         if not isinstance(payload, dict):
-            raise ValueError("O payload cifrado precisa ser um objeto JSON.")
+            raise ValueError("The encrypted payload must be a JSON object.")
 
         ciphertext_hex = payload.get("ciphertext_hex")
         if not isinstance(ciphertext_hex, str) or not ciphertext_hex:
-            raise ValueError("O payload cifrado nao contem ciphertext_hex valido.")
+            raise ValueError("The encrypted payload does not contain a valid ciphertext_hex.")
 
         plaintext_json = bytes.fromhex(
             aes_decrypt_hex(

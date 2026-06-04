@@ -84,11 +84,11 @@ class CoreWebSocketApiServer:
         try:
             message = json.loads(raw_message)
         except json.JSONDecodeError:
-            await self._send_error(client.websocket, "invalid_json", "Mensagem JSON invalida.")
+            await self._send_error(client.websocket, "invalid_json", "Invalid JSON message.")
             return
 
         if not isinstance(message, dict):
-            await self._send_error(client.websocket, "invalid_message", "Mensagem precisa ser objeto.")
+            await self._send_error(client.websocket, "invalid_message", "Message must be an object.")
             return
 
         message_type = message.get("type")
@@ -102,7 +102,7 @@ class CoreWebSocketApiServer:
             await self._send_json(client.websocket, {"type": "pong", "data": {}})
             return
 
-        await self._send_error(client.websocket, "unknown_message_type", "Tipo de mensagem desconhecido.")
+        await self._send_error(client.websocket, "unknown_message_type", "Unknown message type.")
 
     async def _subscribe_client(
         self,

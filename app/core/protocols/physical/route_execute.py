@@ -120,7 +120,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             route_data=route_data,
         )
         if services.engine is None:
-            raise ValueError("core engine nao esta disponivel para redispatch do virtual_envelope.")
+            raise ValueError("core engine is not available to redispatch the virtual_envelope.")
 
         nested_result = await services.engine.process_protocol_envelope(
             nested_envelope,
@@ -224,7 +224,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         if not isinstance(virtual_response_envelope, dict):
             raise ValueError("virtual_response_envelope precisa ser um objeto.")
         if reply_context is None:
-            raise ValueError("nao foi possivel resolver o caminho reverso da resposta virtual.")
+            raise ValueError("could not resolve the virtual response reverse path.")
 
         reply_direction = _opposite_route_direction(route_data.direction)
         reply_route_data = RouteExecuteData(
@@ -274,7 +274,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 
         session = services.session_manager.get_session_by_session_id(virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
-            raise ValueError("virtual session nao encontrada ou inativa para cifrar a resposta.")
+            raise ValueError("virtual session not found or inactive for encrypting the response.")
 
         plaintext_hex = json.dumps(
             virtual_response_envelope,
@@ -311,7 +311,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 
         session = services.session_manager.get_session_by_session_id(route_data.virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
-            raise ValueError("virtual session nao encontrada ou inativa para decifrar o envelope.")
+            raise ValueError("virtual session not found or inactive for decrypting the envelope.")
 
         plaintext_json = bytes.fromhex(
             aes_decrypt_hex(

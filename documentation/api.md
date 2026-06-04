@@ -1,9 +1,10 @@
-# API Local
+# Local API
 
-A API local permite que aplicacoes externas usem o core sem importar modulos
-internos. No MVP, ela e usada pela PoC social e pelos smokes de integracao.
+The local API lets external applications use the core without importing internal
+Python modules. In the MVP it is used by the social PoC and by integration
+smokes.
 
-## Enderecos
+## Addresses
 
 HTTP:
 
@@ -17,7 +18,7 @@ WebSocket:
 ws://127.0.0.1:18081/v1/events
 ```
 
-Configuracoes principais:
+Main configuration fields:
 
 ```text
 CoreConfig.api_enabled
@@ -29,40 +30,40 @@ CoreConfig.api_websocket_port
 CoreConfig.api_websocket_path
 ```
 
-## Principios
+## Principles
 
-- A API e local por padrao.
-- O front-end pode rodar como arquivo `.html` local.
-- CORS e liberado no MVP para facilitar integracao com apps externas.
-- Operacoes longas podem usar jobs ou eventos WebSocket.
-- A API nao substitui os protocolos internos; ela chama os clients e services do
-  core.
+- The API is local by default.
+- The front-end can run directly as a local `.html` file.
+- CORS is open in the MVP to simplify external app integration.
+- Long operations can use jobs or WebSocket events.
+- The API does not replace internal protocols; it delegates to core clients and
+  services.
 
-## Endpoints de Status
+## Status Endpoints
 
 ### `GET /health`
 
-Retorna status basico do servidor HTTP.
+Returns basic HTTP server health.
 
 ### `GET /v1/status`
 
-Retorna estado resumido do core, incluindo node local, contadores e flags.
+Returns a compact core status snapshot.
 
 ### `GET /debug/state`
 
-Retorna snapshot detalhado para debug console e smokes.
+Returns a detailed snapshot used by the Debug Console and smoke tests.
 
 ## Virtual Nodes
 
 ### `GET /v1/virtual-nodes/local`
 
-Lista VNs locais.
+Lists local virtual nodes.
 
 ### `POST /v1/virtual-nodes`
 
-Cria um VN local.
+Creates a local virtual node.
 
-Corpo tipico:
+Typical body:
 
 ```json
 {
@@ -73,216 +74,77 @@ Corpo tipico:
 
 ### `GET /v1/virtual-nodes/remote`
 
-Lista VNs remotos conhecidos localmente.
+Lists remote virtual nodes known locally.
 
 ### `POST /v1/virtual-nodes/remote`
 
-Cadastra ou atualiza um VN remoto conhecido.
-
-Corpo tipico:
-
-```json
-{
-  "virtual_node_id": "sha512-da-public-key",
-  "public_key": "-----BEGIN PUBLIC KEY-----..."
-}
-```
-
-## Assinaturas de VNs
-
-### `POST /v1/virtual-nodes/local/sign`
-
-Assina payload com a chave privada de um VN local.
-
-### `POST /v1/virtual-nodes/verify-signature`
-
-Verifica assinatura de um VN a partir da chave publica informada.
-
-Esses endpoints sao usados por apps que precisam montar registros DHT assinados,
-como DPT/DDT da PoC social.
+Upserts a known remote virtual node.
 
 ## DHT
 
-### `POST /v1/dht/key`
+### `POST /v1/dht/publish`
 
-Calcula a chave DHT para um namespace e logical key.
-
-Corpo:
-
-```json
-{
-  "namespace": "dpt",
-  "logical_key": "anonnet.social|virtual_node_id"
-}
-```
+Publishes a DHT record through the physical DHT client.
 
 ### `POST /v1/dht/query`
 
-Consulta a DHT.
+Queries a DHT namespace/logical key.
 
-Corpo:
+### `GET /v1/dht/jobs/{job_id}`
 
-```json
-{
-  "namespace": "dpt",
-  "logical_key": "anonnet.social|virtual_node_id"
-}
-```
+Reads the status of an asynchronous DHT publication job.
 
-### `POST /v1/dht/publish`
+## Virtual Sessions
 
-Publica um registro DHT de forma sincrona.
+### `POST /v1/virtual-sessions`
 
-Corpo:
+Starts a virtual session with a remote virtual node. The core resolves the route
+through DRT, resolves the physical entry point through DPNT, and sends
+`VIRTUAL_SESSION_INIT` over `ROUTE_DATA`.
 
-```json
-{
-  "namespace": "dpt",
-  "logical_key": "anonnet.social|virtual_node_id",
-  "record": {}
-}
-```
+### `POST /v1/virtual-sessions/{session_id}/messages`
 
-### `POST /v1/dht/publish-jobs`
+Sends an application message over an active virtual session.
 
-Cria uma publicacao assincrona. E o caminho recomendado para a UI quando a
-publicacao pode demorar.
+### `DELETE /v1/virtual-sessions/{session_id}`
 
-### `GET /v1/dht/publish-jobs/{job_id}`
+Closes a virtual session.
 
-Consulta o estado de um publish job.
-
-## Sessoes Virtuais
-
-### `GET /v1/sessions/virtual`
-
-Lista sessoes virtuais conhecidas.
-
-### `POST /v1/sessions/virtual`
-
-Inicia sessao virtual com um VN remoto.
-
-Corpo tipico:
-
-```json
-{
-  "local_virtual_node_id": "vn-local",
-  "remote_virtual_node_id": "vn-remoto"
-}
-```
-
-O core resolve a rota pela DRT, resolve o entry point fisico pela DPNT e inicia
-o handshake virtual sobre `ROUTE_DATA`.
-
-### `POST /v1/sessions/virtual/{session_id}/messages`
-
-Envia mensagem de aplicacao por uma sessao virtual.
-
-Corpo tipico:
-
-```json
-{
-  "app_message_type": "social.direct_message",
-  "payload": {
-    "text": "ola"
-  }
-}
-```
-
-### `POST /v1/sessions/virtual/{session_id}/close`
-
-Fecha uma sessao virtual.
-
-## Mensagens Virtuais
-
-### `POST /v1/messages/virtual/subscribe`
-
-Registra interesse em um `app_message_type` para que mensagens recebidas fiquem
-disponiveis na inbox da API.
-
-### `GET /v1/messages/virtual`
-
-Le mensagens recebidas.
-
-Filtros comuns:
-
-- `app_message_type`
-- `limit`
-
-## Conteudo
-
-### `GET /v1/content`
-
-Lista conteudos locais.
+## Content
 
 ### `POST /v1/content`
 
-Armazena conteudo localmente.
-
-Corpo tipico:
-
-```json
-{
-  "title": "profile-state.json",
-  "content_type": "application/json",
-  "data_base64": "..."
-}
-```
+Stores content locally.
 
 ### `GET /v1/content/{content_id}`
 
-Retorna metadados de conteudo local.
+Returns local content metadata.
 
-### `GET /v1/content/{content_id}/range?start_byte=0&end_byte=65536`
+### `POST /v1/content/{content_id}/publish`
 
-Retorna uma faixa de bytes em base64.
+Publishes in DDT that a local virtual node holds that content.
 
-### `POST /v1/content/{content_id}/providers/ddt`
+### `POST /v1/content/downloads`
 
-Publica na DDT que um VN local possui aquele conteudo.
+Starts a virtual content download. The core uses `VIRTUAL_CONTENT_*` messages
+over an active virtual session and requests byte ranges until the file is
+complete.
 
-## Downloads
+## WebSocket Events
 
-### `GET /v1/downloads`
+The WebSocket endpoint streams incoming virtual messages and operational events
+to external applications.
 
-Lista downloads em andamento ou concluidos.
-
-### `POST /v1/downloads`
-
-Inicia download virtual de conteudo. O core usa o protocolo
-`VIRTUAL_CONTENT_*` sobre uma sessao virtual.
-
-### `GET /v1/downloads/{session_id}/{content_id}`
-
-Consulta o estado de um download especifico.
-
-## WebSocket
-
-O WebSocket entrega eventos assim que chegam ao core.
-
-Conectar em:
-
-```text
-ws://127.0.0.1:18081/v1/events
-```
-
-Mensagem de inscricao:
+Subscription message:
 
 ```json
 {
   "type": "subscribe",
-  "event_types": ["virtual_message_received"],
-  "app_message_types": ["social.direct_message"]
+  "scope": "virtual_messages"
 }
 ```
 
-Eventos comuns:
-
-- `virtual_message_received`
-- `content_provider_published`
-- `content_download_requested`
-
-Mensagem de ping:
+Ping message:
 
 ```json
 {
@@ -290,31 +152,21 @@ Mensagem de ping:
 }
 ```
 
-Resposta:
+## Social PoC Usage
 
-```json
-{
-  "type": "pong",
-  "data": {}
-}
-```
+The social PoC uses the API to:
 
-## Uso na PoC Social
+- create local virtual nodes;
+- publish social profile state;
+- resolve friend profiles through DPT and DDT;
+- download profile content;
+- establish virtual sessions;
+- exchange direct messages;
+- receive WebSocket events.
 
-A PoC usa a API para:
+## Current Limits
 
-- criar/listar perfis locais como VNs;
-- assinar DPT/DDT;
-- publicar estado social;
-- consultar estado de amigos;
-- baixar conteudo de perfil;
-- abrir sessoes virtuais;
-- enviar DM;
-- receber DM por WebSocket.
-
-## Limites
-
-- A API atual e local e voltada para demo/desenvolvimento.
-- Nao ha autenticacao forte entre app local e core.
-- Nao ha HTTPS por padrao porque o alvo e `localhost`.
-- Apps externas devem tratar erros e timeouts como parte normal da rede.
+- There is no strong authentication between a local app and the local core.
+- HTTPS is not enabled by default because the target is localhost.
+- Browser-facing production usage would require a local app bridge or a trusted
+  local permission model.

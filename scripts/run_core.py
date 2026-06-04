@@ -21,7 +21,7 @@ def main() -> int:
     args = parse_args()
     if args.reset_data:
         reset_local_demo_state()
-    print(f"Iniciando core local na porta TCP {args.listen_port}...")
+    print(f"Starting local core on TCP port {args.listen_port}...")
     engine = CoreEngine()
     engine.services.config.physical_tcp_listen_port = args.listen_port
     asyncio.run(run_node(engine))
@@ -34,20 +34,20 @@ def parse_args() -> argparse.Namespace:
         "--listen-port",
         type=int,
         default=19101,
-        help="Porta TCP do core local.",
+        help="Local core TCP port.",
     )
     parser.add_argument(
         "--no-reset-data",
         dest="reset_data",
         action="store_false",
-        help="Nao limpa data/local antes de iniciar. Use apenas para depuracao.",
+        help="Do not clean data/local before starting. Use only for debugging.",
     )
     parser.set_defaults(reset_data=True)
     return parser.parse_args()
 
 
 def reset_local_demo_state() -> None:
-    print(f"Limpando estado local da demo: {LOCAL_DATA_ROOT}")
+    print(f"Cleaning local demo state: {LOCAL_DATA_ROOT}")
     if LOCAL_DATA_ROOT.exists():
         shutil.rmtree(LOCAL_DATA_ROOT)
     (LOCAL_DATA_ROOT / "logs").mkdir(parents=True, exist_ok=True)

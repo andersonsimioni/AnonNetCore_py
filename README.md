@@ -1,54 +1,50 @@
 # AnonNetCore Python MVP
 
-AnonNetCore Python MVP e um prototipo funcional de rede P2P com camada fisica,
-camada virtual, DHT, rotas, sessoes virtuais, transferencia de conteudo e uma
-PoC social em HTML/JS.
+AnonNetCore Python MVP is a functional peer-to-peer network prototype with a
+physical layer, virtual layer, DHT, route construction, virtual sessions,
+content transfer, and a local HTML/JS social PoC.
 
-O projeto foi construido para validar arquitetura e fluxos principais antes de
-uma implementacao mais performatica.
+The project exists to validate the architecture and main flows before a more
+performant implementation.
 
-## Execucao Rapida
+## Quick Start
 
-Instale dependencias no ambiente virtual e execute:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_poc.py 10
-```
-
-O comando da PoC tambem sobe o Debug Console:
+Install dependencies in the local virtual environment and run:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-Rodar apenas o core local:
+The PoC command also starts the Debug Console.
+
+Run only one local core:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_core.py
 ```
 
-Rodar smokes oficiais:
+Run the official smoke suite:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_smokes.py 10
 ```
 
-## Documentacao
+## Documentation
 
-A documentacao tecnica fica em [documentation/README.md](documentation/README.md).
+Technical documentation lives in [documentation/README.md](documentation/README.md).
 
-Pontos principais:
+Main references:
 
-- [Visao tecnica geral](documentation/documentation.md)
-- [Entidades e persistencia](documentation/entities.md)
+- [Technical overview](documentation/documentation.md)
+- [Entities and persistence](documentation/entities.md)
 - [DHT](documentation/dht_doc.md)
-- [Rotas e route execute](documentation/route.md)
-- [API local](documentation/api.md)
-- [PoC social](documentation/poc.md)
-- [Testes](documentation/tests/README.md)
+- [Routes and route execute](documentation/route.md)
+- [Local API](documentation/api.md)
+- [Social PoC](documentation/poc.md)
+- [Tests](documentation/tests/README.md)
 
-## Estado
+## Status
 
-Este repositorio representa um MVP funcional/prototipo experimental. Ele ja
-demonstra os fluxos principais, mas ainda nao deve ser tratado como
-implementacao pronta para producao.
+This repository is a functional MVP and experimental prototype. It demonstrates
+the main architecture and flows, but it should not be treated as production-ready
+software.

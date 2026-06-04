@@ -17,19 +17,25 @@ def main() -> int:
     args = parse_args()
     verify_docker_is_available()
     down_existing_cluster()
-    generate_cluster(args.node_count)
+    generate_cluster(args.node_count, seed=args.seed)
     reset_cluster_node_state()
     start_compose(detach=args.detach)
     return 0
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Sobe o cluster Docker de nodes AnonNetCore.")
+    parser = argparse.ArgumentParser(description="Starts the AnonNetCore Docker node cluster.")
     parser.add_argument("node_count", type=int)
     parser.add_argument("-Detach", "--detach", action="store_true")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional seed to reproduce randomized non-bootstrap node profiles.",
+    )
     args = parser.parse_args()
     if args.node_count < 2:
-        raise SystemExit("Use pelo menos 2 nodes para manter os bootstraps fixos.")
+        raise SystemExit("Use at least 2 nodes to keep fixed bootstrap nodes.")
     return args
 
 
@@ -37,26 +43,27 @@ def verify_docker_is_available() -> None:
     run_command(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def generate_cluster(node_count: int) -> None:
-    print(f"Gerando cluster com {node_count} nodes...")
-    run_command(
-        [
-            sys.executable,
-            str(GENERATOR_SCRIPT),
-            "--nodes",
-            str(node_count),
-            "--output-dir",
-            str(CLUSTER_ROOT),
-        ],
-        cwd=PROJECT_ROOT,
-    )
+def generate_cluster(node_count: int, *, seed: int | None) -> None:
+    print(f"Generating cluster with {node_count} nodes...")
+    command = [
+        sys.executable,
+        str(GENERATOR_SCRIPT),
+        "--nodes",
+        str(node_count),
+        "--output-dir",
+        str(CLUSTER_ROOT),
+    ]
+    if seed is not None:
+        command.extend(["--seed", str(seed)])
+
+    run_command(command, cwd=PROJECT_ROOT)
 
 
 def down_existing_cluster() -> None:
     if not COMPOSE_FILE.exists():
         return
 
-    print("Derrubando cluster Docker anterior...")
+    print("Stopping previous Docker cluster...")
     run_command(
         [
             "docker",
@@ -71,7 +78,7 @@ def down_existing_cluster() -> None:
 
 
 def reset_cluster_node_state() -> None:
-    print("Limpando bancos e logs locais do cluster...")
+    print("Cleaning local cluster databases and logs...")
     if not CLUSTER_STATE_ROOT.exists():
         return
 
@@ -104,7 +111,7 @@ def start_compose(*, detach: bool) -> None:
     if detach:
         command.append("-d")
 
-    print("Subindo containers...")
+    print("Starting containers...")
     run_command(command, cwd=PROJECT_ROOT)
 
 

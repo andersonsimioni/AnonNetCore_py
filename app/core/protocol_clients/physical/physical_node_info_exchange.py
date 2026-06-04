@@ -18,11 +18,11 @@ class PhysicalNodeInfoExchangeClient(EngineBoundComponent):
     ) -> None:
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
         if session.session_state != "active":
-            raise ValueError("A physical session informada ainda nao esta ativa.")
+            raise ValueError("The provided physical session is not active yet.")
         if is_observed_only_physical_endpoint(session):
-            raise ValueError("A physical session usa endpoint observado e nao deve iniciar exchange.")
+            raise ValueError("The physical session uses an observed endpoint and must not start exchange.")
 
         endpoint = self._build_remote_endpoint(session)
         request_limit = max_records or self.engine.services.config.physical_node_info_exchange_max_records

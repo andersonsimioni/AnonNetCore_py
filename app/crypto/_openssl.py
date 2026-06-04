@@ -28,7 +28,7 @@ def run_openssl(
     )
 
     if result.returncode != 0:
-        raise OpenSSLExecutionError(result.stderr.strip() or "Falha ao executar OpenSSL.")
+        raise OpenSSLExecutionError(result.stderr.strip() or "Failed to execute OpenSSL.")
 
     return result
 

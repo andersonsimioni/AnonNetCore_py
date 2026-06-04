@@ -1,64 +1,62 @@
-# AnonNetCore Python MVP - Documentacao
+# AnonNetCore Python MVP - Documentation
 
-Esta pasta documenta o MVP funcional do AnonNetCore em Python. O objetivo dos
-documentos e servir como base tecnica para o TCC e como guia de manutencao do
-codigo.
+This folder documents the functional Python MVP. The documents are intended to
+support maintenance, validation, and thesis writing.
 
-## Documentos principais
+## Main Documents
 
-- [Visao tecnica geral](documentation.md): objetivo, arquitetura, camadas,
-  modulos, fluxo de execucao e definicao do MVP.
-- [Entidades e persistencia](entities.md): entidades locais, tabelas SQLite,
-  estado em memoria e registros distribuidos.
-- [DHT e tabelas distribuidas](dht_doc.md): modelo de chave, namespaces,
-  responsabilidade por proximidade XOR, replicacao e manutencao.
-- [Rotas e route execute](route.md): construcao de rotas, publicacao na DRT,
-  encapsulamento fisico/virtual e encaminhamento hop-by-hop.
-- [Falhas e limites](faults.md): riscos conhecidos e comportamento esperado em
-  falhas.
-- [API local](api.md): endpoints HTTP, WebSocket e uso por apps externas.
-- [PoC social](poc.md): rede social de demonstracao, DPT/DDT, perfis, feed e
-  mensagens diretas.
-- [Testes](tests/README.md): smokes, testes de integracao e comandos.
+- [Technical overview](documentation.md): goals, architecture, layers, modules,
+  runtime flow, and MVP boundaries.
+- [Entities and persistence](entities.md): local entities, SQLite tables,
+  in-memory state, and distributed records.
+- [DHT and distributed tables](dht_doc.md): key model, namespaces, XOR
+  responsibility, replication, maintenance, and proof-of-work.
+- [Routes and route execute](route.md): route construction, DRT publication,
+  physical/virtual encapsulation, and hop-by-hop forwarding.
+- [Faults and limits](faults.md): known risks and expected behavior under
+  failures.
+- [Local API](api.md): HTTP endpoints, WebSocket events, and external app usage.
+- [Social PoC](poc.md): demo social network, DPT/DDT profile state, feed, and
+  direct messages.
+- [Tests](tests/README.md): smoke tests, integration flows, and commands.
 
-## Estado atual do MVP
+## Current MVP Scope
 
-O MVP demonstra:
+The MVP demonstrates:
 
-- rede de physical nodes via TCP;
-- bootstrap por endpoints hardcoded na configuracao do core;
-- troca e validacao de informacoes de physical nodes;
-- sessoes fisicas com KEM, assinatura e keepalive;
-- DHT generica com namespaces `dpnt`, `drt`, `ddt`, `dpt` e parser para `dtt`;
-- publicacao replicada nos K physical nodes mais proximos da chave;
-- manutencao periodica de registros DHT validados;
-- criacao automatica de rotas para virtual nodes locais;
-- sessoes virtuais end-to-end usando rotas publicadas na DRT;
-- mensagens virtuais entregues por `VIRTUAL_SESSION_DATA`;
-- transferencia de conteudo por byte ranges no layer virtual;
-- API HTTP e WebSocket para aplicacoes externas;
-- PoC social em HTML/JS local sem servidor web obrigatorio;
-- Debug Console para observar nodes locais e containers Docker.
+- physical nodes connected through TCP and relay transport;
+- bootstrap through hardcoded public endpoints in `CoreConfig`;
+- physical-node information exchange and validation;
+- physical sessions with KEM, signatures, encryption, keepalive, and reliable
+  delivery metadata;
+- generic DHT namespaces `dpnt`, `drt`, `ddt`, `dpt`, plus DTT parsing support;
+- proof-of-work cost for DHT publication;
+- replicated DHT publication to the K closest physical nodes;
+- periodic DHT maintenance for validated records;
+- automatic route publication for local virtual nodes;
+- virtual sessions using routes published in DRT;
+- virtual messages through `VIRTUAL_SESSION_DATA`;
+- virtual content transfer by byte ranges;
+- HTTP and WebSocket API for external applications;
+- local HTML/JS social PoC without a web server requirement;
+- Debug Console for local cores and Docker containers.
 
-## Como executar a demo
+## Run the Demo
 
-Na raiz do projeto:
+From the project root:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_poc.py 10
 ```
 
-Sem abrir o navegador automaticamente:
+Without opening the browser automatically:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_poc.py 10 --no-open
 ```
 
-O `run_poc.py` tambem sobe o Debug Console.
+## Thesis Note
 
-## Observacao para o TCC
-
-Este projeto e um MVP arquitetural. Ele prova o funcionamento do desenho de
-rede, mas ainda nao e uma implementacao de producao. Aspectos como protecao
-contra abuso, escalabilidade real em Internet publica, hardening criptografico,
-controle de recursos e auditoria formal ainda sao trabalhos futuros.
+This is an architectural MVP. It proves the network design in a controlled
+environment, but abuse protection, real Internet scale, cryptographic hardening,
+resource governance, NAT traversal, and formal audits remain future work.

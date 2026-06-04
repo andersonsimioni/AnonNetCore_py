@@ -4,7 +4,7 @@ from .base import RouteStrategy
 
 
 class RandomWalkMaxHopRouteStrategy(RouteStrategy):
-    """Estrategia de rota por random walk com limite maximo de hops."""
+    """Random-walk route strategy with a maximum hop limit."""
 
     strategy_name = "random_walk_max_hop_based"
 

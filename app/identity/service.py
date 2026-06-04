@@ -416,7 +416,7 @@ class IdentityService:
         ]
 
     def build_remote_physical_node_route_diagnostics(self) -> dict[str, object]:
-        """Resume os filtros que um PN precisa passar para virar candidato de rota."""
+        """Summarizes the filters a PN must pass to become a route candidate."""
 
         with self.database.session_scope() as session:
             total_remote_nodes_query = select(func.count()).select_from(RemotePhysicalNodeIdentity)
@@ -842,7 +842,7 @@ class IdentityService:
         observed_rtt_ms: float,
     ) -> RttInfo | None:
         if observed_rtt_ms < 0:
-            raise ValueError("O RTT observado nao pode ser negativo.")
+            raise ValueError("The observed RTT cannot be negative.")
 
         now = utc_now()
 

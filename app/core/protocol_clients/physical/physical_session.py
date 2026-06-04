@@ -56,17 +56,17 @@ class PhysicalSessionClient:
 
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
         if local_node is None:
-            raise ValueError("A identidade fisica local ainda nao foi inicializada.")
+            raise ValueError("The local physical identity has not been initialized yet.")
 
         remote_node = await self._load_remote_physical_node(remote_physical_node_id)
         if remote_node is None:
-            raise ValueError("O physical node remoto nao foi encontrado localmente nem na DPNT.")
+            raise ValueError("The remote physical node was not found locally or in DPNT.")
 
         endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
             remote_physical_node_id
         )
         if not endpoints:
-            raise ValueError("O physical node remoto nao possui endpoints conhecidos.")
+            raise ValueError("The remote physical node has no known endpoints.")
 
         self.engine.services.log_service.debug(
             "physical_session_client",
@@ -128,7 +128,7 @@ class PhysicalSessionClient:
             )
             close_failed_handshake_session(self.engine, session_id)
 
-        raise RuntimeError("Nao foi possivel estabelecer physical session com nenhum endpoint conhecido.")
+        raise RuntimeError("Could not establish a physical session with any known endpoint.")
 
     async def _load_remote_physical_node(self, remote_physical_node_id: str):
         remote_node = self.engine.services.identity_service.get_remote_physical_node_by_id(
@@ -287,7 +287,7 @@ class PhysicalSessionClient:
     ) -> None:
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
 
         endpoint = self._build_remote_endpoint(session)
         header = self.engine.build_message_header(
@@ -317,7 +317,7 @@ class PhysicalSessionClient:
     ) -> None:
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
 
         endpoint = self._build_remote_endpoint(session)
         header = self.engine.build_message_header(
@@ -350,15 +350,15 @@ class PhysicalSessionClient:
         inner_payload: dict[str, object],
     ) -> str:
         if not inner_message_type:
-            raise ValueError("inner_message_type nao pode ser vazio.")
+            raise ValueError("inner_message_type cannot be empty.")
         if not isinstance(inner_payload, dict):
             raise ValueError("inner_payload precisa ser um objeto.")
 
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None or session.session_scope != "physical":
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
         if session.session_state != "active":
-            raise ValueError("A physical session informada nao esta ativa.")
+            raise ValueError("The provided physical session is not active.")
 
         reliable_message = self.engine.services.session_manager.prepare_reliable_outbound(
             session_id=session.session_id,
@@ -384,9 +384,9 @@ class PhysicalSessionClient:
             reliable_message.session_id
         )
         if session is None or session.session_scope != "physical":
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
         if session.session_state != "active":
-            raise ValueError("A physical session informada nao esta ativa.")
+            raise ValueError("The provided physical session is not active.")
 
         endpoint = self._build_remote_endpoint(session)
         header = self.engine.build_message_header(

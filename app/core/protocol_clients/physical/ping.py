@@ -26,14 +26,14 @@ class PhysicalPingClient:
             remote_physical_node_id
         )
         if remote_node is None:
-            raise ValueError("O physical node remoto ainda nao foi persistido no banco local.")
+            raise ValueError("The remote physical node has not been persisted locally yet.")
 
         endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
             remote_physical_node_id,
             only_active=True,
         )
         if not endpoints:
-            raise ValueError("O physical node remoto nao possui endpoints conhecidos.")
+            raise ValueError("The remote physical node has no known endpoints.")
 
         last_error: Exception | None = None
         for endpoint_data in endpoints:
@@ -94,7 +94,7 @@ class PhysicalPingClient:
         if last_error is not None:
             raise last_error
 
-        raise RuntimeError("Nao foi possivel executar ping em nenhum endpoint conhecido.")
+        raise RuntimeError("Could not ping any known endpoint.")
 
     async def _ping_endpoint(
         self,
@@ -135,7 +135,7 @@ class PhysicalPingClient:
             self._pending_pongs.pop(header["message_id"], None)
 
         if pong_data.get("nonce") != nonce:
-            raise ValueError("O nonce do PONG nao corresponde ao PING enviado.")
+            raise ValueError("The PONG nonce does not match the sent PING.")
 
         observed_rtt_ms = (perf_counter() - started_at) * 1000.0
         return {

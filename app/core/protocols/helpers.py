@@ -50,7 +50,7 @@ def read_string_or_none(payload: dict[str, object], field_name: str) -> str | No
 def require_string(payload: dict[str, object], field_name: str) -> str:
     value = read_string_or_none(payload, field_name)
     if value is None:
-        raise ValueError(f"O campo '{field_name}' e obrigatorio e precisa ser uma string nao vazia.")
+        raise ValueError(f"Field '{field_name}' is required and must be a non-empty string.")
     return value
 
 
@@ -60,7 +60,7 @@ def optional_string(payload: dict[str, object], field_name: str) -> str | None:
         return None
     if isinstance(value, str) and value:
         return value
-    raise ValueError(f"O campo '{field_name}' precisa ser uma string nao vazia quando informado.")
+        raise ValueError(f"Field '{field_name}' must be a non-empty string when provided.")
 
 
 def require_bool(payload: dict[str, object], field_name: str) -> bool:

@@ -4,7 +4,7 @@ from .base import RouteStrategy
 
 
 class OnionLikeRouteStrategy(RouteStrategy):
-    """Estrategia de rota com composicao inspirada em camadas onion."""
+    """Route strategy with composition inspired by onion layers."""
 
     strategy_name = "onion_like_based"
 

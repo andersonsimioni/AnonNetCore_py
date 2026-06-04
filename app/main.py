@@ -57,7 +57,7 @@ def build_engine_from_args() -> CoreEngine:
 
 def parse_args() -> argparse.Namespace:
     default_config = CoreConfig()
-    parser = argparse.ArgumentParser(description="Sobe um physical node do AnonNetCore.")
+    parser = argparse.ArgumentParser(description="Starts an AnonNetCore physical node.")
     parser.add_argument(
         "--listen-port",
         type=int,

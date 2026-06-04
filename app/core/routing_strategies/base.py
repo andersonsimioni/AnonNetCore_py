@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class RouteStrategy(ABC):
-    """Contrato comum das estrategias de construcao de rota."""
+    """Common contract for route construction strategies."""
 
     strategy_name: str
 
@@ -19,7 +19,7 @@ class RouteStrategy(ABC):
         self,
         **route_fields: object,
     ) -> dict[str, object]:
-        """Monta o payload inicial de ROUTE_CREATE."""
+        """Builds the initial ROUTE_CREATE payload."""
         return {
             "route_strategy": self.strategy_name,
             **route_fields,
@@ -45,7 +45,7 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE para esta estrategia."""
+        """Processes ROUTE_CREATE for this strategy."""
 
     @abstractmethod
     async def handle_route_create_kem_info(
@@ -55,7 +55,7 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_KEM_INFO para esta estrategia."""
+        """Processes ROUTE_CREATE_KEM_INFO for this strategy."""
 
     @abstractmethod
     async def handle_route_create_validate_and_publish(
@@ -65,7 +65,7 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_VALIDATE_AND_PUBLISH para esta estrategia."""
+        """Processes ROUTE_CREATE_VALIDATE_AND_PUBLISH for this strategy."""
 
     @abstractmethod
     async def handle_route_create_ok(
@@ -75,7 +75,7 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_OK para esta estrategia."""
+        """Processes ROUTE_CREATE_OK for this strategy."""
 
     @abstractmethod
     async def handle_route_create_ping(
@@ -85,7 +85,7 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_PING para esta estrategia."""
+        """Processes ROUTE_CREATE_PING for this strategy."""
 
     @abstractmethod
     async def handle_route_create_pong(
@@ -95,4 +95,4 @@ class RouteStrategy(ABC):
         context: PacketContext,
         services: EngineServices,
     ) -> PacketProcessingResult:
-        """Processa ROUTE_CREATE_PONG para esta estrategia."""
+        """Processes ROUTE_CREATE_PONG for this strategy."""

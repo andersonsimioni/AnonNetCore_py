@@ -7,7 +7,7 @@ from ...components import EngineBoundComponent
 
 
 class RouteBuildClient(EngineBoundComponent):
-    """Orquestra a construcao e a validacao inicial de rotas."""
+    """Orchestrates route construction and initial validation."""
 
     async def start_random_walk_ttl_route(
         self,
@@ -71,7 +71,7 @@ class RouteBuildClient(EngineBoundComponent):
                 initial_path_id=initial_path_id,
                 first_hop_physical_node_id=first_hop_physical_node_id,
             )
-            raise RuntimeError("Nao foi possivel enviar ROUTE_CREATE para o first hop.")
+            raise RuntimeError("Could not send ROUTE_CREATE to the first hop.")
 
         self.engine.services.log_service.info(
             "route_build_client",
@@ -101,11 +101,11 @@ class RouteBuildClient(EngineBoundComponent):
             initial_path_id=initial_path_id,
         )
         if initiator_resolution is None:
-            raise ValueError("A rota informada nao existe no estado local do initiator.")
+            raise ValueError("The provided route does not exist in the local initiator state.")
         if not initiator_resolution.first_hop_physical_node_id:
-            raise ValueError("A rota informada nao possui first hop associado.")
+            raise ValueError("The provided route has no associated first hop.")
         if not initiator_resolution.route_strategy:
-            raise ValueError("A rota informada nao possui strategy registrada.")
+            raise ValueError("The provided route has no registered strategy.")
 
         ping_id = str(uuid4())
         self.engine.services.route_service.mark_initiator_resolution_ping_started(

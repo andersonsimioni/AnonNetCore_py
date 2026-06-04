@@ -715,15 +715,15 @@ class PhysicalDhtClient:
     def _get_active_session(self, session_id: str):
         session = self.engine.services.session_manager.get_session_by_session_id(session_id)
         if session is None:
-            raise ValueError("A physical session informada nao existe em memoria.")
+            raise ValueError("The provided physical session does not exist in memory.")
         if session.session_state != "active":
-            raise ValueError("A physical session informada ainda nao esta ativa.")
+            raise ValueError("The provided physical session is not active yet.")
         return session
 
     @staticmethod
     def _build_remote_endpoint(session) -> TransportEndpoint:
         if not session.transport or not session.remote_host or session.remote_port is None:
-            raise ValueError("A physical session nao possui endpoint remoto associado.")
+            raise ValueError("The physical session has no associated remote endpoint.")
 
         return TransportEndpoint(
             transport_name=session.transport,

@@ -5,7 +5,7 @@ const assert = require("assert/strict");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const POC_JS_ROOT = path.join(PROJECT_ROOT, "poc", "assets", "js");
-const SOCIAL_MESSAGE_TEXT = `mensagem direta do smoke social ${Date.now()}`;
+const SOCIAL_MESSAGE_TEXT = `direct message from social smoke ${Date.now()}`;
 const SOCIAL_REPLY_TEXT = `resposta direta do smoke social ${Date.now()}`;
 
 loadBrowserScript("core/anonnet-client.js");
@@ -65,14 +65,14 @@ async function main() {
   const stateA = createProfileRuntimeState({
     localVirtualNode: vnA,
     displayName: "Smoke Alice",
-    bio: "Perfil A publicado via DDT e DPT assinada.",
+    bio: "Profile A published through DDT and signed DPT.",
     friendVirtualNodeIds: [vnB.id],
     firstPostText: "primeiro post publico da Alice",
   });
   const stateB = createProfileRuntimeState({
     localVirtualNode: vnB,
     displayName: "Smoke Bob",
-    bio: "Perfil B publicado via DDT e DPT assinada.",
+    bio: "Profile B published through DDT and signed DPT.",
     friendVirtualNodeIds: [vnA.id],
     firstPostText: "primeiro post publico do Bob",
   });

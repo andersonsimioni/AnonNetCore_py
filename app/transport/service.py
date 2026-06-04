@@ -39,7 +39,7 @@ class TransportService:
     async def send(self, message: OutboundMessage) -> None:
         adapter = self._adapters.get(message.transport_name)
         if adapter is None:
-            raise ValueError(f"Transporte '{message.transport_name}' nao registrado.")
+            raise ValueError(f"Transport '{message.transport_name}' is not registered.")
 
         await adapter.send(message)
 
