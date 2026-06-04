@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = PROJECT_ROOT / "app"
 CLUSTER_UP_SCRIPT = PROJECT_ROOT / "cluster" / "up_nodes.py"
 RUN_CORE_SCRIPT = PROJECT_ROOT / "scripts" / "run_core.py"
+DEBUG_CONSOLE_SCRIPT = APP_ROOT / "debug" / "console_server.py"
 POC_INDEX = PROJECT_ROOT / "poc" / "index.html"
 
 
@@ -123,6 +124,7 @@ def start_cluster(node_count: int) -> None:
             sys.executable,
             str(CLUSTER_UP_SCRIPT),
             str(node_count),
+            "--detach",
         ],
     )
 
@@ -161,8 +163,7 @@ def start_local_core(listen_port: int) -> subprocess.Popen:
 def start_debug_console(args: argparse.Namespace) -> subprocess.Popen:
     command = [
         sys.executable,
-        "-m",
-        "debug.console_server",
+        str(DEBUG_CONSOLE_SCRIPT),
         "--host",
         args.debug_host,
         "--port",
