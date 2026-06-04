@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from common import load_json_object
 
 from .models import TransportEndpoint
@@ -40,6 +42,20 @@ def normalize_endpoint_list(endpoints: object) -> list[dict[str, object]]:
         if normalized_endpoint is not None:
             normalized.append(normalized_endpoint)
     return normalized
+
+
+def canonical_endpoint_list(endpoints: object) -> list[dict[str, object]]:
+    normalized = normalize_endpoint_list(endpoints)
+    return sorted(
+        normalized,
+        key=lambda endpoint: (
+            str(endpoint.get("transport", "")),
+            str(endpoint.get("host", "")),
+            int(endpoint.get("port", 0)),
+            int(endpoint.get("priority", 0)),
+            json.dumps(endpoint.get("metadata", {}), separators=(",", ":"), sort_keys=True),
+        ),
+    )
 
 
 def build_transport_endpoint_from_result(endpoint_result) -> TransportEndpoint:

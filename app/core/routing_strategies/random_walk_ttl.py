@@ -19,6 +19,7 @@ from crypto import (
     kyber_encapsulate_hex,
     sha512_hex,
 )
+from dht import DrtRecordPayload, parse_record
 
 from ..models import PacketProcessingResult
 from .base import RouteStrategy
@@ -202,7 +203,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 route_build_action=reverse_path.action,
             )
 
-        return self._handle_local_route_create_ok(
+        return await self._handle_local_route_create_ok(
             envelope=envelope,
             services=services,
             route_create_ok=route_create_ok,
@@ -256,6 +257,14 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             path_id=route_create_pong.path_id,
         )
         if forward_path is not None:
+            services.log_service.debug(
+                "route_build",
+                "resolved route create pong forward path",
+                current_path_id=route_create_pong.path_id,
+                next_path_id=forward_path.next_path_id,
+                target_remote_physical_node_id=forward_path.target_remote_physical_node_id,
+                route_build_action=forward_path.action,
+            )
             return self._build_forward_result(
                 envelope=envelope,
                 target_remote_physical_node_id=forward_path.target_remote_physical_node_id,
@@ -267,6 +276,12 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 route_build_action=forward_path.action,
             )
 
+        services.log_service.debug(
+            "route_build",
+            "route create pong has no forward mapping; trying local endpoint validation",
+            path_id=route_create_pong.path_id,
+            ping_id=route_create_pong.ping_id,
+        )
         return await self._handle_local_route_create_pong(
             envelope=envelope,
             services=services,
@@ -561,7 +576,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             route_build_action="send_route_create_ping",
         )
 
-    def _handle_local_route_create_ok(
+    async def _handle_local_route_create_ok(
         self,
         *,
         envelope,
@@ -639,6 +654,28 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 reason="invalid_public_route_acceptance_signature",
             )
 
+        drt_ready = await self._is_route_visible_in_drt(
+            services=services,
+            virtual_node_id=virtual_node_id,
+            final_path_id=final_path_id,
+        )
+        if not drt_ready:
+            services.route_service.invalidate_initiator_resolution(
+                initial_path_id=route_create_ok.path_id,
+                reason="route_create_ok_drt_entry_not_visible",
+            )
+            services.log_service.warning(
+                "route_build",
+                "route create ok rejected because published drt route is not visible",
+                path_id=route_create_ok.path_id,
+                virtual_node_id=virtual_node_id,
+                final_path_id=final_path_id,
+            )
+            return self._build_invalid_result(
+                envelope,
+                reason="route_create_ok_drt_entry_not_visible",
+            )
+
         services.route_service.mark_initiator_resolution_active(
             initial_path_id=route_create_ok.path_id,
             final_path_id=final_path_id,
@@ -663,6 +700,119 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 "next_step": "route_ready_after_drt_publish",
             },
         )
+
+    async def _is_route_visible_in_drt(
+        self,
+        *,
+        services,
+        virtual_node_id: str,
+        final_path_id: str,
+    ) -> bool:
+        deadline = monotonic() + services.config.route_create_ok_drt_visibility_timeout_seconds
+        retry_seconds = services.config.route_create_ok_drt_visibility_retry_seconds
+        last_result: dict[str, object] | None = None
+        attempt = 0
+
+        while monotonic() < deadline:
+            attempt += 1
+            result = await services.protocol_clients.physical.dht.query(
+                namespace="drt",
+                logical_key=virtual_node_id,
+            )
+            last_result = result
+            if self._drt_query_result_contains_route(
+                services=services,
+                result=result,
+                virtual_node_id=virtual_node_id,
+                final_path_id=final_path_id,
+                attempt=attempt,
+            ):
+                return True
+
+            await asyncio.sleep(retry_seconds)
+
+        services.log_service.warning(
+            "route_build",
+            "drt route visibility timed out",
+            virtual_node_id=virtual_node_id,
+            final_path_id=final_path_id,
+            timeout_seconds=services.config.route_create_ok_drt_visibility_timeout_seconds,
+            retry_seconds=retry_seconds,
+            attempts=attempt,
+            last_status=last_result.get("status") if last_result else None,
+            last_reason=last_result.get("reason") if last_result else None,
+        )
+        return False
+
+    def _drt_query_result_contains_route(
+        self,
+        *,
+        services,
+        result: dict[str, object],
+        virtual_node_id: str,
+        final_path_id: str,
+        attempt: int,
+    ) -> bool:
+        if result.get("status") != "found":
+            services.log_service.debug(
+                "route_build",
+                "drt route visibility check did not find record",
+                virtual_node_id=virtual_node_id,
+                final_path_id=final_path_id,
+                attempt=attempt,
+                dht_status=result.get("status"),
+                dht_reason=result.get("reason"),
+            )
+            return False
+
+        record_json = result.get("record_json")
+        if not isinstance(record_json, str) or not record_json:
+            services.log_service.warning(
+                "route_build",
+                "drt route visibility check found invalid record json",
+                virtual_node_id=virtual_node_id,
+                final_path_id=final_path_id,
+                attempt=attempt,
+            )
+            return False
+
+        try:
+            record = parse_record("drt", record_json)
+        except ValueError as error:
+            services.log_service.warning(
+                "route_build",
+                "drt route visibility check failed to parse record",
+                virtual_node_id=virtual_node_id,
+                final_path_id=final_path_id,
+                attempt=attempt,
+                error=str(error),
+            )
+            return False
+
+        if not isinstance(record, DrtRecordPayload):
+            return False
+        if _build_virtual_node_id(record.pk_virtual_node) != virtual_node_id:
+            services.log_service.warning(
+                "route_build",
+                "drt route visibility check found record for another virtual node",
+                expected_virtual_node_id=virtual_node_id,
+                record_virtual_node_id=_build_virtual_node_id(record.pk_virtual_node),
+                final_path_id=final_path_id,
+                attempt=attempt,
+            )
+            return False
+
+        route_found = any(entry.final_path_id == final_path_id for entry in record.route_entries)
+        services.log_service.debug(
+            "route_build",
+            "drt route visibility check completed",
+            virtual_node_id=virtual_node_id,
+            final_path_id=final_path_id,
+            attempt=attempt,
+            route_found=route_found,
+            route_entry_count=len(record.route_entries),
+        )
+        return route_found
 
     def _handle_local_route_create_ping(
         self,
@@ -899,7 +1049,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         )
         services.log_service.info(
             "route_build",
-            "scheduling route drt publication after pong",
+            "publishing route in drt before route ok",
             path_id=route_create_pong.path_id,
             final_path_id=route_endpoint_state.final_path_id,
             virtual_node_id=remote_virtual_node_id,
@@ -911,16 +1061,43 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             drt_publish_request["namespace"],
             drt_publish_request["logical_key"],
         )
-        asyncio.create_task(
-            self._publish_drt_route_after_pong(
-                services=services,
-                drt_publish_request=drt_publish_request,
-                drt_key=drt_key,
+        drt_publish_result = await self._publish_drt_route_after_pong(
+            services=services,
+            drt_publish_request=drt_publish_request,
+            drt_key=drt_key,
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            virtual_node_id=remote_virtual_node_id,
+        )
+        if drt_publish_result is None or drt_publish_result.get("status") != "stored":
+            services.log_service.warning(
+                "route_build",
+                "route create pong rejected because drt publication did not complete",
                 path_id=route_create_pong.path_id,
                 final_path_id=route_endpoint_state.final_path_id,
                 virtual_node_id=remote_virtual_node_id,
-            ),
-            name=f"route-drt-publish-{route_create_pong.path_id}",
+                drt_status=(
+                    drt_publish_result.get("status")
+                    if isinstance(drt_publish_result, dict)
+                    else None
+                ),
+                drt_reason=(
+                    drt_publish_result.get("reason")
+                    if isinstance(drt_publish_result, dict)
+                    else None
+                ),
+            )
+            return self._build_invalid_result(envelope, reason="drt_publish_failed")
+
+        services.log_service.info(
+            "route_build",
+            "route drt publication confirmed before route ok",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            virtual_node_id=remote_virtual_node_id,
+            key=drt_publish_result.get("key"),
+            stored_count=drt_publish_result.get("stored_count"),
+            required_stored_count=drt_publish_result.get("required_stored_count"),
         )
 
         encrypted_ok_payload = aes_encrypt_text(
@@ -954,7 +1131,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             has_public_route_acceptance_signature=bool(
                 route_endpoint_state.public_route_acceptance_signature
             ),
-            drt_status="scheduled",
+            drt_status="stored",
         )
 
         return self._build_forward_result(
@@ -983,7 +1160,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         path_id: str,
         final_path_id: str | None,
         virtual_node_id: str,
-    ) -> None:
+    ) -> dict[str, object] | None:
         try:
             publish_result = await services.protocol_clients.physical.dht.publish(
                 namespace=str(drt_publish_request["namespace"]),
@@ -1000,7 +1177,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 virtual_node_id=virtual_node_id,
                 key=drt_key,
             )
-            return
+            return None
         except Exception as error:
             services.log_service.warning(
                 "route_build",
@@ -1012,7 +1189,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 error_type=type(error).__name__,
                 error=repr(error),
             )
-            return
+            return None
 
         services.log_service.info(
             "route_build",
@@ -1027,6 +1204,7 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             stored_by=publish_result.get("stored_by"),
             reason=publish_result.get("reason"),
         )
+        return publish_result
 
     def _forward_route_create(
         self,

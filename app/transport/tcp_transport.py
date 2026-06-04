@@ -201,7 +201,8 @@ class TcpTransportAdapter(TransportAdapter):
         connection_key = self._build_connection_key(connection.remote_endpoint)
         self._connections.pop(connection_key, None)
 
-        if connection.reader_task is not asyncio.current_task() and not connection.reader_task.done():
+        current_task = self._get_current_task()
+        if connection.reader_task is not current_task and not connection.reader_task.done():
             connection.reader_task.cancel()
             try:
                 await connection.reader_task
@@ -210,7 +211,17 @@ class TcpTransportAdapter(TransportAdapter):
 
         if not connection.writer.is_closing():
             connection.writer.close()
-            await connection.writer.wait_closed()
+            try:
+                await connection.writer.wait_closed()
+            except (ConnectionError, OSError, RuntimeError):
+                pass
+
+    @staticmethod
+    def _get_current_task() -> asyncio.Task | None:
+        try:
+            return asyncio.current_task()
+        except RuntimeError:
+            return None
 
     @staticmethod
     def _build_connection_key(endpoint: TransportEndpoint) -> str:

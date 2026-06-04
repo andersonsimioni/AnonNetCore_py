@@ -9,6 +9,7 @@ from uuid import uuid4
 from common import load_json_object
 from crypto import sha512_hex
 from dht import DpntRecordPayload, DrtRecordPayload, DrtRouteEntryRecord, parse_record
+from transport import canonical_endpoint_list
 from ..helpers import (
     close_failed_handshake_session,
     is_expired_iso_datetime,
@@ -679,11 +680,18 @@ class VirtualSessionClient:
         record: DpntRecordPayload,
     ) -> bool:
         key_hex = self.engine.services.dht_service.build_key("dpnt", physical_node_id)
+        endpoints = canonical_endpoint_list(record.endpoints)
         payload = {
             "key": key_hex,
             "pk_physical_node": record.pk_physical_node,
-            "endpoints": record.endpoints,
-            "transport_methods": record.transport_methods,
+            "endpoints": endpoints,
+            "transport_methods": sorted(
+                {
+                    endpoint["transport"]
+                    for endpoint in endpoints
+                    if isinstance(endpoint.get("transport"), str)
+                }
+            ),
             "reachability_class": record.reachability_class,
             "relay_capable": record.relay_capable,
             "hole_punch_capable": record.hole_punch_capable,

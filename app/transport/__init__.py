@@ -2,6 +2,7 @@ from .interfaces import InboundPacketHandler, TransportAdapter
 from .models import OutboundMessage, TransportEndpoint, TransportPacket, TransportState
 from .endpoints import (
     build_transport_endpoint_from_result,
+    canonical_endpoint_list,
     normalize_endpoint_dict,
     normalize_endpoint_list,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "UdpTransportAdapter",
     "UdpTransportConfig",
     "build_transport_endpoint_from_result",
+    "canonical_endpoint_list",
     "normalize_endpoint_dict",
     "normalize_endpoint_list",
 ]

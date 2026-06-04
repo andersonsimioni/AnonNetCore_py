@@ -4,8 +4,9 @@ import json
 from hashlib import sha512
 from uuid import uuid4
 
+from common import canonical_payload_hex
 from crypto import dilithium_sign_hex
-from transport import normalize_endpoint_list
+from transport import canonical_endpoint_list, normalize_endpoint_list
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -266,6 +267,48 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             observed_remote_host=context.remote_host,
             observed_remote_port=context.remote_port,
         )
+        has_signed_dpnt_descriptor = (
+            isinstance(requester_dpnt_signature, str)
+            and bool(requester_dpnt_signature)
+        )
+        notes: dict[str, object] = {
+            "source": "physical_node_info_request",
+            "advertised_status": (
+                requester_status
+                if isinstance(requester_status, str) and requester_status
+                else None
+            ),
+        }
+        if has_signed_dpnt_descriptor:
+            notes.update(
+                {
+                    "advertised_endpoints": requester_endpoints,
+                    "dpnt_signature": requester_dpnt_signature,
+                    "dpnt_reachability_class": (
+                        requester_reachability_class
+                        if isinstance(requester_reachability_class, str)
+                        else None
+                    ),
+                    "dpnt_relay_capable": bool(requester_relay_capable),
+                    "dpnt_hole_punch_capable": bool(requester_hole_punch_capable),
+                    "dpnt_protocol_version": (
+                        str(envelope.header.get("version"))
+                        if envelope.header.get("version") is not None
+                        else None
+                    ),
+                    "dpnt_status": (
+                        requester_status
+                        if isinstance(requester_status, str) and requester_status
+                        else None
+                    ),
+                    "dpnt_feature_flags": (
+                        requester_feature_flags
+                        if isinstance(requester_feature_flags, list)
+                        else []
+                    ),
+                }
+            )
+
         services.identity_service.upsert_discovered_remote_physical_node(
             node_id=requester_node_id,
             public_key=requester_public_key,
@@ -283,27 +326,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             ),
             relay_capable=bool(requester_relay_capable),
             hole_punch_capable=bool(requester_hole_punch_capable),
-            notes_json=json.dumps(
-                {
-                    "source": "physical_node_info_request",
-                    "advertised_status": (
-                        requester_status
-                        if isinstance(requester_status, str) and requester_status
-                        else None
-                    ),
-                    "dpnt_signature": (
-                        requester_dpnt_signature
-                        if isinstance(requester_dpnt_signature, str)
-                        else None
-                    ),
-                    "dpnt_feature_flags": (
-                        requester_feature_flags
-                        if isinstance(requester_feature_flags, list)
-                        else []
-                    ),
-                },
-                separators=(",", ":"),
-            ),
+            notes_json=json.dumps(notes, separators=(",", ":")),
         )
         services.log_service.info(
             "physical_node_info",
@@ -361,6 +384,25 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
                 metadata={"reason": "invalid_physical_node_info_response"},
             )
 
+        has_signed_dpnt_descriptor = isinstance(dpnt_signature, str) and bool(dpnt_signature)
+        notes: dict[str, object] = {
+            "key_algorithm": key_algorithm,
+            "advertised_status": advertised_status,
+        }
+        if has_signed_dpnt_descriptor:
+            notes.update(
+                {
+                    "advertised_endpoints": endpoints,
+                    "dpnt_signature": dpnt_signature,
+                    "dpnt_reachability_class": reachability_class,
+                    "dpnt_relay_capable": bool(relay_capable),
+                    "dpnt_hole_punch_capable": bool(hole_punch_capable),
+                    "dpnt_protocol_version": protocol_version,
+                    "dpnt_status": advertised_status,
+                    "dpnt_feature_flags": feature_flags if isinstance(feature_flags, list) else [],
+                }
+            )
+
         services.identity_service.upsert_remote_physical_node(
             node_id=remote_node_id,
             public_key=remote_public_key,
@@ -372,21 +414,7 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             reachability_class=reachability_class if isinstance(reachability_class, str) else None,
             relay_capable=bool(relay_capable),
             hole_punch_capable=bool(hole_punch_capable),
-            notes_json=json.dumps(
-                {
-                    "key_algorithm": key_algorithm,
-                    "advertised_status": advertised_status,
-                    "advertised_endpoints": endpoints,
-                    "dpnt_signature": dpnt_signature,
-                    "dpnt_reachability_class": reachability_class,
-                    "dpnt_relay_capable": bool(relay_capable),
-                    "dpnt_hole_punch_capable": bool(hole_punch_capable),
-                    "dpnt_protocol_version": protocol_version,
-                    "dpnt_status": advertised_status,
-                    "dpnt_feature_flags": feature_flags if isinstance(feature_flags, list) else [],
-                },
-                separators=(",", ":"),
-            ),
+            notes_json=json.dumps(notes, separators=(",", ":")),
         )
         services.log_service.info(
             "physical_node_info",
@@ -442,13 +470,20 @@ def _sign_dpnt_descriptor(
     status: str,
     private_key_pem: str,
 ) -> str:
+    normalized_endpoints = canonical_endpoint_list(endpoints)
     physical_node_id = sha512(physical_node_public_key.encode("utf-8")).hexdigest()
     key_hex = sha512(f"dpnt|{physical_node_id}".encode("utf-8")).hexdigest()
     signed_payload = {
         "key": key_hex,
         "pk_physical_node": physical_node_public_key,
-        "endpoints": endpoints,
-        "transport_methods": sorted({endpoint["transport"] for endpoint in endpoints}),
+        "endpoints": normalized_endpoints,
+        "transport_methods": sorted(
+            {
+                endpoint["transport"]
+                for endpoint in normalized_endpoints
+                if isinstance(endpoint.get("transport"), str)
+            }
+        ),
         "reachability_class": reachability_class,
         "relay_capable": relay_capable,
         "hole_punch_capable": hole_punch_capable,
@@ -456,9 +491,4 @@ def _sign_dpnt_descriptor(
         "feature_flags": feature_flags,
         "status": status,
     }
-    payload_hex = json.dumps(
-        signed_payload,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8").hex()
-    return dilithium_sign_hex(payload_hex, private_key_pem)
+    return dilithium_sign_hex(canonical_payload_hex(signed_payload), private_key_pem)

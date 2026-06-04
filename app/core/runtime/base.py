@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 
 
 class PeriodicRuntime:
@@ -31,8 +32,17 @@ class PeriodicRuntime:
             return
 
         self._stop_event.set()
+        stop_timeout_seconds = getattr(
+            self.engine.services.config,
+            "runtime_stop_timeout_seconds",
+            3.0,
+        )
         try:
-            await self._task
+            await asyncio.wait_for(self._task, timeout=stop_timeout_seconds)
+        except TimeoutError:
+            self._task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._task
         finally:
             self._task = None
 

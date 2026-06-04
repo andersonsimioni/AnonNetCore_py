@@ -6,6 +6,7 @@ from hashlib import sha512
 
 from common import canonical_payload_hex as _canonical_payload_hex
 from crypto import dilithium_verify_hex
+from transport import canonical_endpoint_list
 from .records import (
     DdtHolderRecord,
     DdtRecordPayload,
@@ -53,9 +54,6 @@ def validate_and_merge_dpnt_fragment(
 
     if not _is_valid_dpnt_fragment(key, fragment):
         raise ValueError("O fragmento DPNT possui assinatura invalida.")
-
-    if not _is_fragment_newer(parent.last_validated_at, fragment.last_validated_at):
-        return parent
 
     return fragment
 
@@ -297,11 +295,18 @@ def _is_valid_drt_route_entry(
 
 
 def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload) -> bool:
+    endpoints = canonical_endpoint_list(fragment.endpoints)
     signed_payload = {
         "key": key,
         "pk_physical_node": fragment.pk_physical_node,
-        "endpoints": fragment.endpoints,
-        "transport_methods": fragment.transport_methods,
+        "endpoints": endpoints,
+        "transport_methods": sorted(
+            {
+                endpoint["transport"]
+                for endpoint in endpoints
+                if isinstance(endpoint.get("transport"), str)
+            }
+        ),
         "reachability_class": fragment.reachability_class,
         "relay_capable": fragment.relay_capable,
         "hole_punch_capable": fragment.hole_punch_capable,

@@ -18,6 +18,7 @@ from storage.models import (
     RemoteVirtualNodeIdentity,
     RttInfo,
 )
+from transport import canonical_endpoint_list
 
 from .models import (
     PhysicalNodeIdentityResult,
@@ -886,12 +887,9 @@ class IdentityService:
         if remote_node is None:
             return None
 
-        endpoints = self.list_remote_physical_node_endpoints(node_id, only_active=True)
-        if not endpoints:
-            return None
-
         notes = load_json_object(remote_node.notes_json)
         dpnt_signature = notes.get("dpnt_signature")
+        signed_endpoints = canonical_endpoint_list(notes.get("advertised_endpoints"))
         dpnt_feature_flags = notes.get("dpnt_feature_flags", [])
         dpnt_reachability_class = notes.get("dpnt_reachability_class")
         dpnt_relay_capable = notes.get("dpnt_relay_capable")
@@ -902,6 +900,7 @@ class IdentityService:
             not isinstance(dpnt_signature, str)
             or not dpnt_signature
             or remote_node.last_validated_at is None
+            or not signed_endpoints
         ):
             return None
 
@@ -913,17 +912,14 @@ class IdentityService:
         local_last_validated_at = remote_node.last_validated_at.isoformat()
         payload = DpntRecordPayload(
             pk_physical_node=remote_node.public_key,
-            endpoints=[
+            endpoints=signed_endpoints,
+            transport_methods=sorted(
                 {
-                    "transport": endpoint.transport,
-                    "host": endpoint.host,
-                    "port": endpoint.port,
-                    "priority": endpoint.priority,
-                    "metadata": load_json_object(endpoint.metadata_json),
+                    endpoint["transport"]
+                    for endpoint in signed_endpoints
+                    if isinstance(endpoint.get("transport"), str)
                 }
-                for endpoint in endpoints
-            ],
-            transport_methods=sorted({endpoint.transport for endpoint in endpoints}),
+            ),
             reachability_class=(
                 dpnt_reachability_class
                 if isinstance(dpnt_reachability_class, str) and dpnt_reachability_class

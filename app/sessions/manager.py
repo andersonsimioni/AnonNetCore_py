@@ -376,6 +376,18 @@ class SessionManager:
             return session
         return None
 
+    def has_active_virtual_session_bound_to_route(self, *route_ids: str | None) -> bool:
+        active_route_ids = {route_id for route_id in route_ids if route_id}
+        if not active_route_ids:
+            return False
+
+        for session in self.list_active_sessions():
+            if session.session_scope != "virtual":
+                continue
+            if session.bound_route_id in active_route_ids:
+                return True
+        return False
+
     def has_open_physical_session(self, remote_physical_node_id: str) -> bool:
         for session in self.list_sessions(session_scope="physical"):
             if session.remote_identity_id != remote_physical_node_id:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import socket
 import sys
@@ -105,6 +106,11 @@ def build_service_lines(
         f'      ANONNET_ADVERTISED_TCP_PORT: "{advertised_port}"',
         '      ANONNET_DOCKER_HOST_GATEWAY: "host.docker.internal"',
     ]
+    network_pow_difficulty_bits = os.getenv("ANONNET_NETWORK_POW_DIFFICULTY_BITS")
+    if network_pow_difficulty_bits:
+        lines.append(
+            f'      ANONNET_NETWORK_POW_DIFFICULTY_BITS: "{network_pow_difficulty_bits}"'
+        )
 
     lines.extend(
         [

@@ -195,6 +195,13 @@ class SessionRuntime(PeriodicRuntime):
         return retry_after_seconds
 
     def _resolve_virtual_session_route_rtt_ms(self, session) -> float | None:
+        if session.bound_route_id:
+            route_rtt_ms = self.engine.services.route_service.resolve_route_rtt_ms(
+                route_id=session.bound_route_id,
+            )
+            if route_rtt_ms is not None and route_rtt_ms > 0:
+                return float(route_rtt_ms)
+
         metadata_rtt = _read_positive_float_from_session_metadata(
             session,
             "entry_point_rtt",
@@ -202,15 +209,43 @@ class SessionRuntime(PeriodicRuntime):
         if metadata_rtt is not None:
             return metadata_rtt
 
-        if not session.bound_route_id:
-            return None
-        return self.engine.services.route_service.resolve_route_rtt_ms(
-            route_id=session.bound_route_id,
-        )
+        return None
 
-    @staticmethod
-    def _should_close_session(session) -> bool:
-        return session.keepalive_deadline is not None and session.keepalive_deadline <= self_now()
+    def _should_close_session(self, session) -> bool:
+        if session.keepalive_deadline is None or session.keepalive_deadline > self_now():
+            return False
+
+        if session.session_scope != "virtual":
+            return True
+
+        return self._should_close_virtual_session(session)
+
+    def _should_close_virtual_session(self, session) -> bool:
+        route_rtt_ms = self._resolve_virtual_session_route_rtt_ms(session)
+        if route_rtt_ms is None:
+            return True
+
+        timeout_seconds = max(
+            float(self.engine.services.config.virtual_session_timeout_min_seconds),
+            session.keepalive_interval_seconds * 3.0,
+            route_rtt_ms
+            / 1000.0
+            * float(self.engine.services.config.virtual_session_timeout_rtt_multiplier),
+        )
+        expires_at = session.last_activity_at + timedelta(seconds=timeout_seconds)
+        if expires_at <= self_now():
+            return True
+
+        self.engine.services.log_service.debug(
+            "session_runtime",
+            "kept virtual session open using route-aware timeout",
+            session_id=session.session_id,
+            bound_route_id=session.bound_route_id,
+            route_rtt_ms=round(route_rtt_ms, 3),
+            timeout_seconds=round(timeout_seconds, 3),
+            keepalive_interval_seconds=session.keepalive_interval_seconds,
+        )
+        return False
 
     def _should_send_keepalive(self, session) -> bool:
         if not self._can_send_session_message(session):

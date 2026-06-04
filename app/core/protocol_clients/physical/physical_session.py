@@ -14,6 +14,7 @@ from transport import (
     OutboundMessage,
     TransportEndpoint,
     build_transport_endpoint_from_result,
+    canonical_endpoint_list,
     normalize_endpoint_list,
 )
 
@@ -254,11 +255,18 @@ class PhysicalSessionClient:
         record: DpntRecordPayload,
     ) -> bool:
         key_hex = self.engine.services.dht_service.build_key("dpnt", remote_physical_node_id)
+        endpoints = canonical_endpoint_list(record.endpoints)
         payload = {
             "key": key_hex,
             "pk_physical_node": record.pk_physical_node,
-            "endpoints": record.endpoints,
-            "transport_methods": record.transport_methods,
+            "endpoints": endpoints,
+            "transport_methods": sorted(
+                {
+                    endpoint["transport"]
+                    for endpoint in endpoints
+                    if isinstance(endpoint.get("transport"), str)
+                }
+            ),
             "reachability_class": record.reachability_class,
             "relay_capable": record.relay_capable,
             "hole_punch_capable": record.hole_punch_capable,

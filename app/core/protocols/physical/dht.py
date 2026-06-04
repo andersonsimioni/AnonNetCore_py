@@ -62,6 +62,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at: str | None,
         ttl: int | None = None,
         stored_by: list[str] | None = None,
+        required_stored_count: int | None = None,
         pow_nonce: int | None = None,
     ) -> bytes:
         return json.dumps(
@@ -74,6 +75,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "expires_at": expires_at,
                     "ttl": ttl,
                     "stored_by": stored_by or [],
+                    "required_stored_count": required_stored_count,
                     "pow_nonce": pow_nonce,
                 },
             },
@@ -187,7 +189,9 @@ class DhtProtocolHandler(ProtocolMessageHandler):
 
         closest_nodes_result = services.dht_service.select_k_closest_nodes(key_hex)
         responsible_nodes = closest_nodes_result["nodes"]
-        required_stored_count = len(responsible_nodes)
+        required_stored_count = _read_optional_int(payload, "required_stored_count")
+        if required_stored_count is None:
+            required_stored_count = len(responsible_nodes)
         services.log_service.debug(
             "dht",
             "handling dht publish",
@@ -391,7 +395,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     },
                     status=str(payload.get("status") or "invalid_result"),
                     key_hex=str(payload.get("key") or ""),
-                    responsible_nodes=[],
+                    responsible_nodes=_read_responsible_nodes(payload),
                     stored_locally=payload.get("stored_locally") is True,
                     record_json=payload.get("record_json") if isinstance(payload.get("record_json"), str) else None,
                     expires_at=payload.get("expires_at") if isinstance(payload.get("expires_at"), str) else None,
@@ -438,7 +442,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "status": payload.get("status"),
                     "key": payload.get("key"),
                     "stored_locally": payload.get("stored_locally"),
-                    "responsible_nodes": [],
+                    "responsible_nodes": _read_responsible_nodes(payload),
                     "record_json": payload.get("record_json"),
                     "expires_at": payload.get("expires_at"),
                     "stored_by": _read_string_list(payload, "stored_by"),
@@ -513,6 +517,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "ttl_expired",
                 ),
                 key_hex=key_hex,
+                responsible_nodes=responsible_nodes,
                 stored_by=resolved_stored_by,
                 required_stored_count=resolved_required_count,
             )
@@ -555,6 +560,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     failure_status,
                 ),
                 key_hex=key_hex,
+                responsible_nodes=responsible_nodes,
                 stored_by=resolved_stored_by,
                 required_stored_count=resolved_required_count,
             )
@@ -568,6 +574,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             **payload,
             "ttl": ttl - 1,
             "stored_by": resolved_stored_by,
+            "required_stored_count": resolved_required_count,
         }
         if envelope.message_type == "DHT_QUERY" and resolved_query_cursor_distance_hex is not None:
             forward_payload["query_cursor_distance_hex"] = resolved_query_cursor_distance_hex
@@ -623,6 +630,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         context: PacketContext,
         status: str,
         key_hex: str,
+        responsible_nodes: list[dict[str, object]] | None = None,
         stored_by: list[str] | None = None,
         required_stored_count: int | None = None,
     ) -> PacketProcessingResult:
@@ -630,7 +638,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             request_header=envelope.header,
             status=status,
             key_hex=key_hex,
-            responsible_nodes=[],
+            responsible_nodes=_summarize_responsible_nodes(responsible_nodes or []),
             stored_locally=False,
             stored_by=stored_by,
             required_stored_count=required_stored_count,
@@ -910,6 +918,14 @@ def _read_string_list(payload: dict[str, object], field_name: str) -> list[str]:
         if isinstance(item, str) and item and item not in result:
             result.append(item)
     return result
+
+
+def _read_responsible_nodes(payload: dict[str, object]) -> list[dict[str, object]]:
+    value = payload.get("responsible_nodes")
+    if not isinstance(value, list):
+        return []
+
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _read_optional_int(payload: dict[str, object], field_name: str) -> int | None:

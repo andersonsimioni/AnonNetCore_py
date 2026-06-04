@@ -23,7 +23,7 @@ from smoke_helpers import (
     start_cluster,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
-    wait_for_drt_entry,
+    wait_for_stable_drt_online_route_count,
     wait_for_network_ready,
     wait_for_runtime_route_active,
     wait_for_virtual_session_active,
@@ -61,11 +61,13 @@ async def main() -> None:
         data_dir=TEST_DATA_ROOT / "core-a",
         listen_port=CORE_A_PORT,
         log_dir=TEST_LOG_ROOT / "core-a",
+        cluster_nodes=cluster_nodes,
     )
     core_b = create_test_core(
         data_dir=TEST_DATA_ROOT / "core-b",
         listen_port=CORE_B_PORT,
         log_dir=TEST_LOG_ROOT / "core-b",
+        cluster_nodes=cluster_nodes,
     )
 
     try:
@@ -85,8 +87,16 @@ async def main() -> None:
         print(f"checkpoint 2 OK: virtual nodes created: vn_a={vn_a.id} vn_b={vn_b.id}")
 
         await asyncio.gather(
-            wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes),
-            wait_for_network_ready(core_b, minimum_remote_nodes=required_ready_nodes),
+            wait_for_network_ready(
+                core_a,
+                minimum_remote_nodes=required_ready_nodes,
+                cluster_nodes=cluster_nodes,
+            ),
+            wait_for_network_ready(
+                core_b,
+                minimum_remote_nodes=required_ready_nodes,
+                cluster_nodes=cluster_nodes,
+            ),
         )
         print(f"checkpoint 3 OK: network ready: required_ready_nodes={required_ready_nodes}")
 
@@ -94,21 +104,43 @@ async def main() -> None:
             core_a,
             core_b,
             required_ready_nodes=required_ready_nodes,
+            cluster_nodes=cluster_nodes,
         )
         print("checkpoint 4 OK: cluster network maturity reached")
 
-        active_route = await wait_for_runtime_route_active(core_a, local_virtual_node_id=vn_a.id)
+        active_route_a = await wait_for_runtime_route_active(
+            core_a,
+            local_virtual_node_id=vn_a.id,
+            cluster_nodes=cluster_nodes,
+        )
+        active_route_b = await wait_for_runtime_route_active(
+            core_b,
+            local_virtual_node_id=vn_b.id,
+            cluster_nodes=cluster_nodes,
+        )
         print(
-            "checkpoint 5 OK: route active from runtime: "
-            f"initial_path_id={active_route.initial_path_id} final_path_id={active_route.final_path_id}"
+            "checkpoint 5 OK: runtime routes active: "
+            f"vn_a_initial_path_id={active_route_a.initial_path_id} "
+            f"vn_a_final_path_id={active_route_a.final_path_id} "
+            f"vn_b_initial_path_id={active_route_b.initial_path_id} "
+            f"vn_b_final_path_id={active_route_b.final_path_id}"
         )
 
-        await wait_for_drt_entry(
-            core_b,
-            virtual_node_public_key=vn_a.public_key,
-            expected_final_path_id=active_route.final_path_id,
+        await asyncio.gather(
+            wait_for_stable_drt_online_route_count(
+                core_b,
+                virtual_node_public_key=vn_a.public_key,
+                minimum_routes=1,
+                cluster_nodes=cluster_nodes,
+            ),
+            wait_for_stable_drt_online_route_count(
+                core_a,
+                virtual_node_public_key=vn_b.public_key,
+                minimum_routes=1,
+                cluster_nodes=cluster_nodes,
+            ),
         )
-        print("checkpoint 6 OK: DRT entry discovered from core B")
+        print("checkpoint 6 OK: DRT entries discovered from opposite cores")
 
         core_b.services.identity_service.upsert_remote_virtual_node(
             node_id=vn_a.id,
@@ -123,15 +155,20 @@ async def main() -> None:
             local_virtual_node_id=vn_b.id,
             remote_virtual_node_id=vn_a.id,
         )
-        await wait_for_virtual_session_active(core_b, session_id)
+        await wait_for_virtual_session_active(core_b, session_id, cluster_nodes=cluster_nodes)
         print(f"checkpoint 8 OK: virtual session active: session_id={session_id}")
 
         print("running virtual session keepalive validation with reused cluster and cores")
-        await validate_virtual_session_keepalive(core_b, session_id)
+        await validate_virtual_session_keepalive(core_b, session_id, cluster_nodes=cluster_nodes)
         print("checkpoint 9 OK: virtual session keepalive passed")
 
         print("running virtual message validation with reused cluster and cores")
-        await validate_virtual_message_exchange(core_a, core_b, session_id)
+        await validate_virtual_message_exchange(
+            core_a,
+            core_b,
+            session_id,
+            cluster_nodes=cluster_nodes,
+        )
         print("checkpoint 10 OK: virtual message exchange passed")
 
         print("running virtual content validation with reused cluster and cores")
@@ -139,6 +176,7 @@ async def main() -> None:
             provider_engine=core_a,
             downloader_engine=core_b,
             session_id=session_id,
+            cluster_nodes=cluster_nodes,
         )
         print(f"checkpoint 11 OK: virtual content smoke passed: size_bytes={len(downloaded_bytes)}")
         print("OK core full flow smoke passed")

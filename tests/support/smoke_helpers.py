@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-import math
 import platform
 from pathlib import Path
 import subprocess
@@ -16,6 +15,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from crypto import sha512_hex
+from bootstrap.models import BootstrapEndpoint
 from dht import DrtRecordPayload, parse_record
 from identity import VirtualNodeIdentityCreateInput
 from sessions import VirtualSessionMessageReply
@@ -32,10 +32,7 @@ def resolve_required_ready_nodes(
     cluster_nodes: int,
     minimum_remote_nodes: int | None,
 ) -> int:
-    if minimum_remote_nodes is not None:
-        return max(1, minimum_remote_nodes)
-
-    return max(1, math.ceil(cluster_nodes * SMOKES_CONFIG.ready_cluster_ratio))
+    return SMOKES_CONFIG.required_ready_nodes(cluster_nodes, minimum_remote_nodes)
 
 
 def resolve_cluster_node_count(node_count: int) -> int:
@@ -67,8 +64,11 @@ def start_cluster(*, node_count: int) -> None:
 def wait_for_cluster_containers(
     *,
     expected_count: int,
-    timeout_seconds: float = SMOKES_CONFIG.cluster_container_timeout_seconds,
+    timeout_seconds: float | None = None,
 ) -> None:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.cluster_container_timeout_seconds(
+        expected_count
+    )
     deadline = time.monotonic() + timeout_seconds
 
     while time.monotonic() < deadline:
@@ -105,8 +105,11 @@ def wait_for_cluster_to_reach_local_core_ports(
     *ports: int,
     host: str = "host.docker.internal",
     probe_container: str = "anonnet-node-001",
-    timeout_seconds: float = SMOKES_CONFIG.cluster_reachability_timeout_seconds,
+    timeout_seconds: float | None = None,
 ) -> None:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.cluster_reachability_timeout_seconds(
+        MIN_CLUSTER_NODES
+    )
     deadline = time.monotonic() + timeout_seconds
     last_error = ""
 
@@ -167,24 +170,55 @@ def create_test_core(
     log_dir: Path,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
-    virtual_route_expected_round_trip_ttl_ms: int = (
-        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
-    ),
-    virtual_route_pending_timeout_seconds: float = (
-        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
-    ),
+    cluster_nodes: int = MIN_CLUSTER_NODES,
+    virtual_route_expected_round_trip_ttl_ms: int | None = None,
+    virtual_route_pending_timeout_seconds: float | None = None,
     virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
 ):
+    route_ttl_ms = (
+        virtual_route_expected_round_trip_ttl_ms
+        or SMOKES_CONFIG.route_expected_round_trip_ttl_ms(cluster_nodes)
+    )
     return create_isolated_core(
         data_dir=data_dir,
         listen_port=listen_port,
         log_dir=log_dir,
         api_port=api_port,
         api_websocket_port=api_websocket_port,
-        virtual_route_expected_round_trip_ttl_ms=virtual_route_expected_round_trip_ttl_ms,
-        virtual_route_pending_timeout_seconds=virtual_route_pending_timeout_seconds,
+        virtual_route_expected_round_trip_ttl_ms=route_ttl_ms,
+        virtual_route_pending_timeout_seconds=(
+            virtual_route_pending_timeout_seconds
+            or SMOKES_CONFIG.route_build_timeout_seconds(cluster_nodes)
+        ),
+        route_create_ok_drt_visibility_timeout_seconds=(
+            SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
+        ),
         virtual_route_min_online_routes=virtual_route_min_online_routes,
+        virtual_route_max_pending_before_first_route=(
+            SMOKES_CONFIG.route_max_pending_before_first_route(cluster_nodes)
+        ),
+        random_walk_ttl_acceptance_error_ms=(
+            SMOKES_CONFIG.route_acceptance_error_ms(cluster_nodes)
+        ),
+        dht_request_timeout_seconds=SMOKES_CONFIG.dht_request_timeout_seconds(cluster_nodes),
+        physical_ping_timeout_seconds=SMOKES_CONFIG.physical_ping_timeout_seconds(cluster_nodes),
+        virtual_session_drt_lookup_timeout_seconds=(
+            SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(cluster_nodes)
+        ),
+        session_handshake_timeout_seconds=(
+            SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(cluster_nodes)
+        ),
+        bootstrap_public_endpoints=build_local_cluster_bootstrap_endpoints(),
     )
+
+
+def build_local_cluster_bootstrap_endpoints() -> list[BootstrapEndpoint]:
+    """Use host-published Docker ports from local smokes without changing advertised peer endpoints."""
+
+    return [
+        BootstrapEndpoint(host="127.0.0.1", port=19001, source="local_smoke_bootstrap"),
+        BootstrapEndpoint(host="127.0.0.1", port=19002, source="local_smoke_bootstrap"),
+    ]
 
 
 def create_local_virtual_node(engine, *, kind: str, metadata_source: str):
@@ -205,19 +239,18 @@ async def wait_for_network_ready(
     engine,
     *,
     minimum_remote_nodes: int,
-    timeout_seconds: float = SMOKES_CONFIG.network_ready_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> None:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.network_ready_timeout_seconds(
+        cluster_nodes or minimum_remote_nodes
+    )
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     last_ready_count = -1
     last_forced_exchange_at = 0.0
 
     while asyncio.get_running_loop().time() < deadline:
         now = asyncio.get_running_loop().time()
-        if now - last_forced_exchange_at >= SMOKES_CONFIG.forced_exchange_interval_seconds:
-            await request_known_nodes_from_active_peers(engine)
-            last_forced_exchange_at = now
-
-        await refresh_route_candidate_rtts(engine)
         candidates = engine.services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
             limit=minimum_remote_nodes,
         )
@@ -225,14 +258,25 @@ async def wait_for_network_ready(
         if ready_count >= minimum_remote_nodes:
             return
 
+        if ready_count == 0:
+            await request_bootstrap_again(engine)
+
         if ready_count != last_ready_count:
+            diagnostics = engine.services.identity_service.build_remote_physical_node_route_diagnostics()
             print(
                 "waiting network ready: "
                 f"node={engine.get_runtime_node_name()} "
                 f"ready_route_candidates={ready_count} "
-                f"required={minimum_remote_nodes}"
+                f"required={minimum_remote_nodes} "
+                f"diagnostics={diagnostics}"
             )
             last_ready_count = ready_count
+
+        if now - last_forced_exchange_at >= SMOKES_CONFIG.forced_exchange_interval_seconds:
+            await request_known_nodes_from_active_peers(engine)
+            last_forced_exchange_at = now
+
+        await refresh_route_candidate_rtts(engine)
 
         await asyncio.sleep(SMOKES_CONFIG.network_ready_poll_seconds)
 
@@ -244,13 +288,17 @@ async def wait_for_network_ready(
 async def wait_for_cluster_network_maturity(
     *engines,
     required_ready_nodes: int | None = None,
-    warmup_seconds: float = SMOKES_CONFIG.cluster_network_maturity_seconds,
+    cluster_nodes: int | None = None,
+    warmup_seconds: float | None = None,
     tick_seconds: float = SMOKES_CONFIG.cluster_network_maturity_tick_seconds,
 ) -> None:
     if not engines:
         return
 
     minimum_ready_nodes = max(1, required_ready_nodes or 1)
+    warmup_seconds = warmup_seconds or SMOKES_CONFIG.cluster_network_maturity_seconds(
+        cluster_nodes or minimum_ready_nodes
+    )
     stable_ticks = 0
     deadline = asyncio.get_running_loop().time() + warmup_seconds
     while asyncio.get_running_loop().time() < deadline:
@@ -323,6 +371,17 @@ async def request_known_nodes_from_active_peers(engine) -> None:
             continue
 
 
+async def request_bootstrap_again(engine) -> None:
+    request_bootstrap = getattr(engine, "request_bootstrap_physical_node_info", None)
+    if request_bootstrap is None:
+        return
+
+    try:
+        await request_bootstrap()
+    except Exception:
+        return
+
+
 async def refresh_route_candidate_rtts(engine) -> None:
     ping_candidates = engine.services.identity_service.list_remote_physical_nodes_for_ping(
         limit=SMOKES_CONFIG.route_candidate_ping_limit
@@ -361,8 +420,12 @@ async def wait_for_runtime_route_active(
     engine,
     *,
     local_virtual_node_id: str,
-    timeout_seconds: float = SMOKES_CONFIG.route_active_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ):
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.route_active_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     async def load_active_route():
         return engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
             local_virtual_node_id=local_virtual_node_id,
@@ -380,8 +443,12 @@ async def wait_for_drt_entry(
     *,
     virtual_node_public_key: str,
     expected_final_path_id: str | None = None,
-    timeout_seconds: float = SMOKES_CONFIG.drt_entry_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, object]:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_entry_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
     async def load_drt_entry():
@@ -420,8 +487,12 @@ async def wait_for_drt_online_route_count(
     *,
     virtual_node_public_key: str,
     minimum_routes: int,
-    timeout_seconds: float = SMOKES_CONFIG.drt_online_route_count_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, object]:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_online_route_count_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
     async def load_drt_routes():
@@ -472,8 +543,9 @@ async def wait_for_stable_drt_online_route_count(
     *,
     virtual_node_public_key: str,
     minimum_routes: int,
+    cluster_nodes: int | None = None,
     stable_reads: int = SMOKES_CONFIG.drt_stable_reads,
-    timeout_seconds: float = SMOKES_CONFIG.drt_online_route_count_timeout_seconds,
+    timeout_seconds: float | None = None,
 ) -> dict[str, object]:
     """Wait until DRT routes are visible in consecutive reads.
 
@@ -481,6 +553,9 @@ async def wait_for_stable_drt_online_route_count(
     smoke start the virtual session only after the route inventory is stable.
     """
 
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_online_route_count_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     consecutive_reads = 0
     last_result: dict[str, object] | None = None
@@ -516,8 +591,13 @@ async def wait_for_virtual_session_active(
     engine,
     session_id: str,
     *,
-    timeout_seconds: float = SMOKES_CONFIG.virtual_session_active_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> None:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_session_active_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
+
     async def is_active() -> bool:
         session = engine.services.session_manager.get_session_by_session_id(session_id)
         return session is not None and session.session_state == "active"
@@ -529,8 +609,12 @@ async def wait_for_virtual_keepalive_ack(
     engine,
     session_id: str,
     *,
-    timeout_seconds: float = SMOKES_CONFIG.virtual_keepalive_ack_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> None:
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_keepalive_ack_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     observed_after = datetime.now(timezone.utc)
 
     async def has_keepalive_ack() -> bool:
@@ -554,10 +638,14 @@ async def validate_virtual_message_roundtrip(
     app_message_type: str = "integration.virtual.message",
     reply_message_type: str = "integration.virtual.message.reply",
     payload: dict[str, object] | None = None,
-    timeout_seconds: float = SMOKES_CONFIG.virtual_message_timeout_seconds,
+    cluster_nodes: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> None:
     """Valida entrega e resposta via VIRTUAL_SESSION_DATA sobre sessao virtual ativa."""
 
+    timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_message_timeout_seconds(
+        cluster_nodes or MIN_CLUSTER_NODES
+    )
     message_payload = payload or {"value": "hello-virtual-message"}
     loop = asyncio.get_running_loop()
     received_request = loop.create_future()

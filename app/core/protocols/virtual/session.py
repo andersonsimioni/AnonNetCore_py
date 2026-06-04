@@ -560,12 +560,17 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             )
             return None
 
+        normalized_header = {
+            **header,
+            "physical_session_id": envelope.header.get("physical_session_id"),
+            "virtual_session_id": session_id,
+        }
         inner_envelope = ProtocolEnvelope(
             protocol_name=envelope.protocol_name,
             message_type=message_type,
             payload=payload,
             raw_payload=envelope.raw_payload,
-            header=header,
+            header=normalized_header,
         )
         result = await services.engine.process_protocol_envelope(inner_envelope, context)
         services.log_service.info(
@@ -574,6 +579,8 @@ class VirtualSessionProtocolHandler(ProtocolMessageHandler):
             session_id=session_id,
             inner_message_type=message_type,
             inner_action=result.metadata.get("action"),
+            app_message_type=payload.get("app_message_type"),
+            has_handler=result.metadata.get("has_handler"),
         )
         return result
 

@@ -32,12 +32,39 @@ def create_isolated_core(
     api_port: int | None = None,
     api_websocket_port: int | None = None,
     virtual_route_expected_round_trip_ttl_ms: int = (
-        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
+        SMOKES_CONFIG.route_expected_round_trip_ttl_ms(
+            SMOKES_CONFIG.min_cluster_nodes
+        )
     ),
     virtual_route_pending_timeout_seconds: float = (
-        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
+        SMOKES_CONFIG.route_build_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+    ),
+    route_create_ok_drt_visibility_timeout_seconds: float = (
+        SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
     ),
     virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
+    virtual_route_max_pending_before_first_route: int = (
+        SMOKES_CONFIG.route_max_pending_before_first_route(SMOKES_CONFIG.min_cluster_nodes)
+    ),
+    random_walk_ttl_acceptance_error_ms: int = (
+        SMOKES_CONFIG.route_acceptance_error_ms(SMOKES_CONFIG.min_cluster_nodes)
+    ),
+    dht_request_timeout_seconds: float = (
+        SMOKES_CONFIG.dht_request_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+    ),
+    physical_ping_timeout_seconds: float = (
+        SMOKES_CONFIG.physical_ping_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+    ),
+    virtual_session_drt_lookup_timeout_seconds: float = (
+        SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(
+            SMOKES_CONFIG.min_cluster_nodes
+        )
+    ),
+    session_handshake_timeout_seconds: float = (
+        SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(
+            SMOKES_CONFIG.min_cluster_nodes
+        )
+    ),
     bootstrap_public_endpoints: Iterable[BootstrapEndpoint] | None = None,
     bootstrap_dns_seeds: Iterable[DnsSeed] | None = None,
     reset_database: bool = False,
@@ -58,6 +85,7 @@ def create_isolated_core(
         physical_udp_listen_port=physical_udp_listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
+    config.network_pow_difficulty_bits = SMOKES_CONFIG.network_pow_difficulty_bits
     if udp_enabled is not None:
         config.udp_transport_enabled = udp_enabled
     config.api_enabled = False
@@ -76,10 +104,39 @@ def create_isolated_core(
     )
     config.virtual_route_min_published_routes = max(1, virtual_route_min_online_routes)
     config.virtual_route_build_timeout_seconds = virtual_route_pending_timeout_seconds
+    config.virtual_route_max_pending_builds_before_first_route = max(
+        1,
+        virtual_route_max_pending_before_first_route,
+    )
     config.default_random_walk_ttl_ms = virtual_route_expected_round_trip_ttl_ms
+    config.route_create_ok_drt_visibility_timeout_seconds = (
+        route_create_ok_drt_visibility_timeout_seconds
+    )
+    config.route_create_ok_drt_visibility_retry_seconds = (
+        SMOKES_CONFIG.test_core_route_ok_drt_visibility_retry_seconds
+    )
+    config.random_walk_ttl_acceptance_error_ms = random_walk_ttl_acceptance_error_ms
     config.random_walk_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
+    config.dht_request_timeout_seconds = dht_request_timeout_seconds
+    config.dht_maintenance_interval_seconds = (
+        SMOKES_CONFIG.test_core_dht_maintenance_interval_seconds
+    )
+    config.dht_republish_interval_seconds = (
+        SMOKES_CONFIG.test_core_dht_republish_interval_seconds
+    )
+    config.physical_ping_timeout_seconds = physical_ping_timeout_seconds
     config.virtual_session_drt_lookup_timeout_seconds = (
-        SMOKES_CONFIG.test_core_virtual_session_drt_lookup_timeout_seconds
+        virtual_session_drt_lookup_timeout_seconds
+    )
+    config.session_handshake_timeout_seconds = session_handshake_timeout_seconds
+    config.physical_node_validation_runtime_interval_seconds = (
+        SMOKES_CONFIG.test_core_physical_node_validation_interval_seconds
+    )
+    config.physical_node_info_exchange_interval_seconds = (
+        SMOKES_CONFIG.test_core_physical_node_info_exchange_interval_seconds
+    )
+    config.physical_node_info_exchange_runtime_interval_seconds = (
+        SMOKES_CONFIG.test_core_physical_node_info_exchange_runtime_interval_seconds
     )
     if bootstrap_public_endpoints is not None:
         config.bootstrap_public_endpoints = list(bootstrap_public_endpoints)

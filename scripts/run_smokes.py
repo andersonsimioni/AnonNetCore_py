@@ -11,7 +11,12 @@ import time
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TEST_SUPPORT_ROOT = PROJECT_ROOT / "tests" / "support"
 DEFAULT_CLUSTER_NODES = 8
+if str(TEST_SUPPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(TEST_SUPPORT_ROOT))
+
+from smokes_config import SMOKES_CONFIG
 
 
 @dataclass(frozen=True)
@@ -162,6 +167,7 @@ def run_smoke(
     started_at = time.monotonic()
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env["ANONNET_NETWORK_POW_DIFFICULTY_BITS"] = str(SMOKES_CONFIG.network_pow_difficulty_bits)
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         log_file.write(f"$ {format_command(spec.command)}\n\n")
         log_file.flush()

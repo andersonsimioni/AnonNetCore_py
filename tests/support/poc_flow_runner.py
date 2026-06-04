@@ -26,7 +26,7 @@ from smoke_helpers import (
     resolve_cluster_node_count,
     resolve_required_ready_nodes,
     start_cluster,
-    wait_for_drt_entry,
+    wait_for_stable_drt_online_route_count,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
     wait_for_network_ready,
@@ -59,15 +59,21 @@ async def main() -> int:
         api_port=SMOKES_CONFIG.social_api_port,
         websocket_port=SMOKES_CONFIG.social_websocket_port,
         log_dir=TEST_LOG_ROOT / "core-a",
+        cluster_nodes=cluster_nodes,
     )
     try:
         await core_a.start()
         print("checkpoint 0 OK: API core A started")
 
-        await wait_for_network_ready(core_a, minimum_remote_nodes=required_ready_nodes)
+        await wait_for_network_ready(
+            core_a,
+            minimum_remote_nodes=required_ready_nodes,
+            cluster_nodes=cluster_nodes,
+        )
         await wait_for_cluster_network_maturity(
             core_a,
             required_ready_nodes=required_ready_nodes,
+            cluster_nodes=cluster_nodes,
         )
         print("checkpoint 0 OK: physical network ready for social smoke")
 
@@ -90,14 +96,14 @@ async def main() -> int:
             wait_for_runtime_route_active(
                 core_a,
                 local_virtual_node_id=local_vn_a.id,
-                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds,
+                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds(cluster_nodes),
             )
         )
         active_route_local_b_task = asyncio.create_task(
             wait_for_runtime_route_active(
                 core_a,
                 local_virtual_node_id=local_vn_b.id,
-                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds,
+                timeout_seconds=SMOKES_CONFIG.social_route_active_timeout_seconds(cluster_nodes),
             )
         )
         active_route_local_a, active_route_local_b = await asyncio.gather(
@@ -107,15 +113,17 @@ async def main() -> int:
         print("checkpoint 2 OK: same-core runtime routes are active")
 
         await asyncio.gather(
-            wait_for_drt_entry(
+            wait_for_stable_drt_online_route_count(
                 core_a,
                 virtual_node_public_key=local_vn_a.public_key,
-                expected_final_path_id=active_route_local_a.final_path_id,
+                minimum_routes=1,
+                cluster_nodes=cluster_nodes,
             ),
-            wait_for_drt_entry(
+            wait_for_stable_drt_online_route_count(
                 core_a,
                 virtual_node_public_key=local_vn_b.public_key,
-                expected_final_path_id=active_route_local_b.final_path_id,
+                minimum_routes=1,
+                cluster_nodes=cluster_nodes,
             ),
         )
         print("checkpoint 3 OK: same-core routes are visible through DRT")
@@ -146,6 +154,7 @@ def create_api_core(
     api_port: int,
     websocket_port: int,
     log_dir: Path,
+    cluster_nodes: int,
 ) -> CoreEngine:
     data_dir.mkdir(parents=True, exist_ok=True)
     database = DatabaseManager(DatabaseConfig(db_path=data_dir / "anonnetcore.db"))
@@ -154,6 +163,7 @@ def create_api_core(
         physical_tcp_listen_port=listen_port,
         log_dir=log_dir,
     )
+    config.network_pow_difficulty_bits = SMOKES_CONFIG.network_pow_difficulty_bits
     config.api_enabled = True
     config.api_host = "127.0.0.1"
     config.api_port = api_port
@@ -164,12 +174,43 @@ def create_api_core(
         SMOKES_CONFIG.test_core_route_runtime_interval_seconds
     )
     config.virtual_route_build_timeout_seconds = (
-        SMOKES_CONFIG.test_core_route_pending_timeout_seconds
+        SMOKES_CONFIG.route_build_timeout_seconds(cluster_nodes)
+    )
+    config.virtual_route_min_published_routes = (
+        SMOKES_CONFIG.test_core_route_min_online_routes
+    )
+    config.virtual_route_max_pending_builds_before_first_route = (
+        SMOKES_CONFIG.route_max_pending_before_first_route(cluster_nodes)
     )
     config.default_random_walk_ttl_ms = (
-        SMOKES_CONFIG.test_core_route_expected_round_trip_ttl_ms
+        SMOKES_CONFIG.route_expected_round_trip_ttl_ms(cluster_nodes)
+    )
+    config.route_create_ok_drt_visibility_timeout_seconds = (
+        SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
+    )
+    config.route_create_ok_drt_visibility_retry_seconds = (
+        SMOKES_CONFIG.test_core_route_ok_drt_visibility_retry_seconds
+    )
+    config.random_walk_ttl_acceptance_error_ms = (
+        SMOKES_CONFIG.route_acceptance_error_ms(cluster_nodes)
     )
     config.random_walk_candidate_limit = SMOKES_CONFIG.test_core_route_candidate_limit
+    config.dht_request_timeout_seconds = SMOKES_CONFIG.dht_request_timeout_seconds(cluster_nodes)
+    config.dht_maintenance_interval_seconds = (
+        SMOKES_CONFIG.test_core_dht_maintenance_interval_seconds
+    )
+    config.dht_republish_interval_seconds = (
+        SMOKES_CONFIG.test_core_dht_republish_interval_seconds
+    )
+    config.physical_ping_timeout_seconds = SMOKES_CONFIG.physical_ping_timeout_seconds(
+        cluster_nodes
+    )
+    config.virtual_session_drt_lookup_timeout_seconds = (
+        SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(cluster_nodes)
+    )
+    config.session_handshake_timeout_seconds = (
+        SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(cluster_nodes)
+    )
 
     services = EngineServices(
         config=config,

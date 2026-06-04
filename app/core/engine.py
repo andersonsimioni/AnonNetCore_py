@@ -321,7 +321,7 @@ class CoreEngine:
             endpoints=endpoints,
         )
 
-    async def _request_bootstrap_physical_node_info(self) -> None:
+    async def request_bootstrap_physical_node_info(self) -> None:
         bootstrap_endpoints = self._get_bootstrap_endpoints()
         if not bootstrap_endpoints:
             return
@@ -332,6 +332,9 @@ class CoreEngine:
 
             if attempt < self.services.config.bootstrap_request_retries:
                 await asyncio.sleep(self.services.config.bootstrap_request_delay_seconds)
+
+    async def _request_bootstrap_physical_node_info(self) -> None:
+        await self.request_bootstrap_physical_node_info()
 
     async def _request_single_bootstrap_endpoint(
         self,

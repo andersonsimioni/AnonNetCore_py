@@ -58,6 +58,16 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
                     route_data=route_data,
                 )
             except ValueError as error:
+                services.log_service.warning(
+                    "route_execute",
+                    "failed to deliver virtual route data locally",
+                    path_id=route_data.path_id,
+                    direction=route_data.direction,
+                    virtual_session_id=route_data.virtual_session_id,
+                    reason=str(error),
+                    message_id=envelope.header.get("message_id"),
+                    remote_physical_node_id=self._read_remote_physical_node_id(envelope, services),
+                )
                 return self._build_invalid_result(envelope, reason=str(error))
 
         return PacketProcessingResult(

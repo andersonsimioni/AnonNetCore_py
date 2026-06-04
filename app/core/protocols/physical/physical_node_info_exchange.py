@@ -5,7 +5,7 @@ import json
 from sqlalchemy import func, select
 
 from storage.models import NodeEndpoint, RemotePhysicalNodeIdentity
-from transport import normalize_endpoint_list
+from transport import canonical_endpoint_list, normalize_endpoint_list
 
 from ...models import PacketContext, PacketProcessingResult, ProtocolEnvelope
 from ...services import EngineServices
@@ -121,30 +121,11 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                 )
                 endpoints = [endpoint for endpoint in db_session.scalars(endpoint_query).all() if endpoint.is_active]
 
-                records.append(
-                    {
-                        "physical_node_id": remote_node.id,
-                        "public_key": remote_node.public_key,
-                        "reachability_class": remote_node.reachability_class,
-                        "relay_capable": remote_node.relay_capable,
-                        "hole_punch_capable": remote_node.hole_punch_capable,
-                        "protocol_version": remote_node.protocol_version,
-                        "status": remote_node.status,
-                        "last_validated_at": _format_datetime(remote_node.last_validated_at),
-                        "dpnt_signature": _read_note_string(remote_node.notes_json, "dpnt_signature"),
-                        "feature_flags": _read_note_string_list(remote_node.notes_json, "dpnt_feature_flags"),
-                        "endpoints": [
-                            {
-                                "transport": endpoint.transport,
-                                "host": endpoint.host,
-                                "port": endpoint.port,
-                                "priority": endpoint.priority,
-                                "metadata": _parse_notes_json(endpoint.metadata_json),
-                            }
-                            for endpoint in endpoints
-                        ],
-                    }
-                )
+                record = _build_exchange_record(remote_node, endpoints)
+                if record is None:
+                    continue
+
+                records.append(record)
                 if len(records) >= max_records:
                     break
 
@@ -245,6 +226,26 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                 valid_endpoint_count=len(valid_endpoints),
                 valid_endpoints=valid_endpoints,
             )
+            dpnt_signature = _optional_string(record.get("dpnt_signature"))
+            notes: dict[str, object] = {
+                "source": "physical_node_info_exchange_response",
+                "advertised_status": _optional_string(record.get("status")),
+                "advertised_last_validated_at": _optional_string(record.get("last_validated_at")),
+            }
+            if dpnt_signature is not None:
+                notes.update(
+                    {
+                        "advertised_endpoints": endpoints,
+                        "dpnt_signature": dpnt_signature,
+                        "dpnt_reachability_class": _optional_string(record.get("reachability_class")),
+                        "dpnt_relay_capable": bool(record.get("relay_capable", False)),
+                        "dpnt_hole_punch_capable": bool(record.get("hole_punch_capable", False)),
+                        "dpnt_protocol_version": _optional_string(record.get("protocol_version")),
+                        "dpnt_status": _optional_string(record.get("status")),
+                        "dpnt_feature_flags": _select_string_items(record.get("feature_flags")),
+                    }
+                )
+
             services.identity_service.upsert_discovered_remote_physical_node(
                 node_id=physical_node_id,
                 public_key=public_key,
@@ -253,22 +254,7 @@ class PhysicalNodeInfoExchangeProtocolHandler(ProtocolMessageHandler):
                 reachability_class=_optional_string(record.get("reachability_class")),
                 relay_capable=bool(record.get("relay_capable", False)),
                 hole_punch_capable=bool(record.get("hole_punch_capable", False)),
-                notes_json=json.dumps(
-                    {
-                        "source": "physical_node_info_exchange_response",
-                        "advertised_status": _optional_string(record.get("status")),
-                        "advertised_last_validated_at": _optional_string(record.get("last_validated_at")),
-                        "advertised_endpoints": endpoints,
-                        "dpnt_signature": _optional_string(record.get("dpnt_signature")),
-                        "dpnt_reachability_class": _optional_string(record.get("reachability_class")),
-                        "dpnt_relay_capable": bool(record.get("relay_capable", False)),
-                        "dpnt_hole_punch_capable": bool(record.get("hole_punch_capable", False)),
-                        "dpnt_protocol_version": _optional_string(record.get("protocol_version")),
-                        "dpnt_status": _optional_string(record.get("status")),
-                        "dpnt_feature_flags": _select_string_items(record.get("feature_flags")),
-                    },
-                    separators=(",", ":"),
-                ),
+                notes_json=json.dumps(notes, separators=(",", ":")),
             )
             persisted_count += 1
 
@@ -337,6 +323,59 @@ def _read_max_records(payload: dict[str, object]) -> int:
     if not isinstance(value, int):
         return 50
     return max(1, min(value, 200))
+
+
+def _build_exchange_record(
+    remote_node: RemotePhysicalNodeIdentity,
+    endpoints: list[NodeEndpoint],
+) -> dict[str, object] | None:
+    notes = _parse_notes_json(remote_node.notes_json)
+    dpnt_signature = _optional_string(notes.get("dpnt_signature"))
+
+    if dpnt_signature is not None:
+        signed_endpoints = canonical_endpoint_list(notes.get("advertised_endpoints"))
+        if signed_endpoints:
+            return {
+                "physical_node_id": remote_node.id,
+                "public_key": remote_node.public_key,
+                "reachability_class": _optional_string(notes.get("dpnt_reachability_class")),
+                "relay_capable": bool(notes.get("dpnt_relay_capable", False)),
+                "hole_punch_capable": bool(notes.get("dpnt_hole_punch_capable", False)),
+                "protocol_version": _optional_string(notes.get("dpnt_protocol_version")),
+                "status": _optional_string(notes.get("dpnt_status")),
+                "last_validated_at": _format_datetime(remote_node.last_validated_at),
+                "dpnt_signature": dpnt_signature,
+                "feature_flags": _select_string_items(notes.get("dpnt_feature_flags")),
+                "endpoints": signed_endpoints,
+            }
+
+    exported_endpoints = [
+        {
+            "transport": endpoint.transport,
+            "host": endpoint.host,
+            "port": endpoint.port,
+            "priority": endpoint.priority,
+            "metadata": _parse_notes_json(endpoint.metadata_json),
+        }
+        for endpoint in endpoints
+    ]
+    exported_endpoints = canonical_endpoint_list(exported_endpoints)
+    if not exported_endpoints:
+        return None
+
+    return {
+        "physical_node_id": remote_node.id,
+        "public_key": remote_node.public_key,
+        "reachability_class": remote_node.reachability_class,
+        "relay_capable": remote_node.relay_capable,
+        "hole_punch_capable": remote_node.hole_punch_capable,
+        "protocol_version": remote_node.protocol_version,
+        "status": remote_node.status,
+        "last_validated_at": _format_datetime(remote_node.last_validated_at),
+        "dpnt_signature": None,
+        "feature_flags": [],
+        "endpoints": exported_endpoints,
+    }
 
 def _read_requester_node_id(
     envelope: ProtocolEnvelope,

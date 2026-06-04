@@ -28,6 +28,16 @@ def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
     ]
 
 
+def _read_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
 @dataclass(slots=True)
 class CoreConfig:
     node_reachability: str = "public"
@@ -46,6 +56,7 @@ class CoreConfig:
     udp_reassembly_timeout_seconds: float = 10.0
 
     log_dir: str | Path = "data/local/logs"
+    runtime_stop_timeout_seconds: float = 3.0
 
     bootstrap_dns_seeds: list[DnsSeed] = field(default_factory=list)
     bootstrap_public_endpoints: list[BootstrapEndpoint] = field(
@@ -65,9 +76,12 @@ class CoreConfig:
     virtual_route_maintenance_interval_seconds: float = 5.0
     virtual_route_min_published_routes: int = 5
     virtual_route_build_timeout_seconds: float = 45.0
+    route_create_ok_drt_visibility_timeout_seconds: float = 10.0
+    route_create_ok_drt_visibility_retry_seconds: float = 1.0
+    virtual_route_max_pending_builds_before_first_route: int = 2
     default_random_walk_ttl_ms: int = 500
 
-    network_pow_difficulty_bits: int = 16
+    network_pow_difficulty_bits: int = _read_int_env("ANONNET_NETWORK_POW_DIFFICULTY_BITS", 16)
 
     session_keepalive_seconds: int = 20
     session_runtime_interval_seconds: float = 2.0
@@ -76,8 +90,10 @@ class CoreConfig:
     virtual_reliable_retry_rtt_multiplier: float = 2.0
     virtual_reliable_retry_min_seconds: float = 2.0
     virtual_reliable_retry_max_seconds: float = 30.0
+    virtual_session_timeout_min_seconds: float = 60.0
+    virtual_session_timeout_rtt_multiplier: float = 6.0
     reliable_delivery_max_attempts: int = 5
-    session_handshake_timeout_seconds: float = 8.0
+    session_handshake_timeout_seconds: float = 20.0
     session_handshake_poll_interval_seconds: float = 0.25
 
     physical_node_validation_runtime_interval_seconds: float = 3.0

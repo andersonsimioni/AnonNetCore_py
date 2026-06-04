@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from random import SystemRandom
 from time import monotonic
 
 from common import is_expired_iso_datetime
@@ -30,6 +31,13 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             1,
             int(self.engine.services.config.virtual_route_min_published_routes),
         )
+        self._max_pending_routes_before_first_active_route = max(
+            1,
+            int(
+                self.engine.services.config
+                .virtual_route_max_pending_builds_before_first_route
+            ),
+        )
         self._pending_route_timeout_seconds = (
             self.engine.services.config.virtual_route_build_timeout_seconds
         )
@@ -38,6 +46,7 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             self.engine.services.config.default_random_walk_ttl_ms
         )
         self._pending_seen_at_by_initial_path_id: dict[str, float] = {}
+        self._random = SystemRandom()
 
     async def _run_once(self) -> None:
         local_virtual_nodes = self.engine.services.identity_service.list_local_virtual_nodes(
@@ -82,12 +91,13 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             )
         )
         if active_route is None:
-            if pending_route_count >= self._route_min_online_routes:
+            if pending_route_count >= self._max_pending_routes_before_first_active_route:
                 self.engine.services.log_service.debug(
                     "virtual_route_maintenance_runtime",
                     "virtual node is waiting for pending routes before first active route",
                     local_virtual_node_id=local_virtual_node_id,
                     pending_route_count=pending_route_count,
+                    max_pending_routes=self._max_pending_routes_before_first_active_route,
                     min_online_routes=self._route_min_online_routes,
                 )
                 return False
@@ -271,6 +281,20 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
         final_path_id: str | None,
         reason: str,
     ) -> None:
+        if self.engine.services.session_manager.has_active_virtual_session_bound_to_route(
+            initial_path_id,
+            final_path_id,
+        ):
+            self.engine.services.log_service.warning(
+                "virtual_route_maintenance_runtime",
+                "kept active virtual route because it is bound to an active virtual session",
+                local_virtual_node_id=local_virtual_node_id,
+                initial_path_id=initial_path_id,
+                final_path_id=final_path_id,
+                reason=reason,
+            )
+            return
+
         if not initial_path_id:
             self.engine.services.log_service.warning(
                 "virtual_route_maintenance_runtime",
@@ -310,9 +334,12 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             pending_elapsed_seconds = self._pending_elapsed_seconds(
                 initial_path_id=resolution.initial_path_id,
             )
+            pending_timeout_seconds = self._pending_timeout_seconds_for_status(
+                status=resolution.status,
+            )
             if (
                 resolution.initial_path_id is not None
-                and pending_elapsed_seconds >= self._pending_route_timeout_seconds
+                and pending_elapsed_seconds >= pending_timeout_seconds
             ):
                 self.engine.services.route_service.invalidate_initiator_resolution(
                     initial_path_id=resolution.initial_path_id,
@@ -327,7 +354,8 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
                     final_path_id=resolution.final_path_id,
                     status=resolution.status,
                     pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
-                    pending_timeout_seconds=self._pending_route_timeout_seconds,
+                    pending_timeout_seconds=pending_timeout_seconds,
+                    base_pending_timeout_seconds=self._pending_route_timeout_seconds,
                 )
                 continue
 
@@ -340,8 +368,14 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
                 final_path_id=resolution.final_path_id,
                 status=resolution.status,
                 pending_elapsed_seconds=round(pending_elapsed_seconds, 3),
+                pending_timeout_seconds=pending_timeout_seconds,
             )
         return active_pending_count
+
+    def _pending_timeout_seconds_for_status(self, *, status: str | None) -> float:
+        if status == "pending_final_validation":
+            return self._pending_route_timeout_seconds * 2.0
+        return self._pending_route_timeout_seconds
 
     def _pending_elapsed_seconds(
         self,
@@ -369,14 +403,16 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
         if len(candidates) < 2:
             return None
 
-        first_hop = candidates[0]
-        final_node = next(
-            (candidate for candidate in candidates[1:] if candidate.node_id != first_hop.node_id),
-            None,
-        )
-        if final_node is None:
+        first_hop = self._random.choice(candidates)
+        final_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.node_id != first_hop.node_id
+        ]
+        if not final_candidates:
             return None
 
+        final_node = self._random.choice(final_candidates)
         return RouteBuildPair(first_hop=first_hop, final_node=final_node)
 
     async def _start_route_build(
