@@ -21,6 +21,7 @@ from smoke_helpers import (
     resolve_cluster_node_count,
     resolve_required_ready_nodes,
     start_cluster,
+    stop_cluster,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
     wait_for_stable_drt_online_route_count,
@@ -182,6 +183,7 @@ async def main() -> None:
         print("OK core full flow smoke passed")
     finally:
         await stop_cores(core_b, core_a)
+        stop_cluster()
 
 
 def parse_args() -> argparse.Namespace:

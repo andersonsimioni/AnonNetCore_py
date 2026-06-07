@@ -25,7 +25,7 @@ from core_helpers import create_isolated_core
 from smokes_config import SMOKES_CONFIG
 
 
-MIN_CLUSTER_NODES = SMOKES_CONFIG.min_cluster_nodes
+DEFAULT_CLUSTER_NODES = SMOKES_CONFIG.core_full_flow_cluster_nodes
 
 
 def resolve_required_ready_nodes(
@@ -37,15 +37,19 @@ def resolve_required_ready_nodes(
 
 
 def resolve_cluster_node_count(node_count: int) -> int:
-    return max(node_count, MIN_CLUSTER_NODES)
+    return max(1, node_count)
 
 
 def reset_cluster() -> None:
+    stop_cluster()
+
+
+def stop_cluster() -> None:
     command = [
         sys.executable,
         str(PROJECT_ROOT / "cluster" / "down_nodes.py"),
     ]
-    print("resetting docker cluster")
+    print("stopping docker cluster")
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
 
 
@@ -112,7 +116,7 @@ def wait_for_cluster_to_reach_local_core_ports(
     timeout_seconds: float | None = None,
 ) -> None:
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.cluster_reachability_timeout_seconds(
-        MIN_CLUSTER_NODES
+        DEFAULT_CLUSTER_NODES
     )
     deadline = time.monotonic() + timeout_seconds
     last_error = ""
@@ -174,7 +178,7 @@ def create_test_core(
     log_dir: Path,
     api_port: int | None = None,
     api_websocket_port: int | None = None,
-    cluster_nodes: int = MIN_CLUSTER_NODES,
+    cluster_nodes: int = DEFAULT_CLUSTER_NODES,
     virtual_route_expected_round_trip_ttl_ms: int | None = None,
     virtual_route_pending_timeout_seconds: float | None = None,
     virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
@@ -434,7 +438,7 @@ async def wait_for_runtime_route_active(
     timeout_seconds: float | None = None,
 ):
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.route_active_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     async def load_active_route():
         return engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
@@ -457,7 +461,7 @@ async def wait_for_drt_entry(
     timeout_seconds: float | None = None,
 ) -> dict[str, object]:
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_entry_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
@@ -501,7 +505,7 @@ async def wait_for_drt_online_route_count(
     timeout_seconds: float | None = None,
 ) -> dict[str, object]:
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_online_route_count_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     logical_key = sha512_hex(virtual_node_public_key.encode("utf-8"))
 
@@ -564,7 +568,7 @@ async def wait_for_stable_drt_online_route_count(
     """
 
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_online_route_count_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     consecutive_reads = 0
@@ -605,7 +609,7 @@ async def wait_for_virtual_session_active(
     timeout_seconds: float | None = None,
 ) -> None:
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_session_active_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
 
     async def is_active() -> bool:
@@ -623,7 +627,7 @@ async def wait_for_virtual_keepalive_ack(
     timeout_seconds: float | None = None,
 ) -> None:
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_keepalive_ack_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     observed_after = datetime.now(timezone.utc)
 
@@ -654,7 +658,7 @@ async def validate_virtual_message_roundtrip(
     """Validates delivery and response through VIRTUAL_SESSION_DATA over an active virtual session."""
 
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.virtual_message_timeout_seconds(
-        cluster_nodes or MIN_CLUSTER_NODES
+        cluster_nodes or DEFAULT_CLUSTER_NODES
     )
     message_payload = payload or {"value": "hello-virtual-message"}
     loop = asyncio.get_running_loop()

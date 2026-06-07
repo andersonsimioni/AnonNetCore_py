@@ -76,7 +76,7 @@ class CoreConfig:
     physical_ping_runtime_candidate_limit: int = 4
 
     random_walk_candidate_limit: int = 32
-    random_walk_ttl_acceptance_error_ms: int = 30_000
+    random_walk_ttl_acceptance_error_ms: int = 1_000
     random_walk_previous_hop_fallback_rtt_ms: float = 40.0
 
     virtual_route_maintenance_interval_seconds: float = 5.0

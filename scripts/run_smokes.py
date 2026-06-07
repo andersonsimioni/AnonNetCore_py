@@ -17,6 +17,7 @@ if str(TEST_SUPPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(TEST_SUPPORT_ROOT))
 
 from smokes_config import SMOKES_CONFIG
+from smoke_helpers import stop_cluster
 
 
 @dataclass(frozen=True)
@@ -57,19 +58,29 @@ def main() -> int:
     print_smoke_plan(smokes)
 
     results: list[SmokeResult] = []
-    for index, spec in enumerate(smokes, start=1):
-        result = run_smoke(
-            spec,
-            index=index,
-            total=len(smokes),
-            run_dir=run_dir,
-        )
-        results.append(result)
-        if not result.passed and not args.keep_going:
-            break
+    try:
+        for index, spec in enumerate(smokes, start=1):
+            result = run_smoke(
+                spec,
+                index=index,
+                total=len(smokes),
+                run_dir=run_dir,
+            )
+            results.append(result)
+            if not result.passed and not args.keep_going:
+                break
+    finally:
+        stop_smoke_cluster()
 
     print_summary(results, run_dir=run_dir)
     return 0 if all(result.passed for result in results) and len(results) == len(smokes) else 1
+
+
+def stop_smoke_cluster() -> None:
+    try:
+        stop_cluster()
+    except Exception as error:
+        print(f"Cluster cleanup failed: {error}", file=sys.stderr)
 
 
 def parse_args() -> argparse.Namespace:

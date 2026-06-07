@@ -26,6 +26,7 @@ from smoke_helpers import (
     resolve_cluster_node_count,
     resolve_required_ready_nodes,
     start_cluster,
+    stop_cluster,
     wait_for_stable_drt_online_route_count,
     wait_for_cluster_containers,
     wait_for_cluster_network_maturity,
@@ -49,8 +50,10 @@ async def main() -> int:
     )
 
     reset_data_dir(TEST_DATA_ROOT)
+    cluster_started_by_smoke = False
     if not args.skip_cluster:
         start_cluster(node_count=cluster_nodes)
+        cluster_started_by_smoke = True
         wait_for_cluster_containers(expected_count=cluster_nodes)
 
     core_a = create_api_core(
@@ -135,6 +138,8 @@ async def main() -> int:
         return 0
     finally:
         await stop_core(core_a)
+        if cluster_started_by_smoke:
+            stop_cluster()
 
 
 def parse_args() -> argparse.Namespace:

@@ -12,7 +12,6 @@ class SmokesConfig:
     smoke, but fixed timings, ports, load sizes, and thresholds live here.
     """
 
-    min_cluster_nodes: int = 8
     ready_cluster_ratio: float = 0.3
     network_ready_base_timeout_seconds: float = 90.0
     network_ready_seconds_per_node: float = 8.0

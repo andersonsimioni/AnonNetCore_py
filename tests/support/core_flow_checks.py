@@ -15,6 +15,7 @@ from smokes_config import SMOKES_CONFIG
 
 APP_MESSAGE_TYPE = "integration.virtual-message.echo"
 APP_REPLY_MESSAGE_TYPE = "integration.virtual-message.echo.reply"
+DEFAULT_CLUSTER_NODES = SMOKES_CONFIG.core_full_flow_cluster_nodes
 
 
 async def validate_virtual_session_keepalive(
@@ -118,7 +119,7 @@ async def wait_for_downloaded_content(engine, *, content_hash: str, cluster_node
     content_info = await wait_until_value(
         load_content,
         timeout_seconds=SMOKES_CONFIG.virtual_content_transfer_timeout_seconds(
-            cluster_nodes or SMOKES_CONFIG.min_cluster_nodes
+            cluster_nodes or DEFAULT_CLUSTER_NODES
         ),
         label="virtual content download completed",
     )
@@ -154,7 +155,7 @@ async def wait_for_ddt_provider_advertisement(
     return await wait_until_value(
         load_advertisement,
         timeout_seconds=SMOKES_CONFIG.virtual_content_transfer_timeout_seconds(
-            cluster_nodes or SMOKES_CONFIG.min_cluster_nodes
+            cluster_nodes or DEFAULT_CLUSTER_NODES
         ),
         label="downloaded content ddt provider advertisement",
     )

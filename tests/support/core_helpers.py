@@ -19,6 +19,9 @@ from storage import DatabaseConfig, DatabaseManager
 from smokes_config import SMOKES_CONFIG
 
 
+DEFAULT_CLUSTER_NODES = SMOKES_CONFIG.core_full_flow_cluster_nodes
+
+
 def create_isolated_core(
     *,
     data_dir: Path,
@@ -33,28 +36,28 @@ def create_isolated_core(
     api_websocket_port: int | None = None,
     virtual_route_expected_round_trip_ttl_ms: int = (
         SMOKES_CONFIG.route_expected_round_trip_ttl_ms(
-            SMOKES_CONFIG.min_cluster_nodes
+            DEFAULT_CLUSTER_NODES
         )
     ),
     virtual_route_pending_timeout_seconds: float = (
-        SMOKES_CONFIG.route_build_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+        SMOKES_CONFIG.route_build_timeout_seconds(DEFAULT_CLUSTER_NODES)
     ),
     route_create_ok_drt_visibility_timeout_seconds: float = (
-        SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+        SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(DEFAULT_CLUSTER_NODES)
     ),
     virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
     random_walk_ttl_acceptance_error_ms: int = (
-        SMOKES_CONFIG.route_acceptance_error_ms(SMOKES_CONFIG.min_cluster_nodes)
+        SMOKES_CONFIG.route_acceptance_error_ms(DEFAULT_CLUSTER_NODES)
     ),
     dht_request_timeout_seconds: float = (
-        SMOKES_CONFIG.dht_request_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+        SMOKES_CONFIG.dht_request_timeout_seconds(DEFAULT_CLUSTER_NODES)
     ),
     physical_ping_timeout_seconds: float = (
-        SMOKES_CONFIG.physical_ping_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
+        SMOKES_CONFIG.physical_ping_timeout_seconds(DEFAULT_CLUSTER_NODES)
     ),
     virtual_session_drt_lookup_timeout_seconds: float = (
         SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(
-            SMOKES_CONFIG.min_cluster_nodes
+            DEFAULT_CLUSTER_NODES
         )
     ),
     physical_session_handshake_timeout_seconds: float = (
@@ -62,7 +65,7 @@ def create_isolated_core(
     ),
     virtual_session_handshake_timeout_seconds: float = (
         SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(
-            SMOKES_CONFIG.min_cluster_nodes
+            DEFAULT_CLUSTER_NODES
         )
     ),
     bootstrap_public_endpoints: Iterable[BootstrapEndpoint] | None = None,
