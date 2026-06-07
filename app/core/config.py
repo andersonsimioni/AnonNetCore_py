@@ -86,7 +86,7 @@ class CoreConfig:
     route_create_ok_drt_visibility_retry_seconds: float = 1.0
     default_random_walk_ttl_ms: int = 500
 
-    network_pow_difficulty_bits: int = 16
+    network_pow_difficulty_bits: int = 8
 
     session_keepalive_seconds: int = 20
     session_runtime_interval_seconds: float = 2.0
