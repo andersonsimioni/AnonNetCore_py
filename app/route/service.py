@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from dht import DrtRecordPayload, DrtRouteEntryRecord, serialize_record
+from dht import DrtRecordPayload, DrtRouteEntryRecord, UNCOMPUTED_POW_NONCE, serialize_record
 from crypto import sha512_hex
 from storage import DatabaseManager, get_database
 from storage.models import RouteResolution
@@ -539,6 +539,7 @@ class RouteService:
                     expires_at=expires_at,
                     rtt=observed_round_trip_ms,
                     rtt_physical_node_signature=rtt_physical_node_signature,
+                    pow_nonce=UNCOMPUTED_POW_NONCE,
                 )
             ],
             last_update=now.isoformat(),

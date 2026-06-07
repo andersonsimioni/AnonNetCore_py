@@ -16,9 +16,17 @@ from .records import (
     DrtRecordPayload,
     DttEntryRecord,
     DttRecordPayload,
+    UNCOMPUTED_POW_NONCE,
     parse_record,
     parse_record_dict,
     serialize_record,
+)
+from .pow import (
+    attach_payload_pow_nonces,
+    attach_record_payload_pow_nonces,
+    build_payload_pow_details,
+    validate_payload_pow,
+    validate_record_payload_pow,
 )
 from .service import DhtService
 
@@ -33,13 +41,19 @@ __all__ = [
     "DhtService",
     "DttEntryRecord",
     "DttRecordPayload",
+    "UNCOMPUTED_POW_NONCE",
+    "attach_payload_pow_nonces",
+    "attach_record_payload_pow_nonces",
+    "build_payload_pow_details",
     "parse_record",
     "parse_record_dict",
     "serialize_record",
+    "validate_payload_pow",
     "validate_and_merge",
     "validate_and_merge_ddt_fragment",
     "validate_and_merge_dpnt_fragment",
     "validate_and_merge_dpt_fragment",
     "validate_and_merge_drt_fragment",
     "validate_and_merge_dtt_fragment",
+    "validate_record_payload_pow",
 ]

@@ -198,6 +198,24 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             )
             return self._build_invalid_result(envelope, "invalid_dht_publish_pow")
 
+        if not services.dht_service.validate_record_payload_pow(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=services.config.network_pow_difficulty_bits,
+        ):
+            services.log_service.warning(
+                "dht",
+                "received dht publish with invalid semantic payload proof of work",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                pow_difficulty_bits=services.config.network_pow_difficulty_bits,
+                record_json_size=len(record_json),
+                trace_context=trace_context,
+            )
+            return self._build_invalid_result(envelope, "invalid_dht_payload_pow")
+
         closest_nodes_result = services.dht_service.select_k_closest_nodes(key_hex)
         responsible_nodes = closest_nodes_result["nodes"]
         required_stored_count = _read_optional_int(payload, "required_stored_count")
@@ -948,6 +966,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 key_hex,
                 accumulated_payload,
                 local_payload,
+                services.config.network_pow_difficulty_bits,
             )
             merged_record_json = serialize_record(merged_payload)
         except Exception as error:
@@ -1036,6 +1055,23 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at: datetime | None,
         source: str,
     ) -> None:
+        if not services.dht_service.validate_record_payload_pow(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=services.config.network_pow_difficulty_bits,
+        ):
+            services.log_service.warning(
+                "dht",
+                "ignored local dht record with invalid semantic payload proof of work",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                source=source,
+                record_json_size=len(record_json),
+            )
+            return
+
         effective_record_json = record_json
         merge_status = "new"
         with services.database.session_scope() as session:
@@ -1055,14 +1091,14 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                         key_hex,
                         parent_payload,
                         fragment_payload,
+                        services.config.network_pow_difficulty_bits,
                     )
                     effective_record_json = serialize_record(merged_payload)
                     merge_status = "merged"
                 except Exception as error:
-                    merge_status = "replace_after_merge_failure"
                     services.log_service.warning(
                         "dht",
-                        "failed to merge incoming dht fragment; storing incoming record",
+                        "failed to merge incoming dht fragment; ignoring incoming record",
                         key=key_hex,
                         namespace=namespace,
                         logical_key=logical_key,
@@ -1070,6 +1106,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                         error_type=type(error).__name__,
                         error=repr(error),
                     )
+                    return
 
             now = datetime.now(timezone.utc)
             if existing_record is None:

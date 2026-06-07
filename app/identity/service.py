@@ -7,7 +7,7 @@ from sqlalchemy import case, func, or_, select
 
 from common import compact_json_text, load_json_object, utc_now
 from crypto import generate_dilithium_key_pair, sha512_hex
-from dht import DpntRecordPayload, serialize_record
+from dht import DpntRecordPayload, UNCOMPUTED_POW_NONCE, serialize_record
 from storage import DatabaseManager, get_database
 from storage.models import (
     LocalPhysicalNodeIdentity,
@@ -1091,6 +1091,7 @@ class IdentityService:
                 else remote_node.status
             ),
             signature=dpnt_signature,
+            pow_nonce=UNCOMPUTED_POW_NONCE,
         )
         return {
             "namespace": "dpnt",

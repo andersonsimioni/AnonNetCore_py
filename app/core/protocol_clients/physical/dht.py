@@ -36,6 +36,12 @@ class PhysicalDhtClient:
         trace_context: dict[str, object] | None = None,
     ) -> dict[str, object]:
         key_hex = self.engine.services.dht_service.build_key(namespace, logical_key)
+        record_json = self.engine.services.dht_service.attach_record_payload_pow_nonces(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+        )
         pow_nonce = self.engine.services.dht_service.find_publish_pow_nonce(
             key_hex=key_hex,
             record_json=record_json,
@@ -58,6 +64,7 @@ class PhysicalDhtClient:
             pow_canonical_hash=pow_details["canonical_hash"],
             pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
             record_json_size=len(record_json),
+            semantic_payload_pow=True,
             trace_context=trace_context,
         )
         local_publish_result = self._publish_locally_if_responsible(
@@ -708,6 +715,31 @@ class PhysicalDhtClient:
             return {
                 "status": "not_routable",
                 "reason": "invalid_dht_publish_pow",
+                "key": key_hex,
+                "responsible_nodes": [],
+                "stored_by": [],
+                "stored_count": 0,
+                "required_stored_count": required_stored_count,
+            }
+
+        if not self.engine.services.dht_service.validate_record_payload_pow(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+        ):
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "local dht publish semantic payload proof of work is invalid",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+                record_json_size=len(record_json),
+            )
+            return {
+                "status": "not_routable",
+                "reason": "invalid_dht_payload_pow",
                 "key": key_hex,
                 "responsible_nodes": [],
                 "stored_by": [],

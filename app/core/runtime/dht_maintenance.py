@@ -9,6 +9,7 @@ from dht import (
     DptRecordPayload,
     DrtRecordPayload,
     DttRecordPayload,
+    UNCOMPUTED_POW_NONCE,
     parse_record,
     serialize_record,
     validate_and_merge,
@@ -80,6 +81,7 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
                     fragment.key,
                     parent_payload,
                     fragment_payload,
+                    services.config.network_pow_difficulty_bits,
                 )
             except Exception as error:
                 services.log_service.warning(
@@ -232,6 +234,7 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
                 last_validated_at="",
                 status="",
                 signature="",
+                pow_nonce=UNCOMPUTED_POW_NONCE,
             )
 
         if normalized_namespace == "drt":
@@ -268,9 +271,10 @@ class DhtMaintenanceRuntime(PeriodicRuntime):
                 last_modified="",
                 target_ref="",
                 signature="",
+                pow_nonce=UNCOMPUTED_POW_NONCE,
             )
 
-            raise ValueError(f"Unsupported DHT namespace for initial parent: {namespace}")
+        raise ValueError(f"Unsupported DHT namespace for initial parent: {namespace}")
 
     @staticmethod
     def _select_preferred_expires_at(

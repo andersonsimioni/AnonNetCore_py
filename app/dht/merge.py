@@ -7,6 +7,7 @@ from hashlib import sha512
 from common import canonical_payload_hex as _canonical_payload_hex
 from crypto import dilithium_verify_hex
 from transport import canonical_endpoint_list
+from .pow import build_payload_pow_details
 from .records import (
     DdtHolderRecord,
     DdtRecordPayload,
@@ -25,34 +26,36 @@ def validate_and_merge(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DhtPayload:
     normalized_namespace = namespace.lower()
 
     if normalized_namespace == "dpnt":
-        return validate_and_merge_dpnt_fragment(key, parent, fragment)
+        return validate_and_merge_dpnt_fragment(key, parent, fragment, difficulty_bits)
     if normalized_namespace == "drt":
-        return validate_and_merge_drt_fragment(key, parent, fragment)
+        return validate_and_merge_drt_fragment(key, parent, fragment, difficulty_bits)
     if normalized_namespace == "ddt":
-        return validate_and_merge_ddt_fragment(key, parent, fragment)
+        return validate_and_merge_ddt_fragment(key, parent, fragment, difficulty_bits)
     if normalized_namespace == "dtt":
-        return validate_and_merge_dtt_fragment(key, parent, fragment)
+        return validate_and_merge_dtt_fragment(key, parent, fragment, difficulty_bits)
     if normalized_namespace == "dpt":
-        return validate_and_merge_dpt_fragment(key, parent, fragment)
+        return validate_and_merge_dpt_fragment(key, parent, fragment, difficulty_bits)
 
-        raise ValueError(f"Unsupported DHT namespace for merge: {namespace}")
+    raise ValueError(f"Unsupported DHT namespace for merge: {namespace}")
 
 
 def validate_and_merge_dpnt_fragment(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DpntRecordPayload:
     _ensure_payload_type(parent, DpntRecordPayload, "dpnt")
     _ensure_payload_type(fragment, DpntRecordPayload, "dpnt")
 
     _ensure_dpnt_key_matches_physical_node(key, fragment.pk_physical_node)
 
-    if not _is_valid_dpnt_fragment(key, fragment):
+    if not _is_valid_dpnt_fragment(key, fragment, difficulty_bits):
         raise ValueError("O fragmento DPNT possui assinatura invalida.")
 
     return fragment
@@ -62,6 +65,7 @@ def validate_and_merge_drt_fragment(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DrtRecordPayload:
     _ensure_payload_type(parent, DrtRecordPayload, "drt")
     _ensure_payload_type(fragment, DrtRecordPayload, "drt")
@@ -76,13 +80,15 @@ def validate_and_merge_drt_fragment(
     valid_parent_entries = [
         route_entry
         for route_entry in parent.route_entries
-        if _is_valid_drt_route_entry(route_entry, parent.pk_virtual_node)
+        if _is_valid_drt_route_entry(route_entry, parent.pk_virtual_node, key, difficulty_bits)
     ]
     valid_fragment_entries = [
         route_entry
         for route_entry in fragment.route_entries
-        if _is_valid_drt_route_entry(route_entry, fragment.pk_virtual_node)
+        if _is_valid_drt_route_entry(route_entry, fragment.pk_virtual_node, key, difficulty_bits)
     ]
+    if fragment.route_entries and not valid_fragment_entries:
+        raise ValueError("The DRT fragment has no valid route entries.")
 
     merged_entries = _deduplicate_drt_route_entries(
         [*valid_parent_entries, *valid_fragment_entries]
@@ -100,6 +106,7 @@ def validate_and_merge_ddt_fragment(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DdtRecordPayload:
     _ensure_payload_type(parent, DdtRecordPayload, "ddt")
     _ensure_payload_type(fragment, DdtRecordPayload, "ddt")
@@ -109,8 +116,11 @@ def validate_and_merge_ddt_fragment(
     valid_fragment_holders = [
         holder
         for holder in fragment.holders
-        if _is_valid_ddt_holder(key, holder)
+        if _is_valid_ddt_holder(key, holder, difficulty_bits)
     ]
+    if fragment.holders and not valid_fragment_holders:
+        raise ValueError("The DDT fragment has no valid holders.")
+
     merged_holders = _deduplicate_exact_ddt_holders(
         [*parent.holders, *valid_fragment_holders]
     )
@@ -122,6 +132,7 @@ def validate_and_merge_dtt_fragment(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DttRecordPayload:
     _ensure_payload_type(parent, DttRecordPayload, "dtt")
     _ensure_payload_type(fragment, DttRecordPayload, "dtt")
@@ -129,8 +140,11 @@ def validate_and_merge_dtt_fragment(
     valid_fragment_entries = [
         entry
         for entry in fragment.entries
-        if _is_valid_dtt_entry(key, entry)
+        if _is_valid_dtt_entry(key, entry, difficulty_bits)
     ]
+    if fragment.entries and not valid_fragment_entries:
+        raise ValueError("The DTT fragment has no valid entries.")
+
     merged_entries = _deduplicate_exact_dtt_entries(
         [*parent.entries, *valid_fragment_entries]
     )
@@ -142,6 +156,7 @@ def validate_and_merge_dpt_fragment(
     key: str,
     parent: DhtPayload,
     fragment: DhtPayload,
+    difficulty_bits: int,
 ) -> DptRecordPayload:
     _ensure_payload_type(parent, DptRecordPayload, "dpt")
     _ensure_payload_type(fragment, DptRecordPayload, "dpt")
@@ -152,7 +167,7 @@ def validate_and_merge_dpt_fragment(
         fragment.title,
     )
 
-    if not _is_valid_dpt_fragment(key, fragment):
+    if not _is_valid_dpt_fragment(key, fragment, difficulty_bits):
         raise ValueError("O fragmento DPT possui assinatura invalida.")
 
     if not _is_fragment_newer(parent.last_modified, fragment.last_modified):
@@ -182,7 +197,7 @@ def _ensure_drt_key_matches_virtual_node(key: str, pk_virtual_node: str) -> None
     if key == expected_key:
         return
 
-        raise ValueError("The DRT key does not match the provided virtual_node_id.")
+    raise ValueError("The DRT key does not match the provided virtual_node_id.")
 
 
 def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> None:
@@ -191,7 +206,7 @@ def _ensure_dpnt_key_matches_physical_node(key: str, pk_physical_node: str) -> N
     if key == expected_key:
         return
 
-        raise ValueError("The DPNT key does not match the node_id derived from pk_physical_node.")
+    raise ValueError("The DPNT key does not match the node_id derived from pk_physical_node.")
 
 
 def _ensure_dpt_key_matches_owner_and_title(
@@ -225,6 +240,8 @@ def _ensure_ddt_metadata_matches(
 def _is_valid_drt_route_entry(
     route_entry: DrtRouteEntryRecord,
     pk_virtual_node: str,
+    key: str,
+    difficulty_bits: int,
 ) -> bool:
     if _is_expired(route_entry.expires_at):
         return False
@@ -238,6 +255,15 @@ def _is_valid_drt_route_entry(
     if not route_entry.physical_node_signature:
         return False
     if not route_entry.rtt_physical_node_signature:
+        return False
+    if not build_payload_pow_details(
+        namespace="drt",
+        key_hex=key,
+        payload=route_entry,
+        nonce=route_entry.pow_nonce,
+        difficulty_bits=difficulty_bits,
+        parent_pk_virtual_node=pk_virtual_node,
+    )["is_valid"]:
         return False
 
     try:
@@ -299,7 +325,16 @@ def _is_valid_drt_route_entry(
         return False
 
 
-def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload) -> bool:
+def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload, difficulty_bits: int) -> bool:
+    if not build_payload_pow_details(
+        namespace="dpnt",
+        key_hex=key,
+        payload=fragment,
+        nonce=fragment.pow_nonce,
+        difficulty_bits=difficulty_bits,
+    )["is_valid"]:
+        return False
+
     endpoints = canonical_endpoint_list(fragment.endpoints)
     signed_payload = {
         "key": key,
@@ -331,7 +366,16 @@ def _is_valid_dpnt_fragment(key: str, fragment: DpntRecordPayload) -> bool:
         return False
 
 
-def _is_valid_dpt_fragment(key: str, fragment: DptRecordPayload) -> bool:
+def _is_valid_dpt_fragment(key: str, fragment: DptRecordPayload, difficulty_bits: int) -> bool:
+    if not build_payload_pow_details(
+        namespace="dpt",
+        key_hex=key,
+        payload=fragment,
+        nonce=fragment.pow_nonce,
+        difficulty_bits=difficulty_bits,
+    )["is_valid"]:
+        return False
+
     signed_payload = {
         "key": key,
         "pk_virtual_node_owner": fragment.pk_virtual_node_owner,
@@ -352,8 +396,16 @@ def _is_valid_dpt_fragment(key: str, fragment: DptRecordPayload) -> bool:
         return False
 
 
-def _is_valid_dtt_entry(key: str, entry: DttEntryRecord) -> bool:
+def _is_valid_dtt_entry(key: str, entry: DttEntryRecord, difficulty_bits: int) -> bool:
     if _is_expired(entry.expires_at):
+        return False
+    if not build_payload_pow_details(
+        namespace="dtt",
+        key_hex=key,
+        payload=entry,
+        nonce=entry.pow_nonce,
+        difficulty_bits=difficulty_bits,
+    )["is_valid"]:
         return False
 
     signed_payload = {
@@ -375,8 +427,16 @@ def _is_valid_dtt_entry(key: str, entry: DttEntryRecord) -> bool:
         return False
 
 
-def _is_valid_ddt_holder(key: str, holder: DdtHolderRecord) -> bool:
+def _is_valid_ddt_holder(key: str, holder: DdtHolderRecord, difficulty_bits: int) -> bool:
     if _is_expired(holder.expires_at):
+        return False
+    if not build_payload_pow_details(
+        namespace="ddt",
+        key_hex=key,
+        payload=holder,
+        nonce=holder.pow_nonce,
+        difficulty_bits=difficulty_bits,
+    )["is_valid"]:
         return False
 
     signed_payload = {

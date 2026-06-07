@@ -5,6 +5,9 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import TypeAlias
 
 
+UNCOMPUTED_POW_NONCE: int | None = None
+
+
 @dataclass(slots=True, frozen=True)
 class DpntRecordPayload:
     pk_physical_node: str
@@ -18,6 +21,7 @@ class DpntRecordPayload:
     last_validated_at: str
     status: str
     signature: str
+    pow_nonce: int | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -31,6 +35,7 @@ class DrtRouteEntryRecord:
     expires_at: str
     rtt: int
     rtt_physical_node_signature: str
+    pow_nonce: int | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -45,6 +50,7 @@ class DdtHolderRecord:
     pk_virtual_node: str
     expires_at: str
     signature: str
+    pow_nonce: int | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -62,6 +68,7 @@ class DttEntryRecord:
     created_at: str
     expires_at: str
     signature: str
+    pow_nonce: int | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -77,6 +84,7 @@ class DptRecordPayload:
     last_modified: str
     target_ref: str
     signature: str
+    pow_nonce: int | None
 
 
 DhtPayload: TypeAlias = (
@@ -132,6 +140,7 @@ def _parse_dpnt(payload: dict[str, object]) -> DpntRecordPayload:
         last_validated_at=_read_required_string(payload, "last_validated_at"),
         status=_read_required_string(payload, "status"),
         signature=_read_required_string(payload, "signature"),
+        pow_nonce=_read_pow_nonce(payload),
     )
 
 
@@ -166,6 +175,7 @@ def _parse_dpt(payload: dict[str, object]) -> DptRecordPayload:
         last_modified=_read_required_string(payload, "last_modified"),
         target_ref=_read_required_string(payload, "target_ref"),
         signature=_read_required_string(payload, "signature"),
+        pow_nonce=_read_pow_nonce(payload),
     )
 
 
@@ -232,6 +242,7 @@ def _read_ddt_holders(payload: dict[str, object]) -> list[DdtHolderRecord]:
                 pk_virtual_node=_read_required_string(item, "pk_virtual_node"),
                 expires_at=_read_required_string(item, "expires_at"),
                 signature=_read_required_string(item, "signature"),
+                pow_nonce=_read_pow_nonce(item),
             )
         )
     return holders
@@ -269,6 +280,7 @@ def _read_drt_route_entries(payload: dict[str, object]) -> list[DrtRouteEntryRec
                     item,
                     "rtt_physical_node_signature",
                 ),
+                pow_nonce=_read_pow_nonce(item),
             )
         )
     return route_entries
@@ -293,6 +305,7 @@ def _read_dtt_entries(payload: dict[str, object]) -> list[DttEntryRecord]:
                 created_at=_read_required_string(item, "created_at"),
                 expires_at=_read_required_string(item, "expires_at"),
                 signature=_read_required_string(item, "signature"),
+                pow_nonce=_read_pow_nonce(item),
             )
         )
     return entries
@@ -302,6 +315,15 @@ def _read_required_int(payload: dict[str, object], field_name: str) -> int:
     raw_value = payload.get(field_name)
     if not isinstance(raw_value, int):
         raise ValueError(f"O campo '{field_name}' precisa ser um inteiro.")
+    return raw_value
+
+
+def _read_pow_nonce(payload: dict[str, object]) -> int | None:
+    raw_value = payload.get("pow_nonce")
+    if raw_value is None:
+        return UNCOMPUTED_POW_NONCE
+    if not isinstance(raw_value, int):
+        raise ValueError("O campo 'pow_nonce' precisa ser um inteiro.")
     return raw_value
 
 

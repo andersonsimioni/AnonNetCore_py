@@ -116,7 +116,7 @@ class CoreConfig:
     dht_replication_factor: int = 3
     dht_maintenance_interval_seconds: float = 5.0
     dht_republish_interval_seconds: float = 120.0
-    dht_request_timeout_seconds: float = 20.0
+    dht_request_timeout_seconds: float = 60.0
     dht_request_max_forward_hops: int = 60
 
     virtual_session_drt_lookup_timeout_seconds: float = 20.0

@@ -6,6 +6,16 @@ from typing import TYPE_CHECKING
 from storage import DatabaseManager, get_database
 from storage.models import LocalPhysicalNodeIdentity, NodeEndpoint, RemotePhysicalNodeIdentity
 
+from .pow import (
+    PowPayload,
+    attach_payload_pow_nonces as _attach_payload_pow_nonces,
+    attach_record_payload_pow_nonces as _attach_record_payload_pow_nonces,
+    build_payload_pow_details as _build_payload_pow_details,
+    validate_payload_pow as _validate_payload_pow,
+    validate_record_payload_pow as _validate_record_payload_pow,
+)
+from .records import DhtPayload
+
 if TYPE_CHECKING:
     from core.config import CoreConfig
 
@@ -118,6 +128,85 @@ class DhtService:
             "nonce": nonce,
             "is_valid": difficulty_bits <= 0 or proof_bits.startswith("0" * difficulty_bits),
         }
+
+    @staticmethod
+    def attach_record_payload_pow_nonces(
+        *,
+        namespace: str,
+        key_hex: str,
+        record_json: str,
+        difficulty_bits: int,
+    ) -> str:
+        return _attach_record_payload_pow_nonces(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=difficulty_bits,
+        )
+
+    @staticmethod
+    def attach_payload_pow_nonces(
+        *,
+        namespace: str,
+        key_hex: str,
+        payload: DhtPayload,
+        difficulty_bits: int,
+    ) -> DhtPayload:
+        return _attach_payload_pow_nonces(
+            namespace=namespace,
+            key_hex=key_hex,
+            payload=payload,
+            difficulty_bits=difficulty_bits,
+        )
+
+    @staticmethod
+    def validate_record_payload_pow(
+        *,
+        namespace: str,
+        key_hex: str,
+        record_json: str,
+        difficulty_bits: int,
+    ) -> bool:
+        return _validate_record_payload_pow(
+            namespace=namespace,
+            key_hex=key_hex,
+            record_json=record_json,
+            difficulty_bits=difficulty_bits,
+        )
+
+    @staticmethod
+    def validate_payload_pow(
+        *,
+        namespace: str,
+        key_hex: str,
+        payload: DhtPayload,
+        difficulty_bits: int,
+    ) -> bool:
+        return _validate_payload_pow(
+            namespace=namespace,
+            key_hex=key_hex,
+            payload=payload,
+            difficulty_bits=difficulty_bits,
+        )
+
+    @staticmethod
+    def build_payload_pow_details(
+        *,
+        namespace: str,
+        key_hex: str,
+        payload: PowPayload,
+        nonce: int | None,
+        difficulty_bits: int,
+        parent_pk_virtual_node: str | None = None,
+    ) -> dict[str, object]:
+        return _build_payload_pow_details(
+            namespace=namespace,
+            key_hex=key_hex,
+            payload=payload,
+            nonce=nonce,
+            difficulty_bits=difficulty_bits,
+            parent_pk_virtual_node=parent_pk_virtual_node,
+        )
 
     def select_k_closest_nodes(self, key_hex: str) -> dict[str, object]:
         if not key_hex:

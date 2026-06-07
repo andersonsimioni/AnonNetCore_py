@@ -56,8 +56,8 @@ class SmokesConfig:
 
     route_active_base_timeout_seconds: float = 90.0
     route_active_seconds_per_node: float = 14.0
-    test_core_dht_request_base_timeout_seconds: float = 12.0
-    test_core_dht_request_seconds_per_node: float = 1.0
+    test_core_dht_request_base_timeout_seconds: float = 45.0
+    test_core_dht_request_seconds_per_node: float = 2.0
     test_core_dht_maintenance_interval_seconds: float = 1.0
     test_core_dht_republish_interval_seconds: float = 6.0
     drt_entry_base_timeout_seconds: float = 20.0

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from crypto import dilithium_sign_hex
-from dht import DdtHolderRecord, DdtRecordPayload, serialize_record
+from dht import DdtHolderRecord, DdtRecordPayload, UNCOMPUTED_POW_NONCE, serialize_record
 from storage import DatabaseManager, get_database
 from storage.models import (
     ContentAdvertisement,
@@ -366,6 +366,7 @@ class ContentTransferService:
                     pk_virtual_node=virtual_node_public_key,
                     expires_at=expires_at.isoformat(),
                     signature=holder_signature,
+                    pow_nonce=UNCOMPUTED_POW_NONCE,
                 )
             ],
         )
