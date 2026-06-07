@@ -7,6 +7,7 @@ from .dht_maintenance import DhtMaintenanceRuntime
 from .physical_node_info_exchange import PhysicalNodeInfoExchangeRuntime
 from .physical_ping import PhysicalPingRuntime
 from .physical_node_validation import PhysicalNodeValidationRuntime
+from .physical_relay_maintenance import PhysicalRelayMaintenanceRuntime
 from .session_runtime import SessionRuntime
 from .virtual_route_maintenance import VirtualRouteMaintenanceRuntime
 
@@ -20,6 +21,7 @@ class RuntimeServices:
     physical_node_info_exchange: PhysicalNodeInfoExchangeRuntime
     physical_ping: PhysicalPingRuntime
     physical_node_validation: PhysicalNodeValidationRuntime
+    physical_relay_maintenance: PhysicalRelayMaintenanceRuntime
     virtual_route_maintenance: VirtualRouteMaintenanceRuntime
     session: SessionRuntime
 
@@ -28,6 +30,7 @@ class RuntimeServices:
         self.physical_node_info_exchange = PhysicalNodeInfoExchangeRuntime(engine)
         self.physical_ping = PhysicalPingRuntime(engine)
         self.physical_node_validation = PhysicalNodeValidationRuntime(engine)
+        self.physical_relay_maintenance = PhysicalRelayMaintenanceRuntime(engine)
         self.virtual_route_maintenance = VirtualRouteMaintenanceRuntime(engine)
         self.session = SessionRuntime(engine)
 
@@ -36,6 +39,7 @@ class RuntimeServices:
         await self.physical_node_info_exchange.start()
         await self.physical_ping.start()
         await self.physical_node_validation.start()
+        await self.physical_relay_maintenance.start()
         await self.virtual_route_maintenance.start()
         await self.session.start()
 
@@ -44,6 +48,7 @@ class RuntimeServices:
         await self.physical_node_info_exchange.stop()
         await self.physical_ping.stop()
         await self.physical_node_validation.stop()
+        await self.physical_relay_maintenance.stop()
         await self.virtual_route_maintenance.stop()
         await self.session.stop()
 
@@ -53,6 +58,7 @@ __all__ = [
     "PhysicalNodeInfoExchangeRuntime",
     "PhysicalPingRuntime",
     "PhysicalNodeValidationRuntime",
+    "PhysicalRelayMaintenanceRuntime",
     "VirtualRouteMaintenanceRuntime",
     "SessionRuntime",
     "RuntimeServices",

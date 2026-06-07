@@ -12,7 +12,7 @@ from ...protocols import DhtProtocolHandler
 
 
 class PhysicalDhtClient:
-    """Cliente DHT: inicia a operacao e deixa os handlers rotearem hop-by-hop."""
+    """DHT client: starts requests and lets handlers route them hop-by-hop."""
 
     def __init__(self, engine) -> None:
         self.engine = engine
@@ -33,11 +33,18 @@ class PhysicalDhtClient:
         logical_key: str,
         record_json: str,
         expires_at: str | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> dict[str, object]:
         key_hex = self.engine.services.dht_service.build_key(namespace, logical_key)
         pow_nonce = self.engine.services.dht_service.find_publish_pow_nonce(
             key_hex=key_hex,
             record_json=record_json,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+        )
+        pow_details = self.engine.services.dht_service.build_publish_pow_details(
+            key_hex=key_hex,
+            record_json=record_json,
+            nonce=pow_nonce,
             difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
         )
         self.engine.services.log_service.info(
@@ -48,6 +55,10 @@ class PhysicalDhtClient:
             key=key_hex,
             pow_nonce=pow_nonce,
             pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+            pow_canonical_hash=pow_details["canonical_hash"],
+            pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+            record_json_size=len(record_json),
+            trace_context=trace_context,
         )
         local_publish_result = self._publish_locally_if_responsible(
             key_hex=key_hex,
@@ -69,6 +80,7 @@ class PhysicalDhtClient:
                 status=local_publish_result.get("status"),
                 stored_count=local_publish_result.get("stored_count"),
                 required_stored_count=local_publish_result.get("required_stored_count"),
+                trace_context=trace_context,
             )
             return local_publish_result
 
@@ -92,6 +104,7 @@ class PhysicalDhtClient:
                 local_reason=local_publish_result.get("reason"),
                 stored_count=local_publish_result.get("stored_count"),
                 required_stored_count=local_publish_result.get("required_stored_count"),
+                trace_context=trace_context,
             )
             return local_publish_result
 
@@ -109,6 +122,7 @@ class PhysicalDhtClient:
                 required_stored_count=required_stored_count,
                 pow_nonce=pow_nonce,
                 timeout_seconds=self._publish_attempt_timeout_seconds,
+                trace_context=trace_context,
             )
             stored_by = self._merge_stored_by(stored_by, self._read_stored_by(result))
             result = self._normalize_publish_result(
@@ -132,6 +146,7 @@ class PhysicalDhtClient:
                 stored_count=result.get("stored_count"),
                 required_stored_count=result.get("required_stored_count"),
                 stored_by=stored_by,
+                trace_context=trace_context,
             )
             if attempt == self._publish_attempt_count:
                 break
@@ -153,6 +168,7 @@ class PhysicalDhtClient:
             stored_count=result.get("stored_count"),
             required_stored_count=result.get("required_stored_count"),
             stored_by=result.get("stored_by"),
+            trace_context=trace_context,
         )
         return result
 
@@ -252,7 +268,30 @@ class PhysicalDhtClient:
         result_data: dict[str, object],
     ) -> None:
         future = self._pending_results.pop(response_to_message_id, None)
-        if future is None or future.done():
+        if future is None:
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "received dht result without pending future",
+                response_to_message_id=response_to_message_id,
+                status=result_data.get("status"),
+                key=result_data.get("key"),
+                stored_count=result_data.get("stored_count"),
+                required_stored_count=result_data.get("required_stored_count"),
+                pending_result_count=len(self._pending_results),
+                trace_context=result_data.get("trace_context"),
+            )
+            return
+        if future.done():
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "received dht result for already completed future",
+                response_to_message_id=response_to_message_id,
+                status=result_data.get("status"),
+                key=result_data.get("key"),
+                stored_count=result_data.get("stored_count"),
+                required_stored_count=result_data.get("required_stored_count"),
+                trace_context=result_data.get("trace_context"),
+            )
             return
 
         future.set_result(result_data)
@@ -278,6 +317,7 @@ class PhysicalDhtClient:
         required_stored_count: int,
         pow_nonce: int,
         timeout_seconds: float | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> dict[str, object]:
         session = self._get_active_session(session_id)
         endpoint = self._build_remote_endpoint(session)
@@ -296,6 +336,24 @@ class PhysicalDhtClient:
             stored_by=stored_by,
             required_stored_count=required_stored_count,
             pow_nonce=pow_nonce,
+            trace_context=trace_context,
+        )
+        self.engine.services.log_service.debug(
+            "physical_dht_client",
+            "sending dht publish request",
+            namespace=namespace,
+            logical_key=logical_key,
+            message_id=header["message_id"],
+            session_id=session.session_id,
+            remote_physical_node_id=session.remote_identity_id,
+            transport=endpoint.transport_name,
+            host=endpoint.host,
+            port=endpoint.port,
+            stored_by=stored_by,
+            stored_count=len(stored_by),
+            required_stored_count=required_stored_count,
+            ttl=self._request_ttl,
+            trace_context=trace_context,
         )
         return await self._send_and_wait_result(
             message_id=header["message_id"],
@@ -303,6 +361,7 @@ class PhysicalDhtClient:
             payload=payload,
             remote_endpoint=endpoint,
             timeout_seconds=timeout_seconds,
+            trace_context=trace_context,
         )
 
     async def _request_query_once(
@@ -342,6 +401,7 @@ class PhysicalDhtClient:
         payload: bytes,
         remote_endpoint: TransportEndpoint,
         timeout_seconds: float | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> dict[str, object]:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, object]] = loop.create_future()
@@ -365,6 +425,7 @@ class PhysicalDhtClient:
                 port=remote_endpoint.port,
                 payload_size_bytes=len(payload),
                 timeout_seconds=wait_timeout_seconds,
+                trace_context=trace_context,
             )
             return await asyncio.wait_for(future, timeout=wait_timeout_seconds)
         except asyncio.TimeoutError:
@@ -376,6 +437,8 @@ class PhysicalDhtClient:
                 transport=transport_name,
                 host=remote_endpoint.host,
                 port=remote_endpoint.port,
+                pending_result_count=len(self._pending_results),
+                trace_context=trace_context,
             )
             return {
                 "status": "timeout",
@@ -392,6 +455,7 @@ class PhysicalDhtClient:
                 port=remote_endpoint.port,
                 error_type=type(error).__name__,
                 error=repr(error),
+                trace_context=trace_context,
             )
             return {
                 "status": "send_failed",
@@ -464,11 +528,7 @@ class PhysicalDhtClient:
             if node_id in attempted_remote_node_ids:
                 continue
 
-            existing_session = (
-                self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(
-                    node_id
-                )
-            )
+            existing_session = self._get_preferred_active_physical_session(node_id)
             if existing_session is not None and not self._is_observed_only_physical_session(existing_session):
                 self.engine.services.log_service.debug(
                     "physical_dht_client",
@@ -476,6 +536,7 @@ class PhysicalDhtClient:
                     key=key_hex,
                     remote_physical_node_id=node_id,
                     session_id=existing_session.session_id,
+                    transport=existing_session.transport,
                 )
                 return existing_session
 
@@ -521,12 +582,22 @@ class PhysicalDhtClient:
             and session.remote_identity_id not in ignored_remote_node_ids
         ]
         if active_sessions:
-            session = random.choice(active_sessions)
+            preferred_score = min(
+                self._transport_preference(session.transport)
+                for session in active_sessions
+            )
+            preferred_sessions = [
+                candidate
+                for candidate in active_sessions
+                if self._transport_preference(candidate.transport) == preferred_score
+            ]
+            session = random.choice(preferred_sessions)
             self.engine.services.log_service.debug(
                 "physical_dht_client",
                 "selected random active session for dht request",
                 remote_physical_node_id=session.remote_identity_id,
                 session_id=session.session_id,
+                transport=session.transport,
             )
             return session
 
@@ -567,6 +638,27 @@ class PhysicalDhtClient:
 
         return None
 
+    def _get_preferred_active_physical_session(self, remote_physical_node_id: str):
+        sessions = [
+            session
+            for session in self.engine.services.session_manager.list_active_physical_sessions()
+            if session.remote_identity_id == remote_physical_node_id
+            and not self._is_observed_only_physical_session(session)
+        ]
+        if not sessions:
+            return None
+        return min(sessions, key=lambda session: self._transport_preference(session.transport))
+
+    @staticmethod
+    def _transport_preference(transport_name: str | None) -> int:
+        if transport_name == "tcp":
+            return 0
+        if transport_name == "relay_tcp":
+            return 1
+        if transport_name == "udp":
+            return 2
+        return 3
+
     def _publish_locally_if_responsible(
         self,
         *,
@@ -596,18 +688,22 @@ class PhysicalDhtClient:
                 "required_stored_count": required_stored_count,
             }
 
-        if not self.engine.services.dht_service.validate_publish_pow(
+        pow_details = self.engine.services.dht_service.build_publish_pow_details(
             key_hex=key_hex,
             record_json=record_json,
             nonce=pow_nonce,
             difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
-        ):
+        )
+        if not pow_details["is_valid"]:
             self.engine.services.log_service.warning(
                 "physical_dht_client",
                 "local dht publish proof of work is invalid",
                 key=key_hex,
                 pow_nonce=pow_nonce,
                 pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+                pow_canonical_hash=pow_details["canonical_hash"],
+                pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+                record_json_size=len(record_json),
             )
             return {
                 "status": "not_routable",
@@ -729,6 +825,7 @@ class PhysicalDhtClient:
             transport_name=session.transport,
             host=session.remote_host,
             port=session.remote_port,
+            metadata=load_json_object(session.metadata_json),
         )
 
     @staticmethod

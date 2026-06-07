@@ -24,20 +24,23 @@ class TcpConnection:
         self.last_activity_at = utc_now()
 
 
-@dataclass(slots=True, frozen=True)
-class TcpTransportConfig:
-    listen_host: str = "0.0.0.0"
-    listen_port: int = 9000
-    listen_enabled: bool = True
-    backlog: int = 100
-    idle_timeout_seconds: int = 60
-
-
 class TcpTransportAdapter(TransportAdapter):
     transport_name = "tcp"
 
-    def __init__(self, config: TcpTransportConfig | None = None) -> None:
-        self.config = config or TcpTransportConfig()
+    def __init__(
+        self,
+        *,
+        listen_host: str,
+        listen_port: int,
+        listen_enabled: bool,
+        backlog: int,
+        idle_timeout_seconds: int,
+    ) -> None:
+        self.listen_host = listen_host
+        self.listen_port = listen_port
+        self.listen_enabled = listen_enabled
+        self.backlog = backlog
+        self.idle_timeout_seconds = idle_timeout_seconds
         self._state = TransportState.STOPPED
         self._inbound_packet_handler: InboundPacketHandler | None = None
         self._server: asyncio.AbstractServer | None = None
@@ -55,12 +58,12 @@ class TcpTransportAdapter(TransportAdapter):
             return
 
         self._state = TransportState.STARTING
-        if self.config.listen_enabled:
+        if self.listen_enabled:
             self._server = await asyncio.start_server(
                 self._handle_connection,
-                host=self.config.listen_host,
-                port=self.config.listen_port,
-                backlog=self.config.backlog,
+                host=self.listen_host,
+                port=self.listen_port,
+                backlog=self.backlog,
             )
         self._state = TransportState.STARTED
 
@@ -180,7 +183,7 @@ class TcpTransportAdapter(TransportAdapter):
             while True:
                 payload = await asyncio.wait_for(
                     LengthPrefixedFrameCodec.read_frame(reader),
-                    timeout=self.config.idle_timeout_seconds,
+                    timeout=self.idle_timeout_seconds,
                 )
                 connection = self._connections.get(connection_key)
                 if connection is not None:

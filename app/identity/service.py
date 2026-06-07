@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 
 from common import compact_json_text, load_json_object, utc_now
 from crypto import generate_dilithium_key_pair, sha512_hex
@@ -25,6 +25,7 @@ from .models import (
     RemotePhysicalNodeExchangeCandidate,
     RemotePhysicalNodeEndpointResult,
     RemotePhysicalNodePingCandidate,
+    RemotePhysicalRelayCandidate,
     RemotePhysicalNodeRouteCandidate,
     RemotePhysicalNodeValidationCandidate,
     VirtualNodeIdentityCreateInput,
@@ -310,6 +311,10 @@ class IdentityService:
                 port=endpoint.port,
                 priority=endpoint.priority,
                 metadata_json=endpoint.metadata_json,
+                is_active=endpoint.is_active,
+                failure_count=endpoint.failure_count,
+                last_success_at=endpoint.last_success_at,
+                last_failure_at=endpoint.last_failure_at,
             )
             for endpoint in endpoints
         ]
@@ -378,6 +383,37 @@ class IdentityService:
             remote_nodes = list(session.scalars(query).all())
 
         return [RemotePhysicalNodePingCandidate(node_id=remote_node.id) for remote_node in remote_nodes]
+
+    def list_remote_physical_nodes_for_relay_registration(
+        self,
+        *,
+        limit: int = 8,
+    ) -> list[RemotePhysicalRelayCandidate]:
+        with self.database.session_scope() as session:
+            query = (
+                select(RemotePhysicalNodeIdentity)
+                .join(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
+                .where(RemotePhysicalNodeIdentity.status == "active")
+                .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .where(RemotePhysicalNodeIdentity.relay_capable.is_(True))
+                .where(NodeEndpoint.is_active.is_(True))
+                .where(NodeEndpoint.transport == "tcp")
+                .where(NodeEndpoint.host.is_not(None))
+                .where(NodeEndpoint.port.is_not(None))
+                .distinct()
+                .order_by(func.random())
+                .limit(limit)
+            )
+            query = self._exclude_local_physical_node(session, query)
+            remote_nodes = list(session.scalars(query).all())
+
+        return [
+            RemotePhysicalRelayCandidate(node_id=remote_node.id)
+            for remote_node in remote_nodes
+        ]
 
     def list_remote_physical_nodes_for_random_walk_ttl(
         self,
@@ -479,6 +515,56 @@ class IdentityService:
                 NodeEndpoint.is_active,
                 NodeEndpoint.failure_count,
             )
+            reachability_rows_query = (
+                select(
+                    RemotePhysicalNodeIdentity.reachability_class,
+                    RemotePhysicalNodeIdentity.relay_capable,
+                    func.count(),
+                )
+                .select_from(RemotePhysicalNodeIdentity)
+                .group_by(
+                    RemotePhysicalNodeIdentity.reachability_class,
+                    RemotePhysicalNodeIdentity.relay_capable,
+                )
+            )
+            endpoint_transport_rows_query = (
+                select(
+                    NodeEndpoint.transport,
+                    NodeEndpoint.is_active,
+                    func.count(func.distinct(NodeEndpoint.physical_node_hash_id)),
+                )
+                .group_by(NodeEndpoint.transport, NodeEndpoint.is_active)
+            )
+            not_ready_nodes_query = (
+                select(
+                    RemotePhysicalNodeIdentity.id,
+                    RemotePhysicalNodeIdentity.status,
+                    RemotePhysicalNodeIdentity.reachability_class,
+                    RemotePhysicalNodeIdentity.relay_capable,
+                    RemotePhysicalNodeIdentity.last_seen_at,
+                    RemotePhysicalNodeIdentity.last_validated_at,
+                    func.count(NodeEndpoint.id),
+                    func.sum(
+                        case(
+                            (
+                                NodeEndpoint.is_active.is_(True),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                )
+                .select_from(RemotePhysicalNodeIdentity)
+                .outerjoin(
+                    NodeEndpoint,
+                    NodeEndpoint.physical_node_hash_id == RemotePhysicalNodeIdentity.id,
+                )
+                .group_by(RemotePhysicalNodeIdentity.id)
+                .order_by(
+                    RemotePhysicalNodeIdentity.last_seen_at.desc().nullslast(),
+                    RemotePhysicalNodeIdentity.updated_at.desc(),
+                )
+            )
 
             total_remote_nodes = session.scalar(
                 self._exclude_local_physical_node(session, total_remote_nodes_query)
@@ -511,6 +597,21 @@ class IdentityService:
                 NodeEndpoint.id.desc(),
             ).limit(8)
             endpoint_rows = list(session.execute(endpoint_rows_query).all())
+            if local_node_id is not None:
+                reachability_rows_query = reachability_rows_query.where(
+                    RemotePhysicalNodeIdentity.id != local_node_id
+                )
+                endpoint_transport_rows_query = endpoint_transport_rows_query.where(
+                    NodeEndpoint.physical_node_hash_id != local_node_id
+                )
+                not_ready_nodes_query = not_ready_nodes_query.where(
+                    RemotePhysicalNodeIdentity.id != local_node_id
+                )
+            reachability_rows = list(session.execute(reachability_rows_query).all())
+            endpoint_transport_rows = list(
+                session.execute(endpoint_transport_rows_query).all()
+            )
+            not_ready_rows = list(session.execute(not_ready_nodes_query.limit(12)).all())
 
         return {
             "total_remote_nodes": int(total_remote_nodes),
@@ -530,6 +631,48 @@ class IdentityService:
                     "failure_count": failure_count,
                 }
                 for node_id, transport, host, port, is_active, failure_count in endpoint_rows
+            ],
+            "reachability_counts": [
+                {
+                    "reachability": reachability_class or "unknown",
+                    "relay_capable": bool(relay_capable),
+                    "count": int(count),
+                }
+                for reachability_class, relay_capable, count in reachability_rows
+            ],
+            "endpoint_transport_counts": [
+                {
+                    "transport": transport,
+                    "is_active": bool(is_active),
+                    "node_count": int(node_count),
+                }
+                for transport, is_active, node_count in endpoint_transport_rows
+            ],
+            "recent_remote_node_readiness": [
+                {
+                    "node_id": node_id,
+                    "status": status,
+                    "reachability": reachability_class,
+                    "relay_capable": bool(relay_capable),
+                    "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
+                    "last_validated_at": (
+                        last_validated_at.isoformat()
+                        if last_validated_at
+                        else None
+                    ),
+                    "endpoint_count": int(endpoint_count or 0),
+                    "active_endpoint_count": int(active_endpoint_count or 0),
+                }
+                for (
+                    node_id,
+                    status,
+                    reachability_class,
+                    relay_capable,
+                    last_seen_at,
+                    last_validated_at,
+                    endpoint_count,
+                    active_endpoint_count,
+                ) in not_ready_rows
             ],
         }
 

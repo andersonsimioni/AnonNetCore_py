@@ -152,7 +152,7 @@ class RouteExecuteClient(EngineBoundComponent):
         direction: str,
     ) -> dict[str, object]:
         if direction not in {"vn_to_pn", "pn_to_vn"}:
-            raise ValueError("direction precisa ser 'vn_to_pn' ou 'pn_to_vn'.")
+            raise ValueError("direction must be 'vn_to_pn' or 'pn_to_vn'.")
 
         if not virtual_envelope_ciphered:
             return {
@@ -163,7 +163,7 @@ class RouteExecuteClient(EngineBoundComponent):
             }
 
         if not virtual_session_id:
-            raise ValueError("virtual_session_id e obrigatorio para enviar virtual_envelope cifrado.")
+            raise ValueError("virtual_session_id is required to send an encrypted virtual envelope.")
 
         session = self.engine.services.session_manager.get_session_by_session_id(virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:

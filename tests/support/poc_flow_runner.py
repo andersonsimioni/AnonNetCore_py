@@ -163,7 +163,6 @@ def create_api_core(
         physical_tcp_listen_port=listen_port,
         log_dir=log_dir,
     )
-    config.network_pow_difficulty_bits = SMOKES_CONFIG.network_pow_difficulty_bits
     config.api_enabled = True
     config.api_host = "127.0.0.1"
     config.api_port = api_port
@@ -178,9 +177,6 @@ def create_api_core(
     )
     config.virtual_route_min_published_routes = (
         SMOKES_CONFIG.test_core_route_min_online_routes
-    )
-    config.virtual_route_max_pending_builds_before_first_route = (
-        SMOKES_CONFIG.route_max_pending_before_first_route(cluster_nodes)
     )
     config.default_random_walk_ttl_ms = (
         SMOKES_CONFIG.route_expected_round_trip_ttl_ms(cluster_nodes)
@@ -208,7 +204,10 @@ def create_api_core(
     config.virtual_session_drt_lookup_timeout_seconds = (
         SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(cluster_nodes)
     )
-    config.session_handshake_timeout_seconds = (
+    config.physical_session_handshake_timeout_seconds = (
+        SMOKES_CONFIG.test_core_physical_session_handshake_timeout_seconds
+    )
+    config.virtual_session_handshake_timeout_seconds = (
         SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(cluster_nodes)
     )
 

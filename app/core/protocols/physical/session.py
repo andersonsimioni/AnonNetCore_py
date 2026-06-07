@@ -207,6 +207,17 @@ class SessionProtocolHandler(ProtocolMessageHandler):
             initiator_physical_node_id=initiator_physical_node_id,
             services=services,
         )
+        services.log_service.debug(
+            "physical_session",
+            "received physical session init",
+            session_id=session_id,
+            initiator_physical_node_id=initiator_physical_node_id,
+            context_transport=context.transport_name,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            context_metadata=context.metadata,
+            advertised_endpoint_count=len(payload.get("initiator_endpoints") or []),
+        )
         remote_node = services.identity_service.get_remote_physical_node_by_id(initiator_physical_node_id)
         resolved_transport, resolved_host, resolved_port, endpoint_source = self._resolve_preferred_remote_endpoint(
             services=services,
@@ -231,7 +242,32 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         services.session_manager.update_session_state(
             session_id,
-            data=_build_endpoint_metadata_update(endpoint_source, context.metadata),
+            data=_build_endpoint_metadata_update(
+                endpoint_source,
+                _merge_endpoint_metadata(
+                    _find_known_endpoint_metadata(
+                        services=services,
+                        remote_physical_node_id=initiator_physical_node_id,
+                        transport=resolved_transport,
+                        host=resolved_host,
+                        port=resolved_port,
+                    ),
+                    context.metadata,
+                ),
+                fallback_target_physical_node_id=initiator_physical_node_id,
+            ),
+        )
+        refreshed_session = services.session_manager.get_session_by_session_id(session_id)
+        services.log_service.debug(
+            "physical_session",
+            "stored inbound physical session endpoint",
+            session_id=session_id,
+            initiator_physical_node_id=initiator_physical_node_id,
+            resolved_transport=resolved_transport,
+            resolved_host=resolved_host,
+            resolved_port=resolved_port,
+            endpoint_source=endpoint_source,
+            metadata_json=refreshed_session.metadata_json if refreshed_session else None,
         )
 
         ephemeral_key_pair = generate_kyber_key_pair()
@@ -307,8 +343,29 @@ class SessionProtocolHandler(ProtocolMessageHandler):
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None:
+            services.log_service.warning(
+                "physical_session",
+                "received session init ok for unknown session",
+                session_id=session_id,
+                context_transport=context.transport_name,
+                observed_remote_host=context.remote_host,
+                observed_remote_port=context.remote_port,
+                context_metadata=context.metadata,
+            )
             return self._build_invalid_result(envelope, "physical_session_not_found")
 
+        services.log_service.debug(
+            "physical_session",
+            "received physical session init ok",
+            session_id=session_id,
+            current_session_state=session.session_state,
+            current_handshake_state=session.handshake_state,
+            context_transport=context.transport_name,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            context_metadata=context.metadata,
+            metadata_json=session.metadata_json,
+        )
         self._refresh_session_remote_endpoint(
             session_id=session_id,
             services=services,
@@ -399,8 +456,30 @@ class SessionProtocolHandler(ProtocolMessageHandler):
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.local_ephemeral_private_key:
+            services.log_service.warning(
+                "physical_session",
+                "received key confirm for session without local ephemeral key",
+                session_id=session_id,
+                session_found=session is not None,
+                current_session_state=session.session_state if session else None,
+                current_handshake_state=session.handshake_state if session else None,
+                context_transport=context.transport_name,
+                context_metadata=context.metadata,
+            )
             return self._build_invalid_result(envelope, "physical_session_ephemeral_key_not_found")
 
+        services.log_service.debug(
+            "physical_session",
+            "received physical session key confirm",
+            session_id=session_id,
+            current_session_state=session.session_state,
+            current_handshake_state=session.handshake_state,
+            context_transport=context.transport_name,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            context_metadata=context.metadata,
+            metadata_json=session.metadata_json,
+        )
         self._refresh_session_remote_endpoint(
             session_id=session_id,
             services=services,
@@ -462,8 +541,30 @@ class SessionProtocolHandler(ProtocolMessageHandler):
 
         session = services.session_manager.get_session_by_session_id(session_id)
         if session is None or not session.shared_secret_hex:
+            services.log_service.warning(
+                "physical_session",
+                "received ready for session without shared secret",
+                session_id=session_id,
+                session_found=session is not None,
+                current_session_state=session.session_state if session else None,
+                current_handshake_state=session.handshake_state if session else None,
+                context_transport=context.transport_name,
+                context_metadata=context.metadata,
+            )
             return self._build_invalid_result(envelope, "physical_session_shared_secret_not_found")
 
+        services.log_service.debug(
+            "physical_session",
+            "received physical session ready",
+            session_id=session_id,
+            current_session_state=session.session_state,
+            current_handshake_state=session.handshake_state,
+            context_transport=context.transport_name,
+            observed_remote_host=context.remote_host,
+            observed_remote_port=context.remote_port,
+            context_metadata=context.metadata,
+            metadata_json=session.metadata_json,
+        )
         self._refresh_session_remote_endpoint(
             session_id=session_id,
             services=services,
@@ -921,7 +1022,20 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         )
         services.session_manager.update_session_state(
             session_id,
-            data=_build_endpoint_metadata_update(endpoint_source, context.metadata),
+            data=_build_endpoint_metadata_update(
+                endpoint_source,
+                _merge_endpoint_metadata(
+                    _find_known_endpoint_metadata(
+                        services=services,
+                        remote_physical_node_id=session.remote_identity_id,
+                        transport=resolved_transport,
+                        host=resolved_host,
+                        port=resolved_port,
+                    ),
+                    context.metadata,
+                ),
+                fallback_target_physical_node_id=session.remote_identity_id,
+            ),
         )
         services.log_service.debug(
             "physical_session",
@@ -949,7 +1063,7 @@ class SessionProtocolHandler(ProtocolMessageHandler):
         fallback_host: str | None,
         fallback_port: int | None,
     ) -> tuple[str, str | None, int | None, str]:
-        if services.config.node_reachability == "private" and fallback_transport == "relay_tcp":
+        if fallback_transport == "relay_tcp":
             return fallback_transport, fallback_host, fallback_port, "relay"
 
         known_endpoints = services.identity_service.list_remote_physical_node_endpoints(remote_physical_node_id)
@@ -1025,14 +1139,21 @@ def _read_session_id(envelope: ProtocolEnvelope) -> str | None:
 def _build_endpoint_metadata_update(
     endpoint_source: str,
     context_metadata: dict[str, object] | None = None,
+    fallback_target_physical_node_id: str | None = None,
 ) -> SessionStateUpdateInput:
     metadata = {
         key: value
         for key, value in (context_metadata or {}).items()
-        if key in {"relay_channel_id", "relay_physical_node_id", "target_physical_node_id"}
+        if key in {"relay_physical_node_id", "target_physical_node_id"}
         and isinstance(value, str)
         and value
     }
+    if (
+        "target_physical_node_id" not in metadata
+        and isinstance(fallback_target_physical_node_id, str)
+        and fallback_target_physical_node_id
+    ):
+        metadata["target_physical_node_id"] = fallback_target_physical_node_id
     metadata["physical_endpoint_source"] = endpoint_source
     return SessionStateUpdateInput(
         metadata_json=json.dumps(
@@ -1041,6 +1162,35 @@ def _build_endpoint_metadata_update(
             sort_keys=True,
         )
     )
+
+
+def _find_known_endpoint_metadata(
+    *,
+    services: EngineServices,
+    remote_physical_node_id: str,
+    transport: str | None,
+    host: str | None,
+    port: int | None,
+) -> dict[str, object]:
+    if transport is None or host is None or port is None:
+        return {}
+
+    for endpoint in services.identity_service.list_remote_physical_node_endpoints(
+        remote_physical_node_id
+    ):
+        if endpoint.transport == transport and endpoint.host == host and endpoint.port == port:
+            return load_json_object(endpoint.metadata_json)
+    return {}
+
+
+def _merge_endpoint_metadata(
+    endpoint_metadata: dict[str, object],
+    context_metadata: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        **endpoint_metadata,
+        **(context_metadata or {}),
+    }
 
 
 def _read_endpoint_source(metadata_json: str | None) -> str | None:

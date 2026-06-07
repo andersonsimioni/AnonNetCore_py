@@ -76,6 +76,33 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         )
         return route_create.to_payload(strategy_name=self.strategy_name)
 
+    def build_route_pow_details(
+        self,
+        *,
+        pk_final_physical_node: str,
+        nonce: int | None,
+        difficulty_bits: int,
+    ) -> dict[str, object]:
+        if nonce is None:
+            return _build_route_pow_details(
+                route_create=None,
+                difficulty_bits=difficulty_bits,
+            )
+
+        route_create = RandomWalkTtlRouteCreate(
+            pk_final_physical_node=_require_non_empty_string(
+                pk_final_physical_node,
+                field_name="pk_final_physical_node",
+            ),
+            remaining_ttl_ms=1,
+            path_id="pow-probe",
+            nonce=_require_non_negative_int(nonce, field_name="nonce"),
+        )
+        return _build_route_pow_details(
+            route_create=route_create,
+            difficulty_bits=difficulty_bits,
+        )
+
     async def handle_route_create(
         self,
         *,
@@ -86,17 +113,55 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         del context
 
         route_create = self._parse_route_create(envelope.payload)
-        if not _is_valid_route_pow(
+        pow_details = _build_route_pow_details(
             route_create=route_create,
             difficulty_bits=services.config.network_pow_difficulty_bits,
-        ):
+        )
+        if not pow_details["is_valid"]:
+            services.log_service.warning(
+                "route_build",
+                "received route create with invalid proof of work",
+                path_id=route_create.path_id,
+                route_nonce=route_create.nonce,
+                remaining_ttl_ms=route_create.remaining_ttl_ms,
+                pow_difficulty_bits=services.config.network_pow_difficulty_bits,
+                pow_canonical_hash=pow_details["canonical_hash"],
+                pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+            )
             return self._build_invalid_result(envelope, reason="invalid_route_create_pow")
+
+        services.log_service.debug(
+            "route_build",
+            "validated route create proof of work",
+            path_id=route_create.path_id,
+            route_nonce=route_create.nonce,
+            remaining_ttl_ms=route_create.remaining_ttl_ms,
+            pow_difficulty_bits=services.config.network_pow_difficulty_bits,
+            pow_canonical_hash=pow_details["canonical_hash"],
+            pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+        )
 
         local_node = services.identity_service.get_local_physical_node_result()
         if local_node is None:
             return self._build_invalid_result(envelope, reason="local_physical_node_not_initialized")
 
-        if local_node.public_key == route_create.pk_final_physical_node:
+        final_physical_node_id = _build_physical_node_id(route_create.pk_final_physical_node)
+        local_is_final_physical_node = local_node.public_key == route_create.pk_final_physical_node
+        services.log_service.info(
+            "route_build",
+            "route create final node decision",
+            path_id=route_create.path_id,
+            route_nonce=route_create.nonce,
+            local_physical_node_id=local_node.id,
+            expected_final_physical_node_id=final_physical_node_id,
+            local_is_final_physical_node=local_is_final_physical_node,
+            physical_session_id=_read_header_value(envelope, "physical_session_id"),
+            message_id=_read_header_value(envelope, "message_id"),
+            message_sequence=_read_header_value(envelope, "message_sequence"),
+            remaining_ttl_ms=route_create.remaining_ttl_ms,
+        )
+
+        if local_is_final_physical_node:
             return await self._handle_route_create_as_final_node(
                 envelope=envelope,
                 services=services,
@@ -336,6 +401,16 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         if local_node is None:
             return self._build_invalid_result(envelope, reason="local_physical_node_not_initialized")
 
+        services.log_service.info(
+            "route_build",
+            "route build trace reached final physical node",
+            path_id=route_create.path_id,
+            route_nonce=route_create.nonce,
+            previous_physical_node_id=previous_physical_node_id,
+            final_physical_node_id=local_node.id,
+            remaining_ttl_ms=route_create.remaining_ttl_ms,
+        )
+
         kyber_key_pair = generate_kyber_key_pair()
         physical_node_signature = _sign_route_kem_public_key_offer(
             kyber_public_key_pem=kyber_key_pair.public_key_pem,
@@ -424,6 +499,18 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         if updated_state is None:
             return self._build_invalid_result(envelope, reason="route_initiator_state_not_found")
 
+        services.log_service.info(
+            "route_build",
+            "route build trace received kem info at initiator",
+            path_id=route_path_id,
+            final_path_id=final_path_id,
+            local_virtual_node_id=local_virtual_node.id,
+            first_hop_physical_node_id=initiator_state.first_hop_physical_node_id,
+            final_physical_node_id=final_physical_node_id,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            initiator_status=updated_state.status,
+        )
+
         encrypted_payload = aes_encrypt_text(
             json.dumps(
                 {
@@ -470,6 +557,15 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         )
         if route_endpoint_state is None:
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
+
+        services.log_service.info(
+            "route_build",
+            "route build trace validation request reached final physical node",
+            path_id=validation_request.path_id,
+            endpoint_status=route_endpoint_state.status,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            route_nonce=route_endpoint_state.route_nonce,
+        )
 
         shared_secret_hex = kyber_decapsulate_hex(
             validation_request.kem_ciphertext_hex,
@@ -549,6 +645,18 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         if updated_endpoint_resolution is None:
             return self._build_invalid_result(envelope, reason="route_endpoint_state_not_found")
 
+        services.log_service.info(
+            "route_build",
+            "route build trace validation accepted by final physical node",
+            path_id=validation_request.path_id,
+            final_path_id=final_path_id,
+            ping_id=ping_id,
+            virtual_node_id=virtual_node_id,
+            final_physical_node_id=final_physical_node_id,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            endpoint_status=updated_endpoint_resolution.status,
+        )
+
         services.log_service.debug(
             "route_build",
             "prepared route ping validation",
@@ -614,6 +722,15 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
 
         if initiator_state.final_path_id and final_path_id != initiator_state.final_path_id:
             return self._build_invalid_result(envelope, reason="invalid_route_create_ok_final_path_id")
+
+        services.log_service.info(
+            "route_build",
+            "route build trace route ok reached initiator",
+            path_id=route_create_ok.path_id,
+            final_path_id=final_path_id,
+            virtual_node_id=virtual_node_id,
+            initiator_status=initiator_state.status,
+        )
 
         if (
             initiator_state.virtual_node_signature
@@ -682,6 +799,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             virtual_node_signature=virtual_node_signature,
             physical_node_signature=physical_node_signature,
             public_route_acceptance_signature=route_create_ok.public_route_acceptance_signature,
+        )
+        services.log_service.info(
+            "route_build",
+            "route build trace initiator route marked active",
+            path_id=route_create_ok.path_id,
+            final_path_id=final_path_id,
+            virtual_node_id=virtual_node_id,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -896,6 +1020,18 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             has_public_route_acceptance_signature=bool(
                 route_endpoint_state.public_route_acceptance_signature
             ),
+        )
+        services.log_service.info(
+            "route_build",
+            "route build trace pong reached final physical node",
+            path_id=route_create_pong.path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            ping_id=route_create_pong.ping_id,
+            expected_ping_id=last_ping_id,
+            endpoint_status=route_endpoint_state.status,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
+            remote_virtual_node_id=remote_virtual_node_id,
         )
 
         if last_ping_id != route_create_pong.ping_id:
@@ -1162,11 +1298,24 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         virtual_node_id: str,
     ) -> dict[str, object] | None:
         try:
+            trace_context = {
+                "source": "route_create_drt_publish",
+                "path_id": path_id,
+                "final_path_id": final_path_id,
+                "virtual_node_id": virtual_node_id,
+                "drt_key": drt_key,
+            }
+            services.log_service.debug(
+                "route_build",
+                "route build trace publishing drt through dht",
+                **trace_context,
+            )
             publish_result = await services.protocol_clients.physical.dht.publish(
                 namespace=str(drt_publish_request["namespace"]),
                 logical_key=str(drt_publish_request["logical_key"]),
                 record_json=str(drt_publish_request["record_json"]),
                 expires_at=str(drt_publish_request["expires_at"]),
+                trace_context=trace_context,
             )
         except asyncio.TimeoutError:
             services.log_service.warning(
@@ -1342,8 +1491,26 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             received_path_id=path_id,
         )
         if mapping is None:
+            services.log_service.debug(
+                "route_build",
+                "route forward path not found; treating message as local endpoint",
+                path_id=path_id,
+            )
             return None
 
+        services.log_service.debug(
+            "route_build",
+            "route forward path resolved",
+            current_path_id=path_id,
+            next_path_id=mapping.generated_path_id,
+            target_remote_physical_node_id=mapping.to_physical_node_id,
+            received_path_id=mapping.received_path_id,
+            generated_path_id=mapping.generated_path_id,
+            from_physical_node_id=mapping.from_physical_node_id,
+            to_physical_node_id=mapping.to_physical_node_id,
+            status=mapping.status,
+            metadata=load_json_object(mapping.metadata_json),
+        )
         return BuildPathResolution(
             action="forward_vn_to_pn",
             next_path_id=mapping.generated_path_id,
@@ -1356,16 +1523,36 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             generated_path_id=path_id,
         )
         if mapping is None:
+            services.log_service.debug(
+                "route_build",
+                "route reverse path not found; treating message as local initiator/final endpoint",
+                path_id=path_id,
+            )
             return None
 
+        from_physical_session_id = _read_optional_metadata_string(
+            mapping.metadata_json,
+            "from_physical_session_id",
+        )
+        services.log_service.debug(
+            "route_build",
+            "route reverse path resolved",
+            current_path_id=path_id,
+            next_path_id=mapping.received_path_id,
+            target_remote_physical_node_id=mapping.from_physical_node_id,
+            target_physical_session_id=from_physical_session_id,
+            received_path_id=mapping.received_path_id,
+            generated_path_id=mapping.generated_path_id,
+            from_physical_node_id=mapping.from_physical_node_id,
+            to_physical_node_id=mapping.to_physical_node_id,
+            status=mapping.status,
+            metadata=load_json_object(mapping.metadata_json),
+        )
         return BuildPathResolution(
             action="forward_pn_to_vn",
             next_path_id=mapping.received_path_id,
             target_remote_physical_node_id=mapping.from_physical_node_id,
-            target_physical_session_id=_read_optional_metadata_string(
-                mapping.metadata_json,
-                "from_physical_session_id",
-            ),
+            target_physical_session_id=from_physical_session_id,
         )
 
     def _select_next_candidate(
@@ -1379,6 +1566,24 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
         route_candidates = services.identity_service.list_remote_physical_nodes_for_random_walk_ttl(
             limit=services.config.random_walk_candidate_limit,
         )
+        services.log_service.debug(
+            "route_build",
+            "random walk candidate inventory",
+            final_physical_node_id=final_physical_node_id,
+            previous_physical_node_id=previous_physical_node_id,
+            remaining_ttl_ms=remaining_ttl_ms,
+            candidate_count=len(route_candidates),
+            route_ready_candidates=[
+                {
+                    "node_id": candidate.node_id,
+                    "average_rtt_ms": candidate.average_rtt_ms,
+                    "one_way_rtt_ms": _build_one_way_rtt_ms(candidate.average_rtt_ms),
+                    "session_count": getattr(candidate, "session_count", None),
+                    "endpoint_count": getattr(candidate, "endpoint_count", None),
+                }
+                for candidate in route_candidates[:20]
+            ],
+        )
 
         eligible_intermediaries = [
             candidate
@@ -1388,8 +1593,19 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             and _build_one_way_rtt_ms(candidate.average_rtt_ms) < remaining_ttl_ms
         ]
         if eligible_intermediaries:
+            selected = random.choice(eligible_intermediaries)
+            services.log_service.debug(
+                "route_build",
+                "random walk selected eligible intermediary",
+                selected_physical_node_id=selected.node_id,
+                final_physical_node_id=final_physical_node_id,
+                previous_physical_node_id=previous_physical_node_id,
+                remaining_ttl_ms=remaining_ttl_ms,
+                eligible_count=len(eligible_intermediaries),
+                selected_average_rtt_ms=selected.average_rtt_ms,
+            )
             return _as_route_candidate_selection(
-                random.choice(eligible_intermediaries),
+                selected,
                 selection_reason="eligible_intermediary",
             )
 
@@ -1402,12 +1618,26 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             None,
         )
         if final_candidate is not None:
+            services.log_service.debug(
+                "route_build",
+                "random walk selected final candidate",
+                final_physical_node_id=final_physical_node_id,
+                previous_physical_node_id=previous_physical_node_id,
+                remaining_ttl_ms=remaining_ttl_ms,
+                final_average_rtt_ms=final_candidate.average_rtt_ms,
+            )
             return _as_route_candidate_selection(
                 final_candidate,
                 selection_reason="final_candidate",
             )
 
         if previous_physical_node_id == final_physical_node_id:
+            services.log_service.debug(
+                "route_build",
+                "random walk selected final fallback because previous is final",
+                final_physical_node_id=final_physical_node_id,
+                remaining_ttl_ms=remaining_ttl_ms,
+            )
             return RandomWalkTtlRouteCandidateSelection(
                 node_id=final_physical_node_id,
                 average_rtt_ms=0.0,
@@ -1425,6 +1655,14 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             None,
         )
         if previous_candidate is not None:
+            services.log_service.debug(
+                "route_build",
+                "random walk revisiting previous hop",
+                previous_physical_node_id=previous_physical_node_id,
+                final_physical_node_id=final_physical_node_id,
+                remaining_ttl_ms=remaining_ttl_ms,
+                previous_average_rtt_ms=previous_candidate.average_rtt_ms,
+            )
             return _as_route_candidate_selection(
                 previous_candidate,
                 selection_reason="previous_hop_revisit",
@@ -1432,12 +1670,28 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
 
         fallback_previous_hop_rtt_ms = services.config.random_walk_previous_hop_fallback_rtt_ms
         if previous_physical_node_id != final_physical_node_id and fallback_previous_hop_rtt_ms < remaining_ttl_ms:
+            services.log_service.debug(
+                "route_build",
+                "random walk revisiting previous hop using fallback rtt",
+                previous_physical_node_id=previous_physical_node_id,
+                final_physical_node_id=final_physical_node_id,
+                remaining_ttl_ms=remaining_ttl_ms,
+                fallback_previous_hop_rtt_ms=fallback_previous_hop_rtt_ms,
+            )
             return RandomWalkTtlRouteCandidateSelection(
                 node_id=previous_physical_node_id,
                 average_rtt_ms=fallback_previous_hop_rtt_ms,
                 selection_reason="previous_hop_revisit_without_rtt",
             )
 
+        services.log_service.debug(
+            "route_build",
+            "random walk selected final fallback without candidate",
+            final_physical_node_id=final_physical_node_id,
+            previous_physical_node_id=previous_physical_node_id,
+            remaining_ttl_ms=remaining_ttl_ms,
+            candidate_count=len(route_candidates),
+        )
         return RandomWalkTtlRouteCandidateSelection(
             node_id=final_physical_node_id,
             average_rtt_ms=0.0,
@@ -1676,17 +1930,48 @@ def _is_valid_route_pow(
     route_create: RandomWalkTtlRouteCreate,
     difficulty_bits: int,
 ) -> bool:
-    if difficulty_bits <= 0:
-        return True
+    return _build_route_pow_details(
+        route_create=route_create,
+        difficulty_bits=difficulty_bits,
+    )["is_valid"]
 
-    hash_bits = _build_route_pow_hash_bits(route_create)
-    return hash_bits.startswith("0" * difficulty_bits)
+
+def _build_route_pow_details(
+    *,
+    route_create: RandomWalkTtlRouteCreate | None,
+    difficulty_bits: int,
+) -> dict[str, object]:
+    if route_create is None:
+        return {
+            "canonical_hash": None,
+            "proof_hash": None,
+            "proof_hash_prefix": None,
+            "difficulty_bits": difficulty_bits,
+            "nonce": None,
+            "is_valid": False,
+        }
+
+    canonical_payload_bytes = _build_route_pow_canonical_payload(route_create)
+    canonical_hash = sha512_hex(canonical_payload_bytes)
+    pow_material = canonical_payload_bytes + b"|" + str(route_create.nonce).encode("utf-8")
+    proof_hash = sha512_hex(pow_material)
+    proof_bits = bin(int(proof_hash, 16))[2:].zfill(512)
+    return {
+        "canonical_hash": canonical_hash,
+        "proof_hash": proof_hash,
+        "proof_hash_prefix": proof_hash[:16],
+        "difficulty_bits": difficulty_bits,
+        "nonce": route_create.nonce,
+        "is_valid": difficulty_bits <= 0 or proof_bits.startswith("0" * difficulty_bits),
+    }
 
 
 def _build_route_pow_hash_bits(route_create: RandomWalkTtlRouteCreate) -> str:
-    canonical_payload_bytes = _build_route_pow_canonical_payload(route_create)
-    pow_material = canonical_payload_bytes + b"|" + str(route_create.nonce).encode("utf-8")
-    return bin(int(sha512_hex(pow_material), 16))[2:].zfill(512)
+    proof_hash = _build_route_pow_details(
+        route_create=route_create,
+        difficulty_bits=0,
+    )["proof_hash"]
+    return bin(int(str(proof_hash), 16))[2:].zfill(512)
 
 
 def _build_route_pow_canonical_payload(route_create: RandomWalkTtlRouteCreate) -> bytes:
@@ -1910,6 +2195,13 @@ def _read_optional_metadata_string(metadata_json: str | None, key: str) -> str |
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _read_header_value(envelope, key: str) -> object:
+    header = getattr(envelope, "header", None)
+    if not isinstance(header, dict):
+        return None
+    return header.get(key)
 
 
 def _build_route_encrypted_payload_aad(*, message_type: str) -> bytes:

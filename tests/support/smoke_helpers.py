@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import os
 import platform
 from pathlib import Path
 import subprocess
@@ -51,12 +52,15 @@ def reset_cluster() -> None:
 def start_cluster(*, node_count: int) -> None:
     node_count = resolve_cluster_node_count(node_count)
     detach_argument = "-Detach" if platform.system().lower() == "windows" else "--detach"
+    cluster_profiles = os.getenv("ANONNET_CLUSTER_PROFILES")
     command = [
         sys.executable,
         str(PROJECT_ROOT / "cluster" / "up_nodes.py"),
         str(node_count),
         detach_argument,
     ]
+    if cluster_profiles:
+        command.extend(["--profiles", cluster_profiles])
     print(f"starting docker cluster: nodes={node_count}")
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
 
@@ -194,9 +198,6 @@ def create_test_core(
             SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
         ),
         virtual_route_min_online_routes=virtual_route_min_online_routes,
-        virtual_route_max_pending_before_first_route=(
-            SMOKES_CONFIG.route_max_pending_before_first_route(cluster_nodes)
-        ),
         random_walk_ttl_acceptance_error_ms=(
             SMOKES_CONFIG.route_acceptance_error_ms(cluster_nodes)
         ),
@@ -205,7 +206,10 @@ def create_test_core(
         virtual_session_drt_lookup_timeout_seconds=(
             SMOKES_CONFIG.virtual_session_drt_lookup_timeout_seconds(cluster_nodes)
         ),
-        session_handshake_timeout_seconds=(
+        physical_session_handshake_timeout_seconds=(
+            SMOKES_CONFIG.test_core_physical_session_handshake_timeout_seconds
+        ),
+        virtual_session_handshake_timeout_seconds=(
             SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(cluster_nodes)
         ),
         bootstrap_public_endpoints=build_local_cluster_bootstrap_endpoints(),
@@ -248,6 +252,7 @@ async def wait_for_network_ready(
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     last_ready_count = -1
     last_forced_exchange_at = 0.0
+    last_diagnostic_at = 0.0
 
     while asyncio.get_running_loop().time() < deadline:
         now = asyncio.get_running_loop().time()
@@ -261,7 +266,11 @@ async def wait_for_network_ready(
         if ready_count == 0:
             await request_bootstrap_again(engine)
 
-        if ready_count != last_ready_count:
+        should_print_diagnostics = (
+            ready_count != last_ready_count
+            or now - last_diagnostic_at >= SMOKES_CONFIG.network_ready_diagnostic_interval_seconds
+        )
+        if should_print_diagnostics:
             diagnostics = engine.services.identity_service.build_remote_physical_node_route_diagnostics()
             print(
                 "waiting network ready: "
@@ -271,6 +280,7 @@ async def wait_for_network_ready(
                 f"diagnostics={diagnostics}"
             )
             last_ready_count = ready_count
+            last_diagnostic_at = now
 
         if now - last_forced_exchange_at >= SMOKES_CONFIG.forced_exchange_interval_seconds:
             await request_known_nodes_from_active_peers(engine)
@@ -513,11 +523,11 @@ async def wait_for_drt_online_route_count(
         if not isinstance(record, DrtRecordPayload):
             return None
 
-        online_routes = [
+        online_routes = sorted({
             entry.final_path_id
             for entry in record.route_entries
             if entry.final_path_id
-        ]
+        })
         if len(online_routes) < minimum_routes:
             print(
                 "waiting DRT online routes: "

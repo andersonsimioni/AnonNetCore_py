@@ -5,7 +5,7 @@ from .models import OutboundMessage
 
 
 class TransportService:
-    """Servico central para envio e recebimento de mensagens de transporte."""
+    """Central service for sending and receiving transport messages."""
 
     def __init__(self) -> None:
         self._adapters: dict[str, TransportAdapter] = {}
@@ -13,7 +13,7 @@ class TransportService:
 
     def register_adapter(self, adapter: TransportAdapter) -> None:
         if adapter.transport_name in self._adapters:
-            raise ValueError(f"Transporte '{adapter.transport_name}' ja registrado.")
+            raise ValueError(f"Transport '{adapter.transport_name}' is already registered.")
 
         adapter.set_inbound_packet_handler(self._dispatch_inbound_packet)
         self._adapters[adapter.transport_name] = adapter

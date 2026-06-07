@@ -43,9 +43,6 @@ def create_isolated_core(
         SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(SMOKES_CONFIG.min_cluster_nodes)
     ),
     virtual_route_min_online_routes: int = SMOKES_CONFIG.test_core_route_min_online_routes,
-    virtual_route_max_pending_before_first_route: int = (
-        SMOKES_CONFIG.route_max_pending_before_first_route(SMOKES_CONFIG.min_cluster_nodes)
-    ),
     random_walk_ttl_acceptance_error_ms: int = (
         SMOKES_CONFIG.route_acceptance_error_ms(SMOKES_CONFIG.min_cluster_nodes)
     ),
@@ -60,7 +57,10 @@ def create_isolated_core(
             SMOKES_CONFIG.min_cluster_nodes
         )
     ),
-    session_handshake_timeout_seconds: float = (
+    physical_session_handshake_timeout_seconds: float = (
+        SMOKES_CONFIG.test_core_physical_session_handshake_timeout_seconds
+    ),
+    virtual_session_handshake_timeout_seconds: float = (
         SMOKES_CONFIG.virtual_session_handshake_timeout_seconds(
             SMOKES_CONFIG.min_cluster_nodes
         )
@@ -85,7 +85,6 @@ def create_isolated_core(
         physical_udp_listen_port=physical_udp_listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
-    config.network_pow_difficulty_bits = SMOKES_CONFIG.network_pow_difficulty_bits
     if udp_enabled is not None:
         config.udp_transport_enabled = udp_enabled
     config.api_enabled = False
@@ -104,10 +103,6 @@ def create_isolated_core(
     )
     config.virtual_route_min_published_routes = max(1, virtual_route_min_online_routes)
     config.virtual_route_build_timeout_seconds = virtual_route_pending_timeout_seconds
-    config.virtual_route_max_pending_builds_before_first_route = max(
-        1,
-        virtual_route_max_pending_before_first_route,
-    )
     config.default_random_walk_ttl_ms = virtual_route_expected_round_trip_ttl_ms
     config.route_create_ok_drt_visibility_timeout_seconds = (
         route_create_ok_drt_visibility_timeout_seconds
@@ -128,7 +123,12 @@ def create_isolated_core(
     config.virtual_session_drt_lookup_timeout_seconds = (
         virtual_session_drt_lookup_timeout_seconds
     )
-    config.session_handshake_timeout_seconds = session_handshake_timeout_seconds
+    config.physical_session_handshake_timeout_seconds = (
+        physical_session_handshake_timeout_seconds
+    )
+    config.virtual_session_handshake_timeout_seconds = (
+        virtual_session_handshake_timeout_seconds
+    )
     config.physical_node_validation_runtime_interval_seconds = (
         SMOKES_CONFIG.test_core_physical_node_validation_interval_seconds
     )

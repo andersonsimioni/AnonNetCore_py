@@ -31,7 +31,7 @@ class PhysicalSessionClient:
     def __init__(self, engine) -> None:
         self.engine = engine
         self._handshake_timeout_seconds = (
-            self.engine.services.config.session_handshake_timeout_seconds
+            self.engine.services.config.physical_session_handshake_timeout_seconds
         )
         self._handshake_poll_interval_seconds = (
             self.engine.services.config.session_handshake_poll_interval_seconds
@@ -42,17 +42,31 @@ class PhysicalSessionClient:
         *,
         remote_physical_node_id: str,
     ) -> str:
-        existing_session = self.engine.services.session_manager.get_active_physical_session_by_remote_node_id(
-            remote_physical_node_id
-        )
-        if existing_session is not None and not is_observed_only_physical_session(existing_session):
+        existing_session = self._get_preferred_active_session(remote_physical_node_id)
+        if existing_session is not None:
             self.engine.services.log_service.debug(
                 "physical_session_client",
-                "reusing active physical session",
+                "found existing physical session candidate",
                 session_id=existing_session.session_id,
                 remote_physical_node_id=remote_physical_node_id,
+                transport=existing_session.transport,
+                session_state=existing_session.session_state,
+                handshake_state=existing_session.handshake_state,
+                observed_only=is_observed_only_physical_session(existing_session),
+                remote_host=existing_session.remote_host,
+                remote_port=existing_session.remote_port,
+                metadata_json=existing_session.metadata_json,
             )
-            return existing_session.session_id
+        if existing_session is not None and not is_observed_only_physical_session(existing_session):
+            if self._transport_preference(existing_session.transport) < self._transport_preference("udp"):
+                self.engine.services.log_service.debug(
+                    "physical_session_client",
+                    "reusing active physical session",
+                    session_id=existing_session.session_id,
+                    remote_physical_node_id=remote_physical_node_id,
+                    transport=existing_session.transport,
+                )
+                return existing_session.session_id
 
         local_node = self.engine.services.identity_service.get_local_physical_node_result()
         if local_node is None:
@@ -68,14 +82,43 @@ class PhysicalSessionClient:
         if not endpoints:
             raise ValueError("The remote physical node has no known endpoints.")
 
+        endpoints = self._sort_endpoints_by_transport_preference(endpoints)
+        attempted_endpoints: list[dict[str, object]] = []
+        if (
+            existing_session is not None
+            and not is_observed_only_physical_session(existing_session)
+            and all(
+                self._transport_preference(endpoint.transport) >= self._transport_preference("udp")
+                for endpoint in endpoints
+            )
+        ):
+            self.engine.services.log_service.debug(
+                "physical_session_client",
+                "reusing active udp physical session because no preferred endpoint exists",
+                session_id=existing_session.session_id,
+                remote_physical_node_id=remote_physical_node_id,
+                transport=existing_session.transport,
+            )
+            return existing_session.session_id
+
         self.engine.services.log_service.debug(
             "physical_session_client",
             "loaded candidate endpoints for physical session",
             remote_physical_node_id=remote_physical_node_id,
             endpoint_count=len(endpoints),
+            endpoints=_summarize_endpoint_results(endpoints),
+            local_transports=sorted(self.engine.services.transport.adapters.keys()),
+            remote_reachability=getattr(remote_node, "reachability_class", None),
+            remote_relay_capable=getattr(remote_node, "relay_capable", None),
         )
-        for endpoint_data in endpoints:
+        for attempt_index, endpoint_data in enumerate(endpoints, start=1):
             if not self.engine.services.transport.has_adapter(endpoint_data.transport):
+                attempted_endpoints.append(
+                    _build_attempt_summary(
+                        endpoint_data,
+                        result="skipped_missing_transport_adapter",
+                    )
+                )
                 self.engine.services.log_service.debug(
                     "physical_session_client",
                     "skipping physical session endpoint without transport adapter",
@@ -86,13 +129,25 @@ class PhysicalSessionClient:
                 )
                 continue
             endpoint = build_transport_endpoint_from_result(endpoint_data)
+            attempted_endpoints.append(
+                {
+                    "transport": endpoint.transport_name,
+                    "host": endpoint.host,
+                    "port": endpoint.port,
+                    "metadata": endpoint.metadata,
+                    "result": "attempting",
+                }
+            )
             self.engine.services.log_service.info(
                 "physical_session_client",
                 "trying to establish physical session",
                 remote_physical_node_id=remote_physical_node_id,
+                attempt_index=attempt_index,
+                attempt_count=len(endpoints),
                 transport=endpoint.transport_name,
                 host=endpoint.host,
                 port=endpoint.port,
+                endpoint_metadata=endpoint.metadata,
             )
             session_id = await self._start_session_with_endpoint(
                 local_physical_node_id=local_node.id,
@@ -102,17 +157,25 @@ class PhysicalSessionClient:
                 endpoint=endpoint,
             )
             if session_id is None:
+                attempted_endpoints[-1]["result"] = "send_failed"
                 continue
 
             if await self._wait_for_activation(session_id):
+                attempted_endpoints[-1]["result"] = "active"
+                attempted_endpoints[-1]["session_id"] = session_id
                 self.engine.services.log_service.info(
                     "physical_session_client",
                     "physical session established",
                     session_id=session_id,
                     remote_physical_node_id=remote_physical_node_id,
+                    transport=endpoint.transport_name,
+                    host=endpoint.host,
+                    port=endpoint.port,
                 )
                 return session_id
 
+            attempted_endpoints[-1]["result"] = "activation_timeout"
+            attempted_endpoints[-1]["session_id"] = session_id
             self.engine.services.log_service.warning(
                 "physical_session_client",
                 "physical session endpoint did not activate",
@@ -128,7 +191,41 @@ class PhysicalSessionClient:
             )
             close_failed_handshake_session(self.engine, session_id)
 
+        self.engine.services.log_service.warning(
+            "physical_session_client",
+            "could not establish physical session after trying all endpoints",
+            remote_physical_node_id=remote_physical_node_id,
+            attempted_endpoints=attempted_endpoints,
+            local_transports=sorted(self.engine.services.transport.adapters.keys()),
+        )
         raise RuntimeError("Could not establish a physical session with any known endpoint.")
+
+    def _get_preferred_active_session(self, remote_physical_node_id: str):
+        sessions = [
+            session
+            for session in self.engine.services.session_manager.list_active_physical_sessions()
+            if session.remote_identity_id == remote_physical_node_id
+            and not is_observed_only_physical_session(session)
+        ]
+        if not sessions:
+            return None
+        return min(sessions, key=lambda session: self._transport_preference(session.transport))
+
+    def _sort_endpoints_by_transport_preference(self, endpoints):
+        return sorted(
+            endpoints,
+            key=lambda endpoint: self._transport_preference(endpoint.transport),
+        )
+
+    @staticmethod
+    def _transport_preference(transport_name: str | None) -> int:
+        if transport_name == "tcp":
+            return 0
+        if transport_name == "relay_tcp":
+            return 1
+        if transport_name == "udp":
+            return 2
+        return 3
 
     async def _load_remote_physical_node(self, remote_physical_node_id: str):
         remote_node = self.engine.services.identity_service.get_remote_physical_node_by_id(
@@ -449,6 +546,16 @@ class PhysicalSessionClient:
             session.session_id,
             SessionStateUpdateInput(metadata_json=json.dumps(session_metadata, separators=(",", ":"))),
         )
+        self.engine.services.log_service.debug(
+            "physical_session_client",
+            "created outbound physical handshake session",
+            session_id=session.session_id,
+            remote_physical_node_id=remote_physical_node_id,
+            transport=endpoint.transport_name,
+            host=endpoint.host,
+            port=endpoint.port,
+            session_metadata=session_metadata,
+        )
         header = self.engine.build_message_header(
             message_type="PHYSICAL_SESSION_INIT",
             physical_session_id=session.session_id,
@@ -496,11 +603,14 @@ class PhysicalSessionClient:
             transport=endpoint.transport_name,
             host=endpoint.host,
             port=endpoint.port,
+            session_metadata=session_metadata,
+            payload_size=len(payload),
         )
         return session.session_id
 
     async def _wait_for_activation(self, session_id: str) -> bool:
         deadline = asyncio.get_running_loop().time() + self._handshake_timeout_seconds
+        last_seen_state: tuple[object, ...] | None = None
 
         while asyncio.get_running_loop().time() < deadline:
             session = self.engine.services.session_manager.get_session_by_session_id(session_id)
@@ -511,23 +621,71 @@ class PhysicalSessionClient:
                     session_id=session_id,
                 )
                 return False
+            current_state = (
+                session.session_state,
+                session.handshake_state,
+                session.transport,
+                session.remote_host,
+                session.remote_port,
+                session.metadata_json,
+            )
+            if current_state != last_seen_state:
+                last_seen_state = current_state
+                self.engine.services.log_service.debug(
+                    "physical_session_client",
+                    "waiting for physical session activation",
+                    session_id=session_id,
+                    session_state=session.session_state,
+                    handshake_state=session.handshake_state,
+                    transport=session.transport,
+                    remote_physical_node_id=session.remote_identity_id,
+                    remote_host=session.remote_host,
+                    remote_port=session.remote_port,
+                    metadata_json=session.metadata_json,
+                    last_activity_at=session.last_activity_at.isoformat()
+                    if session.last_activity_at
+                    else None,
+                )
             if session.session_state == "active":
                 return True
             if session.session_state == "closed":
                 self.engine.services.log_service.warning(
-                    "physical_session_client",
-                    "session closed before activation",
-                    session_id=session_id,
+                "physical_session_client",
+                "session closed before activation",
+                session_id=session_id,
+                handshake_state=session.handshake_state,
+                metadata_json=session.metadata_json,
                 )
                 return False
 
             await asyncio.sleep(self._handshake_poll_interval_seconds)
+
+        final_session = self.engine.services.session_manager.get_session_by_session_id(session_id)
+        if final_session is not None and final_session.session_state == "active":
+            self.engine.services.log_service.info(
+                "physical_session_client",
+                "physical session activated at handshake timeout boundary",
+                session_id=session_id,
+                transport=final_session.transport,
+                remote_physical_node_id=final_session.remote_identity_id,
+                remote_host=final_session.remote_host,
+                remote_port=final_session.remote_port,
+                timeout_seconds=self._handshake_timeout_seconds,
+            )
+            return True
 
         self.engine.services.log_service.warning(
             "physical_session_client",
             "session activation timed out",
             session_id=session_id,
             timeout_seconds=self._handshake_timeout_seconds,
+            poll_interval_seconds=self._handshake_poll_interval_seconds,
+            final_session_state=final_session.session_state if final_session else None,
+            final_handshake_state=final_session.handshake_state if final_session else None,
+            final_transport=final_session.transport if final_session else None,
+            final_remote_host=final_session.remote_host if final_session else None,
+            final_remote_port=final_session.remote_port if final_session else None,
+            final_metadata_json=final_session.metadata_json if final_session else None,
         )
         return False
 
@@ -543,6 +701,19 @@ class PhysicalSessionClient:
             host=endpoint.host,
             port=endpoint.port,
         )
+        endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+            remote_physical_node_id,
+        )
+        matching_endpoint = next(
+            (
+                item
+                for item in endpoints
+                if item.transport == endpoint.transport_name
+                and item.host == endpoint.host
+                and item.port == endpoint.port
+            ),
+            None,
+        )
         self.engine.services.log_service.warning(
             "physical_session_client",
             "registered endpoint failure",
@@ -550,6 +721,8 @@ class PhysicalSessionClient:
             transport=endpoint.transport_name,
             host=endpoint.host,
             port=endpoint.port,
+            failure_count=matching_endpoint.failure_count if matching_endpoint else None,
+            endpoint_is_active=matching_endpoint.is_active if matching_endpoint else None,
         )
 
     @staticmethod
@@ -577,3 +750,33 @@ def _build_session_transport_metadata(
     metadata = dict(endpoint_metadata)
     metadata["target_physical_node_id"] = target_physical_node_id
     return metadata
+
+
+def _summarize_endpoint_results(endpoints) -> list[dict[str, object]]:
+    return [
+        _build_attempt_summary(endpoint, result="candidate")
+        for endpoint in endpoints
+    ]
+
+
+def _build_attempt_summary(endpoint, *, result: str) -> dict[str, object]:
+    return {
+        "transport": endpoint.transport,
+        "host": endpoint.host,
+        "port": endpoint.port,
+        "priority": endpoint.priority,
+        "metadata": getattr(endpoint, "metadata_json", None),
+        "is_active": getattr(endpoint, "is_active", None),
+        "failure_count": getattr(endpoint, "failure_count", None),
+        "last_success_at": (
+            endpoint.last_success_at.isoformat()
+            if getattr(endpoint, "last_success_at", None)
+            else None
+        ),
+        "last_failure_at": (
+            endpoint.last_failure_at.isoformat()
+            if getattr(endpoint, "last_failure_at", None)
+            else None
+        ),
+        "result": result,
+    }

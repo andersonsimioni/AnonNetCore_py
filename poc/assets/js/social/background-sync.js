@@ -81,6 +81,10 @@ class SocialBackgroundSyncService {
     logBackgroundSyncInfo("run_started", {
       reason,
       profileId: profileState.localVirtualNode.id,
+      localPostCount: profileState.feedPosts?.length || 0,
+      friendCount: profileState.profile?.friend_virtual_node_ids?.length || 0,
+      currentContentId: profileState.userStateContent?.content_id || null,
+      currentDptTargetRef: profileState.profilePointer?.record?.target_ref || null,
     });
     try {
       await this.withRetry(
@@ -94,6 +98,8 @@ class SocialBackgroundSyncService {
       logBackgroundSyncInfo("run_finished", {
         reason,
         profileId: profileState.localVirtualNode.id,
+        localPostCount: profileState.feedPosts?.length || 0,
+        syncedFriendCount: profileState.contacts.filter((contact) => contact.status === "synced").length,
       });
     } catch (error) {
       logBackgroundSyncInfo("run_failed", {
@@ -136,6 +142,8 @@ class SocialBackgroundSyncService {
       reason,
       profileId: profileState.localVirtualNode.id,
       currentContentId: profileState.userStateContent?.content_id || null,
+      currentDptTargetRef: profileState.profilePointer?.record?.target_ref || null,
+      postCount: profileState.feedPosts?.length || 0,
     });
     const result = await this.socialService.ensureLocalUserStatePublished({
       localVirtualNode: profileState.localVirtualNode,
@@ -169,6 +177,8 @@ class SocialBackgroundSyncService {
       profileId: profileState.localVirtualNode.id,
       contentId: result.content.content_id,
       dptKey: result.dpt.dhtKey,
+      dptTargetRef: result.dpt.record.target_ref,
+      postCount: profileState.feedPosts?.length || 0,
     });
     this.appendEvent({
       type: "profile_background_published",
@@ -188,6 +198,12 @@ class SocialBackgroundSyncService {
       reason,
       profileId: profileState.localVirtualNode.id,
       contactCount: contacts.length,
+      friends: contacts.map((contact) => ({
+        id: contact.virtual_node_id,
+        status: contact.status,
+        posts: contact.feed_posts?.length || 0,
+        contentId: contact.user_state_content_id || null,
+      })),
     });
     if (!contacts.length) {
       return;
@@ -282,6 +298,8 @@ class SocialBackgroundSyncService {
       friend: contact.virtual_node_id,
       posts: contact.feed_posts.length,
       contentId: contact.user_state_content_id,
+      postTexts: contact.feed_posts.map((post) => post.text),
+      displayName: contact.display_name,
     });
     this.appendEvent({
       type: "friend_background_synced",

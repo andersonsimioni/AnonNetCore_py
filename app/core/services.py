@@ -9,7 +9,6 @@ from debug import DebugSnapshotService
 from dht import DhtService
 from identity import IdentityService
 from log import LogService
-from relay import RelayService
 from route import RouteService
 from sessions import SessionManager
 from storage import DatabaseManager, get_database
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class EngineServices:
-    """Servicos compartilhados pela engine e pelos protocolos."""
+    """Shared services used by the engine and protocols."""
 
     config: CoreConfig = field(default_factory=CoreConfig)
     database: DatabaseManager = field(default_factory=get_database)
@@ -37,7 +36,6 @@ class EngineServices:
     dht_service: DhtService = field(default_factory=DhtService)
     identity_service: IdentityService = field(default_factory=IdentityService)
     log_service: LogService = field(default_factory=LogService)
-    relay_service: RelayService = field(default_factory=RelayService)
     route_service: RouteService = field(default_factory=RouteService)
     session_manager: SessionManager = field(default_factory=SessionManager)
     route_strategies: RouteStrategyRegistry | None = None
@@ -51,7 +49,15 @@ class EngineServices:
 
     def ensure_defaults(self) -> None:
         if not self.transport.adapters:
-            self.transport.register_adapter(TcpTransportAdapter())
+            self.transport.register_adapter(
+                TcpTransportAdapter(
+                    listen_host=self.config.physical_listen_host,
+                    listen_port=self.config.physical_tcp_listen_port,
+                    listen_enabled=self.config.tcp_transport_enabled,
+                    backlog=self.config.physical_tcp_backlog,
+                    idle_timeout_seconds=self.config.physical_tcp_idle_timeout_seconds,
+                )
+            )
 
     def bind_engine(self, engine: CoreEngine) -> None:
         from .protocol_clients import ProtocolClients
@@ -69,11 +75,6 @@ class EngineServices:
             storage_dir=self.config.content_storage_dir,
             download_range_size=self.config.content_download_range_size,
         )
-        self.relay_service.challenge_ttl_seconds = self.config.physical_relay_challenge_ttl_seconds
-        self.relay_service.registration_ttl_seconds = (
-            self.config.physical_relay_registration_ttl_seconds
-        )
-        self.relay_service.channel_ttl_seconds = self.config.physical_relay_channel_ttl_seconds
         self.route_strategies = RouteStrategyRegistry()
         self.protocol_clients = ProtocolClients(engine)
         self.runtime_services = RuntimeServices(engine)

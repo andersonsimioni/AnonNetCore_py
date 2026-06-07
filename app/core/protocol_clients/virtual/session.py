@@ -29,7 +29,7 @@ class VirtualSessionClient:
             self.engine.services.config.virtual_session_drt_lookup_retry_seconds
         )
         self._handshake_timeout_seconds = (
-            self.engine.services.config.session_handshake_timeout_seconds
+            self.engine.services.config.virtual_session_handshake_timeout_seconds
         )
         self._handshake_poll_interval_seconds = (
             self.engine.services.config.session_handshake_poll_interval_seconds
@@ -63,13 +63,40 @@ class VirtualSessionClient:
         remote_virtual_node = self.engine.services.identity_service.get_remote_virtual_node_by_id(
             remote_virtual_node_id
         )
-        entry_point = await self._resolve_entry_point(remote_virtual_node_id)
-        await self._ensure_entry_point_physical_node(entry_point)
-        return await self._start_session_over_entry_point(
-            local_virtual_node_id=local_virtual_node_id,
-            remote_virtual_node_id=remote_virtual_node_id,
-            remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
-            entry_point=entry_point,
+        entry_points = await self._resolve_entry_points(remote_virtual_node_id)
+        last_error: Exception | None = None
+
+        for attempt, entry_point in enumerate(entry_points, start=1):
+            try:
+                await self._ensure_entry_point_physical_node(entry_point)
+                return await self._start_session_over_entry_point(
+                    local_virtual_node_id=local_virtual_node_id,
+                    remote_virtual_node_id=remote_virtual_node_id,
+                    remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
+                    entry_point=entry_point,
+                    timeout_seconds=self._entry_point_handshake_timeout_seconds(entry_point),
+                    attempt=attempt,
+                    max_attempts=len(entry_points),
+                )
+            except Exception as error:
+                last_error = error
+                self.engine.services.log_service.warning(
+                    "virtual_session_client",
+                    "virtual session drt entry point attempt failed",
+                    local_virtual_node_id=local_virtual_node_id,
+                    remote_virtual_node_id=remote_virtual_node_id,
+                    attempt=attempt,
+                    max_attempts=len(entry_points),
+                    entry_point_physical_node_id=entry_point.physical_node_id,
+                    final_path_id=entry_point.final_path_id,
+                    rtt=entry_point.rtt,
+                    error_type=type(error).__name__,
+                    error=repr(error),
+                )
+
+        raise RuntimeError(
+            "Could not establish the virtual session through any DRT entry point. "
+            f"Last error: {last_error!r}"
         )
 
     async def start_session(
@@ -142,6 +169,9 @@ class VirtualSessionClient:
         remote_virtual_node_id: str,
         remote_public_key: str | None,
         entry_point: "VirtualRouteEntryPoint",
+        timeout_seconds: float | None = None,
+        attempt: int = 1,
+        max_attempts: int = 1,
     ) -> str:
         existing_session = self._get_active_virtual_session(
             local_virtual_node_id=local_virtual_node_id,
@@ -197,7 +227,10 @@ class VirtualSessionClient:
                 },
                 virtual_envelope_ciphered=False,
             )
-            if await self._wait_for_activation(session.session_id):
+            if await self._wait_for_activation(
+                session.session_id,
+                timeout_seconds=timeout_seconds,
+            ):
                 self.engine.services.log_service.info(
                     "virtual_session_client",
                     "virtual session activated via drt",
@@ -206,6 +239,8 @@ class VirtualSessionClient:
                     remote_virtual_node_id=remote_virtual_node_id,
                     bound_route_id=session.bound_route_id,
                     entry_point_physical_node_id=entry_point.physical_node_id,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
                 )
                 return session.session_id
         except Exception as error:
@@ -231,7 +266,9 @@ class VirtualSessionClient:
             remote_virtual_node_id=remote_virtual_node_id,
             bound_route_id=session.bound_route_id,
             entry_point_physical_node_id=entry_point.physical_node_id,
-            timeout_seconds=self._handshake_timeout_seconds,
+            timeout_seconds=timeout_seconds or self._handshake_timeout_seconds,
+            attempt=attempt,
+            max_attempts=max_attempts,
         )
         close_failed_handshake_session(self.engine, session.session_id)
         raise RuntimeError("Could not establish the virtual session through DRT.")
@@ -429,8 +466,15 @@ class VirtualSessionClient:
             virtual_envelope_ciphered=virtual_envelope_ciphered,
         )
 
-    async def _wait_for_activation(self, session_id: str) -> bool:
-        deadline = asyncio.get_running_loop().time() + self._handshake_timeout_seconds
+    async def _wait_for_activation(
+        self,
+        session_id: str,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> bool:
+        deadline = asyncio.get_running_loop().time() + (
+            timeout_seconds or self._handshake_timeout_seconds
+        )
 
         while asyncio.get_running_loop().time() < deadline:
             session = self.engine.services.session_manager.get_session_by_session_id(session_id)
@@ -457,10 +501,10 @@ class VirtualSessionClient:
             raise ValueError("The provided virtual session does not exist in memory.")
         return session
 
-    async def _resolve_entry_point(
+    async def _resolve_entry_points(
         self,
         remote_virtual_node_id: str,
-    ) -> "VirtualRouteEntryPoint":
+    ) -> list["VirtualRouteEntryPoint"]:
         deadline = asyncio.get_running_loop().time() + self._drt_lookup_timeout_seconds
         last_error = "not_found"
 
@@ -475,7 +519,7 @@ class VirtualSessionClient:
                 continue
 
             try:
-                entry_point = self._select_entry_point_from_drt_result(
+                entry_points = self._select_entry_points_from_drt_result(
                     result,
                     remote_virtual_node_id,
                 )
@@ -486,12 +530,13 @@ class VirtualSessionClient:
 
             self.engine.services.log_service.info(
                 "virtual_session_client",
-                "selected drt entry point",
-                entry_point_physical_node_id=entry_point.physical_node_id,
-                final_path_id=entry_point.final_path_id,
-                rtt=entry_point.rtt,
+                "resolved drt entry point candidates",
+                entry_point_count=len(entry_points),
+                first_entry_point_physical_node_id=entry_points[0].physical_node_id,
+                first_final_path_id=entry_points[0].final_path_id,
+                first_rtt=entry_points[0].rtt,
             )
-            return entry_point
+            return entry_points
 
         raise RuntimeError(
             "No valid DRT route was found for the remote virtual node "
@@ -512,11 +557,11 @@ class VirtualSessionClient:
             )
         return session_manager.get_active_session_by_remote_virtual_node_id(remote_virtual_node_id)
 
-    def _select_entry_point_from_drt_result(
+    def _select_entry_points_from_drt_result(
         self,
         result: dict[str, object],
         remote_virtual_node_id: str,
-    ) -> "VirtualRouteEntryPoint":
+    ) -> list["VirtualRouteEntryPoint"]:
         record_json = result.get("record_json")
         if not isinstance(record_json, str) or not record_json:
             raise ValueError("drt_record_json_invalid")
@@ -537,12 +582,13 @@ class VirtualSessionClient:
 
         valid_entries.sort(
             key=lambda entry: (
+                -self._entry_point_reachability_score(entry),
                 _expires_at_sort_key(entry.expires_at),
                 -entry.rtt,
             ),
             reverse=True,
         )
-        return valid_entries[0]
+        return valid_entries
 
     async def _ensure_entry_point_physical_node(
         self,
@@ -708,6 +754,35 @@ class VirtualSessionClient:
         if isinstance(entry_point_physical_node_id, str) and entry_point_physical_node_id:
             return entry_point_physical_node_id
         return None
+
+    def _entry_point_reachability_score(self, entry_point: "VirtualRouteEntryPoint") -> int:
+        endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+            entry_point.physical_node_id
+        )
+        if not endpoints:
+            return 3
+        return min(self._transport_preference(endpoint.transport) for endpoint in endpoints)
+
+    def _entry_point_handshake_timeout_seconds(
+        self,
+        entry_point: "VirtualRouteEntryPoint",
+    ) -> float:
+        route_rtt_seconds = max(0.001, entry_point.rtt / 1000.0)
+        route_timeout_seconds = max(
+            self.engine.services.config.session_keepalive_seconds,
+            route_rtt_seconds * self.engine.services.config.virtual_session_timeout_rtt_multiplier,
+        )
+        return min(self._handshake_timeout_seconds, route_timeout_seconds)
+
+    @staticmethod
+    def _transport_preference(transport_name: str | None) -> int:
+        if transport_name == "tcp":
+            return 0
+        if transport_name == "relay_tcp":
+            return 1
+        if transport_name == "udp":
+            return 2
+        return 3
 
 @dataclass(slots=True, frozen=True)
 class VirtualRouteEntryPoint:

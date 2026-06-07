@@ -222,7 +222,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         if virtual_response_envelope is None:
             return None
         if not isinstance(virtual_response_envelope, dict):
-            raise ValueError("virtual_response_envelope precisa ser um objeto.")
+            raise ValueError("virtual_response_envelope must be an object.")
         if reply_context is None:
             raise ValueError("could not resolve the virtual response reverse path.")
 
@@ -270,7 +270,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             return virtual_response_envelope
 
         if not virtual_session_id:
-            raise ValueError("virtual_session_id e obrigatorio para responder com virtual cifrado.")
+            raise ValueError("virtual_session_id is required to send an encrypted virtual response.")
 
         session = services.session_manager.get_session_by_session_id(virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
@@ -305,9 +305,9 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
             raise ValueError("virtual_envelope plaintext invalido.")
 
         if not route_data.virtual_session_id:
-            raise ValueError("virtual_session_id e obrigatorio para virtual_envelope cifrado.")
+            raise ValueError("virtual_session_id is required for encrypted virtual envelopes.")
         if not isinstance(route_data.virtual_envelope, str) or not route_data.virtual_envelope:
-            raise ValueError("virtual_envelope cifrado invalido.")
+            raise ValueError("encrypted virtual_envelope is invalid.")
 
         session = services.session_manager.get_session_by_session_id(route_data.virtual_session_id)
         if session is None or session.session_state != "active" or not session.shared_secret_hex:
@@ -326,7 +326,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         ).decode("utf-8")
         virtual_envelope = json.loads(plaintext_json)
         if not isinstance(virtual_envelope, dict):
-            raise ValueError("virtual_envelope decifrado precisa ser um objeto.")
+            raise ValueError("decrypted virtual_envelope must be an object.")
 
         services.session_manager.touch_session(route_data.virtual_session_id)
         return virtual_envelope
@@ -341,7 +341,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
         header = virtual_envelope.get("header")
         payload = virtual_envelope.get("payload")
         if not isinstance(header, dict):
-            raise ValueError("virtual_envelope.header precisa ser um objeto.")
+            raise ValueError("virtual_envelope.header must be an object.")
         if payload is None:
             payload = {}
 
@@ -358,7 +358,7 @@ class RouteExecuteProtocolHandler(ProtocolMessageHandler):
 
         message_type = header.get("message_type")
         if message_type is not None and not isinstance(message_type, str):
-            raise ValueError("virtual_envelope.header.message_type precisa ser uma string.")
+            raise ValueError("virtual_envelope.header.message_type must be a string.")
 
         nested_packet = {
             "header": header,
@@ -596,7 +596,7 @@ def _read_route_direction(payload: dict[str, object]) -> str:
         return "vn_to_pn"
     if value in {"vn_to_pn", "pn_to_vn"}:
         return str(value)
-    raise ValueError("O campo 'direction' precisa ser 'vn_to_pn' ou 'pn_to_vn'.")
+    raise ValueError("direction must be 'vn_to_pn' or 'pn_to_vn'.")
 
 
 def _opposite_route_direction(direction: str) -> str:
@@ -604,7 +604,7 @@ def _opposite_route_direction(direction: str) -> str:
         return "pn_to_vn"
     if direction == "pn_to_vn":
         return "vn_to_pn"
-    raise ValueError("direction invalido.")
+    raise ValueError("direction is invalid.")
 
 def _build_virtual_envelope_aad(
     *,

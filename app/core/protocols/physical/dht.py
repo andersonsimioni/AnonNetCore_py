@@ -64,6 +64,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         stored_by: list[str] | None = None,
         required_stored_count: int | None = None,
         pow_nonce: int | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> bytes:
         return json.dumps(
             {
@@ -77,6 +78,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "stored_by": stored_by or [],
                     "required_stored_count": required_stored_count,
                     "pow_nonce": pow_nonce,
+                    "trace_context": trace_context or {},
                 },
             },
             separators=(",", ":"),
@@ -95,6 +97,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at: str | None = None,
         stored_by: list[str] | None = None,
         required_stored_count: int | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> bytes:
         resolved_stored_by = stored_by or []
         resolved_required_count = (
@@ -123,6 +126,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "stored_by": resolved_stored_by,
                     "stored_count": len(resolved_stored_by),
                     "required_stored_count": resolved_required_count,
+                    "trace_context": trace_context or {},
                 },
             },
             separators=(",", ":"),
@@ -159,6 +163,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         expires_at = _read_optional_datetime(payload, "expires_at")
         stored_by = _read_string_list(payload, "stored_by")
         pow_nonce = _read_optional_int(payload, "pow_nonce")
+        trace_context = _read_trace_context(payload)
 
         if namespace is None or logical_key is None or record_json is None:
             services.log_service.warning(
@@ -166,16 +171,18 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 "received invalid dht publish payload",
                 remote_host=context.remote_host,
                 remote_port=context.remote_port,
+                trace_context=trace_context,
             )
             return self._build_invalid_result(envelope, "invalid_dht_publish_payload")
 
         key_hex = services.dht_service.build_key(namespace, logical_key)
-        if pow_nonce is None or not services.dht_service.validate_publish_pow(
+        pow_details = services.dht_service.build_publish_pow_details(
             key_hex=key_hex,
             record_json=record_json,
             nonce=pow_nonce,
             difficulty_bits=services.config.network_pow_difficulty_bits,
-        ):
+        )
+        if not pow_details["is_valid"]:
             services.log_service.warning(
                 "dht",
                 "received dht publish with invalid proof of work",
@@ -184,6 +191,10 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 logical_key=logical_key,
                 pow_nonce=pow_nonce,
                 pow_difficulty_bits=services.config.network_pow_difficulty_bits,
+                pow_canonical_hash=pow_details["canonical_hash"],
+                pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+                record_json_size=len(record_json),
+                trace_context=trace_context,
             )
             return self._build_invalid_result(envelope, "invalid_dht_publish_pow")
 
@@ -207,6 +218,10 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             required_stored_count=required_stored_count,
             pow_nonce=pow_nonce,
             pow_difficulty_bits=services.config.network_pow_difficulty_bits,
+            pow_canonical_hash=pow_details["canonical_hash"],
+            pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+            record_json_size=len(record_json),
+            trace_context=trace_context,
         )
 
         if not closest_nodes_result["local_node_is_responsible"]:
@@ -219,6 +234,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 failure_status="not_routable",
                 stored_by=stored_by,
                 required_stored_count=required_stored_count,
+                trace_context=trace_context,
             )
 
         local_node = services.identity_service.get_local_physical_node_result()
@@ -226,6 +242,17 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             return self._build_invalid_result(envelope, "local_physical_node_not_initialized")
 
         if local_node.id not in stored_by:
+            services.log_service.debug(
+                "dht",
+                "storing dht publish on responsible local node",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                local_physical_node_id=local_node.id,
+                stored_by_before=stored_by,
+                required_stored_count=required_stored_count,
+                trace_context=trace_context,
+            )
             self._upsert_local_record(
                 services=services,
                 key_hex=key_hex,
@@ -243,8 +270,11 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             key=key_hex,
             namespace=namespace,
             logical_key=logical_key,
+            local_physical_node_id=local_node.id,
+            stored_by=stored_by,
             stored_count=len(stored_by),
             required_stored_count=required_stored_count,
+            trace_context=trace_context,
         )
 
         if len(stored_by) < required_stored_count:
@@ -257,6 +287,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 failure_status="partially_stored",
                 stored_by=stored_by,
                 required_stored_count=required_stored_count,
+                trace_context=trace_context,
             )
 
         response_payload = self.build_result_payload(
@@ -267,6 +298,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             stored_locally=True,
             stored_by=stored_by,
             required_stored_count=required_stored_count,
+            trace_context=trace_context,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -301,6 +333,8 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             return self._build_invalid_result(envelope, "invalid_dht_query_payload")
 
         key_hex = services.dht_service.build_key(namespace, logical_key)
+        accumulated_record_json = _read_optional_string(payload, "query_record_json")
+        accumulated_expires_at = _read_optional_string(payload, "query_expires_at")
         closest_nodes_result = services.dht_service.select_k_closest_nodes(key_hex)
         responsible_nodes = closest_nodes_result["nodes"]
         services.log_service.debug(
@@ -311,6 +345,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             logical_key=logical_key,
             local_node_is_responsible=closest_nodes_result["local_node_is_responsible"],
             responsible_nodes=_summarize_responsible_nodes(responsible_nodes),
+            has_accumulated_record=bool(accumulated_record_json),
         )
 
         if not closest_nodes_result["local_node_is_responsible"]:
@@ -321,23 +356,26 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 key_hex=key_hex,
                 responsible_nodes=responsible_nodes,
                 failure_status="not_routable",
+                query_record_json=accumulated_record_json,
+                query_expires_at=accumulated_expires_at,
             )
 
         dht_record = self._load_validated_local_record(
             services=services,
             key_hex=key_hex,
         )
+        query_cursor_distance_hex = self._resolve_local_distance_hex(
+            services=services,
+            key_hex=key_hex,
+        )
         if dht_record is None:
-            query_cursor_distance_hex = self._resolve_local_distance_hex(
-                services=services,
-                key_hex=key_hex,
-            )
             services.log_service.info(
                 "dht",
                 "dht record not found locally, trying another responsible node",
                 key=key_hex,
                 responsible_nodes=_summarize_responsible_nodes(responsible_nodes),
                 query_cursor_distance_hex=query_cursor_distance_hex,
+                has_accumulated_record=bool(accumulated_record_json),
             )
             return await self._forward_or_return_failure(
                 envelope=envelope,
@@ -345,9 +383,49 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 services=services,
                 key_hex=key_hex,
                 responsible_nodes=responsible_nodes,
-                failure_status="not_found",
+                failure_status=("found" if accumulated_record_json else "not_found"),
                 query_cursor_distance_hex=query_cursor_distance_hex,
+                query_record_json=accumulated_record_json,
+                query_expires_at=accumulated_expires_at,
             )
+
+        merged_record_json = self._merge_query_record_json(
+            services=services,
+            namespace=namespace,
+            logical_key=logical_key,
+            key_hex=key_hex,
+            accumulated_record_json=accumulated_record_json,
+            local_record_json=dht_record.record_json,
+        )
+        merged_expires_at = (
+            dht_record.expires_at.isoformat()
+            if dht_record.expires_at is not None
+            else accumulated_expires_at
+        )
+        services.log_service.info(
+            "dht",
+            "dht query found local record and will continue responsible merge",
+            key=key_hex,
+            namespace=namespace,
+            logical_key=logical_key,
+            responsible_nodes=_summarize_responsible_nodes(responsible_nodes),
+            query_cursor_distance_hex=query_cursor_distance_hex,
+            had_accumulated_record=bool(accumulated_record_json),
+            merged_record_json_size=len(merged_record_json),
+        )
+        forward_result = await self._forward_or_return_failure(
+            envelope=envelope,
+            context=context,
+            services=services,
+            key_hex=key_hex,
+            responsible_nodes=responsible_nodes,
+            failure_status="found",
+            query_cursor_distance_hex=query_cursor_distance_hex,
+            query_record_json=merged_record_json,
+            query_expires_at=merged_expires_at,
+        )
+        if forward_result.metadata.get("action") != "return_dht_found":
+            return forward_result
 
         response_payload = self.build_result_payload(
             request_header=envelope.header,
@@ -355,13 +433,16 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             key_hex=key_hex,
             responsible_nodes=[],
             stored_locally=True,
-            record_json=dht_record.record_json,
-            expires_at=dht_record.expires_at.isoformat() if dht_record.expires_at is not None else None,
+            record_json=merged_record_json,
+            expires_at=merged_expires_at,
         )
         services.log_service.info(
             "dht",
             "returned validated dht record",
             key=key_hex,
+            namespace=namespace,
+            logical_key=logical_key,
+            merged_record_json_size=len(merged_record_json),
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -387,6 +468,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         if isinstance(response_to_message_id, str):
             forwarded_result = self._pop_pending_forward(response_to_message_id)
             if forwarded_result is not None:
+                trace_context = _read_trace_context(payload)
                 response_payload = self.build_result_payload(
                     request_header={
                         **envelope.header,
@@ -401,6 +483,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     expires_at=payload.get("expires_at") if isinstance(payload.get("expires_at"), str) else None,
                     stored_by=_read_string_list(payload, "stored_by"),
                     required_stored_count=_read_optional_int(payload, "required_stored_count"),
+                    trace_context=trace_context,
                 )
                 services.log_service.debug(
                     "dht",
@@ -412,6 +495,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     key=payload.get("key"),
                     stored_count=payload.get("stored_count"),
                     required_stored_count=payload.get("required_stored_count"),
+                    trace_context=trace_context,
                 )
                 return PacketProcessingResult(
                     protocol_name=envelope.protocol_name,
@@ -433,6 +517,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 key=payload.get("key"),
                 stored_count=payload.get("stored_count"),
                 required_stored_count=payload.get("required_stored_count"),
+                trace_context=_read_trace_context(payload),
             )
 
         if isinstance(response_to_message_id, str) and services.protocol_clients is not None:
@@ -451,6 +536,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "remote_host": context.remote_host,
                     "remote_port": context.remote_port,
                     "transport_name": context.transport_name,
+                    "trace_context": _read_trace_context(payload),
                 },
             )
             services.log_service.debug(
@@ -459,6 +545,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 response_to_message_id=response_to_message_id,
                 status=payload.get("status"),
                 key=payload.get("key"),
+                trace_context=_read_trace_context(payload),
             )
 
         return PacketProcessingResult(
@@ -485,9 +572,23 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         stored_by: list[str] | None = None,
         required_stored_count: int | None = None,
         query_cursor_distance_hex: str | None = None,
+        query_record_json: str | None = None,
+        query_expires_at: str | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> PacketProcessingResult:
         payload = _as_payload_dict(envelope)
+        resolved_trace_context = trace_context if trace_context is not None else _read_trace_context(payload)
         resolved_stored_by = stored_by if stored_by is not None else _read_string_list(payload, "stored_by")
+        resolved_query_record_json = (
+            query_record_json
+            if query_record_json is not None
+            else _read_optional_string(payload, "query_record_json")
+        )
+        resolved_query_expires_at = (
+            query_expires_at
+            if query_expires_at is not None
+            else _read_optional_string(payload, "query_expires_at")
+        )
         resolved_query_cursor_distance_hex = (
             query_cursor_distance_hex
             if query_cursor_distance_hex is not None
@@ -507,6 +608,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 message_type=envelope.message_type,
                 stored_count=len(resolved_stored_by),
                 required_stored_count=resolved_required_count,
+                trace_context=resolved_trace_context,
             )
             return self._build_result_response(
                 envelope=envelope,
@@ -520,6 +622,9 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 responsible_nodes=responsible_nodes,
                 stored_by=resolved_stored_by,
                 required_stored_count=resolved_required_count,
+                record_json=resolved_query_record_json,
+                expires_at=resolved_query_expires_at,
+                trace_context=resolved_trace_context,
             )
 
         previous_session = self._get_previous_session(envelope, services)
@@ -550,6 +655,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 stored_count=len(resolved_stored_by),
                 required_stored_count=resolved_required_count,
                 query_cursor_distance_hex=resolved_query_cursor_distance_hex,
+                trace_context=resolved_trace_context,
             )
             return self._build_result_response(
                 envelope=envelope,
@@ -563,6 +669,9 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 responsible_nodes=responsible_nodes,
                 stored_by=resolved_stored_by,
                 required_stored_count=resolved_required_count,
+                record_json=resolved_query_record_json,
+                expires_at=resolved_query_expires_at,
+                trace_context=resolved_trace_context,
             )
 
         forward_header = {
@@ -575,7 +684,11 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             "ttl": ttl - 1,
             "stored_by": resolved_stored_by,
             "required_stored_count": resolved_required_count,
+            "trace_context": resolved_trace_context,
         }
+        if envelope.message_type == "DHT_QUERY" and resolved_query_record_json:
+            forward_payload["query_record_json"] = resolved_query_record_json
+            forward_payload["query_expires_at"] = resolved_query_expires_at
         if envelope.message_type == "DHT_QUERY" and resolved_query_cursor_distance_hex is not None:
             forward_payload["query_cursor_distance_hex"] = resolved_query_cursor_distance_hex
         packet_bytes = json.dumps(
@@ -595,6 +708,32 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 previous_session_id=previous_session_id,
                 previous_message_id=previous_message_id,
             )
+            services.log_service.debug(
+                "dht",
+                "registered pending dht forward return path",
+                key=key_hex,
+                message_type=envelope.message_type,
+                forward_message_id=forward_header["message_id"],
+                previous_message_id=previous_message_id,
+                previous_session_id=previous_session_id,
+                next_session_id=next_session.session_id,
+                next_remote_physical_node_id=next_session.remote_identity_id,
+                stored_count=len(resolved_stored_by),
+                required_stored_count=resolved_required_count,
+                trace_context=resolved_trace_context,
+            )
+        else:
+            services.log_service.warning(
+                "dht",
+                "dht forward has no previous return path in envelope header",
+                key=key_hex,
+                message_type=envelope.message_type,
+                header_message_id=previous_message_id,
+                header_physical_session_id=previous_session_id,
+                next_session_id=next_session.session_id,
+                next_remote_physical_node_id=next_session.remote_identity_id,
+                trace_context=resolved_trace_context,
+            )
 
         services.log_service.info(
             "dht",
@@ -608,6 +747,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             required_stored_count=resolved_required_count,
             remaining_responsible_count=max(0, resolved_required_count - len(resolved_stored_by)),
             query_cursor_distance_hex=resolved_query_cursor_distance_hex,
+            trace_context=resolved_trace_context,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -633,6 +773,9 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         responsible_nodes: list[dict[str, object]] | None = None,
         stored_by: list[str] | None = None,
         required_stored_count: int | None = None,
+        record_json: str | None = None,
+        expires_at: str | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> PacketProcessingResult:
         response_payload = self.build_result_payload(
             request_header=envelope.header,
@@ -640,8 +783,11 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             key_hex=key_hex,
             responsible_nodes=_summarize_responsible_nodes(responsible_nodes or []),
             stored_locally=False,
+            record_json=record_json,
+            expires_at=expires_at,
             stored_by=stored_by,
             required_stored_count=required_stored_count,
+            trace_context=trace_context,
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -668,6 +814,13 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         query_cursor_distance = _parse_distance_hex(query_cursor_distance_hex)
         for node in responsible_nodes:
             if node.get("is_local") is True:
+                services.log_service.debug(
+                    "dht",
+                    "skipping local responsible node during dht forward selection",
+                    remote_physical_node_id=node.get("node_id"),
+                    stored_by=stored_by,
+                    query_cursor_distance_hex=query_cursor_distance_hex,
+                )
                 continue
 
             node_id = node.get("node_id")
@@ -676,15 +829,43 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             if query_cursor_distance is not None:
                 node_distance = node.get("distance_int")
                 if isinstance(node_distance, int) and node_distance <= query_cursor_distance:
+                    services.log_service.debug(
+                        "dht",
+                        "skipping dht responsible node behind query cursor",
+                        remote_physical_node_id=node_id,
+                        node_distance_hex=node.get("distance_hex"),
+                        query_cursor_distance_hex=query_cursor_distance_hex,
+                    )
                     continue
             if node_id == previous_remote_physical_node_id:
+                services.log_service.debug(
+                    "dht",
+                    "skipping previous dht forward node",
+                    remote_physical_node_id=node_id,
+                    previous_remote_physical_node_id=previous_remote_physical_node_id,
+                )
                 continue
             if node_id in stored_by:
+                services.log_service.debug(
+                    "dht",
+                    "skipping already stored dht responsible node",
+                    remote_physical_node_id=node_id,
+                    stored_by=stored_by,
+                )
                 continue
 
             existing_session = services.session_manager.get_active_physical_session_by_remote_node_id(node_id)
             if existing_session is not None:
                 if not _is_observed_only_physical_session(existing_session):
+                    services.log_service.debug(
+                        "dht",
+                        "selected active dht forward session",
+                        remote_physical_node_id=node_id,
+                        session_id=existing_session.session_id,
+                        transport=existing_session.transport,
+                        remote_host=existing_session.remote_host,
+                        remote_port=existing_session.remote_port,
+                    )
                     return existing_session
                 services.log_service.debug(
                     "dht",
@@ -699,6 +880,14 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 continue
 
             try:
+                services.log_service.debug(
+                    "dht",
+                    "opening dht forward session to responsible node",
+                    remote_physical_node_id=node_id,
+                    responsible_nodes=_summarize_responsible_nodes(responsible_nodes),
+                    previous_remote_physical_node_id=previous_remote_physical_node_id,
+                    stored_by=stored_by,
+                )
                 session_id = await services.protocol_clients.physical.session.start_session(
                     remote_physical_node_id=node_id,
                 )
@@ -717,9 +906,75 @@ class DhtProtocolHandler(ProtocolMessageHandler):
 
             session = services.session_manager.get_session_by_session_id(session_id)
             if session is not None and session.session_state == "active":
+                services.log_service.info(
+                    "dht",
+                    "opened dht forward session to responsible node",
+                    remote_physical_node_id=node_id,
+                    session_id=session.session_id,
+                    transport=session.transport,
+                    remote_host=session.remote_host,
+                    remote_port=session.remote_port,
+                )
                 return session
+            services.log_service.warning(
+                "dht",
+                "dht forward session did not become active",
+                remote_physical_node_id=node_id,
+                session_id=session_id,
+                session_state=(session.session_state if session is not None else None),
+                transport=(session.transport if session is not None else None),
+            )
 
         return None
+
+    def _merge_query_record_json(
+        self,
+        *,
+        services: EngineServices,
+        namespace: str,
+        logical_key: str,
+        key_hex: str,
+        accumulated_record_json: str | None,
+        local_record_json: str,
+    ) -> str:
+        if not accumulated_record_json:
+            return local_record_json
+
+        try:
+            accumulated_payload = parse_record(namespace, accumulated_record_json)
+            local_payload = parse_record(namespace, local_record_json)
+            merged_payload = validate_and_merge(
+                namespace,
+                key_hex,
+                accumulated_payload,
+                local_payload,
+            )
+            merged_record_json = serialize_record(merged_payload)
+        except Exception as error:
+            services.log_service.warning(
+                "dht",
+                "failed to merge dht query records; keeping local record",
+                key=key_hex,
+                namespace=namespace,
+                logical_key=logical_key,
+                accumulated_record_json_size=len(accumulated_record_json),
+                local_record_json_size=len(local_record_json),
+                error_type=type(error).__name__,
+                error=repr(error),
+            )
+            return local_record_json
+
+        services.log_service.debug(
+            "dht",
+            "merged accumulated dht query record with local record",
+            key=key_hex,
+            namespace=namespace,
+            logical_key=logical_key,
+            accumulated_record_json_size=len(accumulated_record_json),
+            local_record_json_size=len(local_record_json),
+            merged_record_json_size=len(merged_record_json),
+        )
+        return merged_record_json
 
     def _resolve_local_distance_hex(
         self,
@@ -933,6 +1188,13 @@ def _read_optional_int(payload: dict[str, object], field_name: str) -> int | Non
     if isinstance(value, int):
         return max(0, value)
     return None
+
+
+def _read_trace_context(payload: dict[str, object]) -> dict[str, object]:
+    value = payload.get("trace_context")
+    if isinstance(value, dict):
+        return value
+    return {}
 
 
 def _parse_distance_hex(value: str | None) -> int | None:

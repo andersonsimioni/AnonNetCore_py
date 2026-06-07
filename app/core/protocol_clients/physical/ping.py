@@ -35,6 +35,15 @@ class PhysicalPingClient:
         if not endpoints:
             raise ValueError("The remote physical node has no known endpoints.")
 
+        self.engine.services.log_service.debug(
+            "physical_ping_client",
+            "loaded ping candidate endpoints",
+            remote_physical_node_id=remote_physical_node_id,
+            endpoint_count=len(endpoints),
+            endpoints=_summarize_endpoint_results(endpoints),
+            local_transports=sorted(self.engine.services.transport.adapters.keys()),
+        )
+
         last_error: Exception | None = None
         for endpoint_data in endpoints:
             if not self.engine.services.transport.has_adapter(endpoint_data.transport):
@@ -57,7 +66,10 @@ class PhysicalPingClient:
                 port=endpoint.port,
             )
             try:
-                result = await self._ping_endpoint(endpoint=endpoint)
+                result = await self._ping_endpoint(
+                    endpoint=endpoint,
+                    remote_physical_node_id=remote_physical_node_id,
+                )
                 self.engine.services.log_service.info(
                     "physical_ping_client",
                     "ping succeeded",
@@ -85,6 +97,8 @@ class PhysicalPingClient:
                     transport=endpoint.transport_name,
                     host=endpoint.host,
                     port=endpoint.port,
+                    endpoint_metadata=endpoint.metadata,
+                    pong_timeout_seconds=self._pong_timeout_seconds,
                     error_type=type(error).__name__,
                     error=repr(error),
                 )
@@ -100,6 +114,7 @@ class PhysicalPingClient:
         self,
         *,
         endpoint: TransportEndpoint,
+        remote_physical_node_id: str,
     ) -> dict[str, object]:
         nonce = str(uuid4())
         header = self.engine.build_message_header(message_type="PING")
@@ -119,6 +134,10 @@ class PhysicalPingClient:
                     transport_name=endpoint.transport_name,
                     payload=payload,
                     remote_endpoint=endpoint,
+                    metadata=_build_ping_metadata(
+                        endpoint=endpoint,
+                        remote_physical_node_id=remote_physical_node_id,
+                    ),
                 )
             )
             self.engine.services.log_service.debug(
@@ -129,8 +148,23 @@ class PhysicalPingClient:
                 transport=endpoint.transport_name,
                 host=endpoint.host,
                 port=endpoint.port,
+                payload_size_bytes=len(payload),
+                timeout_seconds=self._pong_timeout_seconds,
             )
-            pong_data = await asyncio.wait_for(future, timeout=self._pong_timeout_seconds)
+            try:
+                pong_data = await asyncio.wait_for(future, timeout=self._pong_timeout_seconds)
+            except asyncio.TimeoutError:
+                self.engine.services.log_service.warning(
+                    "physical_ping_client",
+                    "pong wait timed out",
+                    message_id=header["message_id"],
+                    nonce=nonce,
+                    transport=endpoint.transport_name,
+                    host=endpoint.host,
+                    port=endpoint.port,
+                    timeout_seconds=self._pong_timeout_seconds,
+                )
+                raise
         finally:
             self._pending_pongs.pop(header["message_id"], None)
 
@@ -169,4 +203,31 @@ class PhysicalPingClient:
             "physical_ping_client",
             "completed pending pong future",
             response_to_message_id=response_to_message_id,
+            remote_host=pong_data.get("remote_host"),
+            remote_port=pong_data.get("remote_port"),
+            transport_name=pong_data.get("transport_name"),
         )
+
+
+def _summarize_endpoint_results(endpoints) -> list[dict[str, object]]:
+    return [
+        {
+            "transport": endpoint.transport,
+            "host": endpoint.host,
+            "port": endpoint.port,
+            "priority": endpoint.priority,
+            "metadata": endpoint.metadata_json,
+        }
+        for endpoint in endpoints
+    ]
+
+
+def _build_ping_metadata(
+    *,
+    endpoint: TransportEndpoint,
+    remote_physical_node_id: str,
+) -> dict[str, object]:
+    metadata = dict(endpoint.metadata)
+    if endpoint.transport_name == "relay_tcp":
+        metadata["target_physical_node_id"] = remote_physical_node_id
+    return metadata

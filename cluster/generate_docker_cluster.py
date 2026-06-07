@@ -15,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 INTERNAL_TCP_PORT = 19001
-INTERNAL_UDP_PORT = 29001
+INTERNAL_UDP_PORT = 19002
 HOST_PORT_BASE = 19001
 HOST_UDP_PORT_BASE = 29001
 BOOTSTRAP_NODE_COUNT = 2
@@ -65,6 +65,10 @@ RANDOM_NODE_PROFILES = (
         udp_enabled=True,
     ),
 )
+PROFILE_BY_NAME = {
+    BOOTSTRAP_PROFILE.name: BOOTSTRAP_PROFILE,
+    **{profile.name: profile for profile in RANDOM_NODE_PROFILES},
+}
 
 
 def main() -> None:
@@ -73,7 +77,9 @@ def main() -> None:
     state_dir = output_dir / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     random_source = random.Random(args.seed)
-    node_profiles = build_node_profiles(args.nodes, random_source)
+    node_profiles = parse_profile_sequence(args.profiles, args.nodes)
+    if node_profiles is None:
+        node_profiles = build_node_profiles(args.nodes, random_source)
 
     for node_index in range(1, args.nodes + 1):
         (state_dir / build_node_name(node_index)).mkdir(parents=True, exist_ok=True)
@@ -111,6 +117,16 @@ def parse_args() -> argparse.Namespace:
         default=random.SystemRandom().randrange(1, 2**31),
         help="Seed used to randomize non-bootstrap node profiles.",
     )
+    parser.add_argument(
+        "--profiles",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated node profile names. When provided, the amount of "
+            "profiles must match --nodes and bootstrap nodes must use "
+            "bootstrap_public_tcp."
+        ),
+    )
     args = parser.parse_args()
     if args.nodes < 2:
         raise SystemExit("Use at least 2 nodes to keep fixed bootstrap nodes.")
@@ -127,6 +143,35 @@ def build_node_profiles(
             profiles.append(BOOTSTRAP_PROFILE)
             continue
         profiles.append(random_source.choice(RANDOM_NODE_PROFILES))
+    return profiles
+
+
+def parse_profile_sequence(
+    raw_profiles: str | None,
+    node_count: int,
+) -> list[ClusterNodeProfile] | None:
+    if raw_profiles is None:
+        return None
+
+    profile_names = [name.strip() for name in raw_profiles.split(",") if name.strip()]
+    if len(profile_names) != node_count:
+        raise SystemExit(
+            f"--profiles must contain exactly {node_count} profile names; "
+            f"received {len(profile_names)}."
+        )
+
+    profiles: list[ClusterNodeProfile] = []
+    for node_index, profile_name in enumerate(profile_names, start=1):
+        profile = PROFILE_BY_NAME.get(profile_name)
+        if profile is None:
+            known_profiles = ", ".join(sorted(PROFILE_BY_NAME))
+            raise SystemExit(f"Unknown node profile '{profile_name}'. Known profiles: {known_profiles}")
+
+        if node_index <= BOOTSTRAP_NODE_COUNT and profile != BOOTSTRAP_PROFILE:
+            raise SystemExit("The first two cluster nodes must use bootstrap_public_tcp.")
+
+        profiles.append(profile)
+
     return profiles
 
 
@@ -198,16 +243,9 @@ def build_service_lines(
     if node_profile.udp_enabled:
         lines.extend(
             [
-                f'      ANONNET_PHYSICAL_UDP_LISTEN_PORT: "{INTERNAL_UDP_PORT}"',
                 f'      ANONNET_ADVERTISED_UDP_HOST: "{host_advertised_ip}"',
                 f'      ANONNET_ADVERTISED_UDP_PORT: "{advertised_udp_port}"',
             ]
-        )
-
-    network_pow_difficulty_bits = os.getenv("ANONNET_NETWORK_POW_DIFFICULTY_BITS")
-    if network_pow_difficulty_bits:
-        lines.append(
-            f'      ANONNET_NETWORK_POW_DIFFICULTY_BITS: "{network_pow_difficulty_bits}"'
         )
 
     lines.extend(

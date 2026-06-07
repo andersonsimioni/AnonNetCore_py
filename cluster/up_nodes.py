@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 CLUSTER_ROOT = Path(__file__).resolve().parent
@@ -17,7 +18,7 @@ def main() -> int:
     args = parse_args()
     verify_docker_is_available()
     down_existing_cluster()
-    generate_cluster(args.node_count, seed=args.seed)
+    generate_cluster(args.node_count, seed=args.seed, profiles=args.profiles)
     reset_cluster_node_state()
     start_compose(detach=args.detach)
     return 0
@@ -33,6 +34,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional seed to reproduce randomized non-bootstrap node profiles.",
     )
+    parser.add_argument(
+        "--profiles",
+        type=str,
+        default=None,
+        help="Optional comma-separated profile list passed to the cluster generator.",
+    )
     args = parser.parse_args()
     if args.node_count < 2:
         raise SystemExit("Use at least 2 nodes to keep fixed bootstrap nodes.")
@@ -40,10 +47,31 @@ def parse_args() -> argparse.Namespace:
 
 
 def verify_docker_is_available() -> None:
-    run_command(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    last_result: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(1, 6):
+        last_result = subprocess.run(
+            ["docker", "info"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if last_result.returncode == 0:
+            return
+
+        print(
+            "waiting for Docker daemon: "
+            f"attempt={attempt}/5 "
+            f"error={(last_result.stderr or last_result.stdout or '').strip()}"
+        )
+        time.sleep(2)
+
+    raise RuntimeError(
+        "Docker is not available. "
+        f"Last error: {(last_result.stderr or last_result.stdout or '').strip() if last_result else ''}"
+    )
 
 
-def generate_cluster(node_count: int, *, seed: int | None) -> None:
+def generate_cluster(node_count: int, *, seed: int | None, profiles: str | None) -> None:
     print(f"Generating cluster with {node_count} nodes...")
     command = [
         sys.executable,
@@ -55,6 +83,8 @@ def generate_cluster(node_count: int, *, seed: int | None) -> None:
     ]
     if seed is not None:
         command.extend(["--seed", str(seed)])
+    if profiles is not None:
+        command.extend(["--profiles", profiles])
 
     run_command(command, cwd=PROJECT_ROOT)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from .interfaces import InboundPacketHandler, TransportAdapter
 from .models import OutboundMessage, TransportEndpoint, TransportPacket, TransportState
@@ -18,6 +19,7 @@ class RelayTcpTransportAdapter(TransportAdapter):
         self._relay_sender = relay_sender
         self._inbound_packet_handler: InboundPacketHandler | None = None
         self._state = TransportState.STOPPED
+        self.debug_logger: Callable[[str, dict[str, Any]], None] | None = None
 
     @property
     def state(self) -> TransportState:
@@ -46,6 +48,15 @@ class RelayTcpTransportAdapter(TransportAdapter):
                 local_endpoint=message.local_endpoint,
                 metadata={**message.remote_endpoint.metadata, **message.metadata},
             )
+        self._log_debug(
+            "sending relay transport packet",
+            {
+                "relay_host": message.remote_endpoint.host,
+                "relay_port": message.remote_endpoint.port,
+                "metadata": message.metadata,
+                "payload_size_bytes": len(message.payload),
+            },
+        )
         await self._relay_sender(message)
 
     async def inject_inbound_packet(
@@ -57,8 +68,27 @@ class RelayTcpTransportAdapter(TransportAdapter):
         metadata: dict[str, object] | None = None,
     ) -> None:
         if self._inbound_packet_handler is None:
+            self._log_debug(
+                "dropped injected relay packet because inbound handler is missing",
+                {
+                    "remote_host": remote_endpoint.host,
+                    "remote_port": remote_endpoint.port,
+                    "metadata": metadata or {},
+                    "payload_size_bytes": len(payload),
+                },
+            )
             return
 
+        self._log_debug(
+            "injecting inbound relay transport packet",
+            {
+                "remote_host": remote_endpoint.host,
+                "remote_port": remote_endpoint.port,
+                "remote_metadata": remote_endpoint.metadata,
+                "packet_metadata": metadata or {},
+                "payload_size_bytes": len(payload),
+            },
+        )
         await self._inbound_packet_handler(
             TransportPacket(
                 transport_name=self.transport_name,
@@ -68,3 +98,7 @@ class RelayTcpTransportAdapter(TransportAdapter):
                 metadata=metadata or {},
             )
         )
+
+    def _log_debug(self, message: str, metadata: dict[str, Any]) -> None:
+        if self.debug_logger is not None:
+            self.debug_logger(message, metadata)

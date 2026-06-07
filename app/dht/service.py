@@ -80,9 +80,44 @@ class DhtService:
         if nonce < 0:
             return False
 
-        proof_material = f"{key_hex}|{record_json}|{nonce}".encode("utf-8")
-        proof_bits = bin(int(sha512(proof_material).hexdigest(), 16))[2:].zfill(512)
-        return proof_bits.startswith("0" * difficulty_bits)
+        return DhtService.build_publish_pow_details(
+            key_hex=key_hex,
+            record_json=record_json,
+            nonce=nonce,
+            difficulty_bits=difficulty_bits,
+        )["is_valid"]
+
+    @staticmethod
+    def build_publish_pow_details(
+        *,
+        key_hex: str,
+        record_json: str,
+        nonce: int | None,
+        difficulty_bits: int,
+    ) -> dict[str, object]:
+        canonical_material = f"{key_hex}|{record_json}".encode("utf-8")
+        canonical_hash = sha512(canonical_material).hexdigest()
+        if nonce is None or nonce < 0:
+            return {
+                "canonical_hash": canonical_hash,
+                "proof_hash": None,
+                "proof_hash_prefix": None,
+                "difficulty_bits": difficulty_bits,
+                "nonce": nonce,
+                "is_valid": False,
+            }
+
+        proof_material = canonical_material + b"|" + str(nonce).encode("utf-8")
+        proof_hash = sha512(proof_material).hexdigest()
+        proof_bits = bin(int(proof_hash, 16))[2:].zfill(512)
+        return {
+            "canonical_hash": canonical_hash,
+            "proof_hash": proof_hash,
+            "proof_hash_prefix": proof_hash[:16],
+            "difficulty_bits": difficulty_bits,
+            "nonce": nonce,
+            "is_valid": difficulty_bits <= 0 or proof_bits.startswith("0" * difficulty_bits),
+        }
 
     def select_k_closest_nodes(self, key_hex: str) -> dict[str, object]:
         if not key_hex:

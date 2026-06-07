@@ -31,13 +31,6 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             1,
             int(self.engine.services.config.virtual_route_min_published_routes),
         )
-        self._max_pending_routes_before_first_active_route = max(
-            1,
-            int(
-                self.engine.services.config
-                .virtual_route_max_pending_builds_before_first_route
-            ),
-        )
         self._pending_route_timeout_seconds = (
             self.engine.services.config.virtual_route_build_timeout_seconds
         )
@@ -91,17 +84,6 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             )
         )
         if active_route is None:
-            if pending_route_count >= self._max_pending_routes_before_first_active_route:
-                self.engine.services.log_service.debug(
-                    "virtual_route_maintenance_runtime",
-                    "virtual node is waiting for pending routes before first active route",
-                    local_virtual_node_id=local_virtual_node_id,
-                    pending_route_count=pending_route_count,
-                    max_pending_routes=self._max_pending_routes_before_first_active_route,
-                    min_online_routes=self._route_min_online_routes,
-                )
-                return False
-
             self.engine.services.log_service.info(
                 "virtual_route_maintenance_runtime",
                 "virtual node has no active route; scheduling route build",
@@ -222,6 +204,18 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
                 active_final_path_is_visible=final_path_is_visible,
                 should_build_more=True,
             )
+        if not final_path_is_visible:
+            self._invalidate_active_route(
+                local_virtual_node_id=local_virtual_node_id,
+                initial_path_id=initial_path_id,
+                final_path_id=final_path_id,
+                reason="active_route_final_path_missing_from_drt",
+            )
+            return DrtRouteHealth(
+                online_route_count=len(valid_final_path_ids),
+                active_final_path_is_visible=False,
+                should_build_more=True,
+            )
 
         return DrtRouteHealth(
             online_route_count=len(valid_final_path_ids),
@@ -267,11 +261,12 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             )
             return []
 
-        return [
+        valid_final_path_ids = {
             entry.final_path_id
             for entry in record.route_entries
             if entry.final_path_id and not is_expired_iso_datetime(entry.expires_at)
-        ]
+        }
+        return sorted(valid_final_path_ids)
 
     def _invalidate_active_route(
         self,

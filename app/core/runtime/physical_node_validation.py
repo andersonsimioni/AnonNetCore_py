@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from identity import RemotePhysicalNodeValidationCandidate
 from sessions import is_observed_only_physical_endpoint
 from sessions.models import utc_now
@@ -49,9 +51,24 @@ class PhysicalNodeValidationRuntime(PeriodicRuntime):
                     "host": endpoint.host,
                     "port": endpoint.port,
                     "priority": endpoint.priority,
+                    "is_active": endpoint.is_active,
+                    "failure_count": endpoint.failure_count,
+                    "last_success_at": (
+                        endpoint.last_success_at.isoformat()
+                        if endpoint.last_success_at is not None
+                        else None
+                    ),
+                    "last_failure_at": (
+                        endpoint.last_failure_at.isoformat()
+                        if endpoint.last_failure_at is not None
+                        else None
+                    ),
                 }
                 for endpoint in endpoints[:4]
             ],
+            physical_session_handshake_timeout_seconds=(
+                self.engine.services.config.physical_session_handshake_timeout_seconds
+            ),
         )
 
         if await self._try_validate_from_active_session(candidate):
@@ -90,20 +107,44 @@ class PhysicalNodeValidationRuntime(PeriodicRuntime):
         self,
         candidate: RemotePhysicalNodeValidationCandidate,
     ) -> None:
+        started_at = time.perf_counter()
+        self.engine.services.log_service.info(
+            "physical_node_validation_runtime",
+            "starting physical node validation session",
+            remote_physical_node_id=candidate.node_id,
+            physical_session_handshake_timeout_seconds=(
+                self.engine.services.config.physical_session_handshake_timeout_seconds
+            ),
+        )
         try:
             session_id = await self.engine.services.protocol_clients.physical.session.start_session(
                 remote_physical_node_id=candidate.node_id,
             )
         except Exception as error:
+            elapsed_seconds = time.perf_counter() - started_at
+            diagnostics = (
+                self.engine.services.identity_service
+                .build_remote_physical_node_route_diagnostics()
+            )
             self.engine.services.log_service.warning(
                 "physical_node_validation_runtime",
                 "physical node validation failed",
                 remote_physical_node_id=candidate.node_id,
+                elapsed_seconds=round(elapsed_seconds, 3),
                 error_type=type(error).__name__,
                 error=repr(error),
+                **diagnostics,
             )
             return
 
+        elapsed_seconds = time.perf_counter() - started_at
+        self.engine.services.log_service.info(
+            "physical_node_validation_runtime",
+            "physical node validation session finished",
+            remote_physical_node_id=candidate.node_id,
+            session_id=session_id,
+            elapsed_seconds=round(elapsed_seconds, 3),
+        )
         if not self._mark_validation_success(session_id, candidate.node_id):
             self.engine.services.log_service.warning(
                 "physical_node_validation_runtime",

@@ -38,6 +38,21 @@ class RouteBuildClient(EngineBoundComponent):
                 pk_final_physical_node=final_physical_node_public_key,
                 difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
             )
+        pow_details = strategy.build_route_pow_details(
+            pk_final_physical_node=final_physical_node_public_key,
+            nonce=route_nonce,
+            difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+        )
+        self.engine.services.log_service.debug(
+            "route_build_client",
+            "prepared route create proof of work",
+            initial_path_id=initial_path_id,
+            route_nonce=route_nonce,
+            pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+            pow_canonical_hash=pow_details["canonical_hash"],
+            pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
+            pow_is_valid=pow_details["is_valid"],
+        )
 
         self.engine.services.route_service.create_initiator_resolution(
             first_hop_physical_node_id=first_hop_physical_node_id,
@@ -80,6 +95,10 @@ class RouteBuildClient(EngineBoundComponent):
             first_hop_physical_node_id=first_hop_physical_node_id,
             remaining_ttl_ms=remaining_ttl_ms,
             route_strategy="random_walk_ttl_based",
+            route_nonce=route_nonce,
+            pow_difficulty_bits=self.engine.services.config.network_pow_difficulty_bits,
+            pow_canonical_hash=pow_details["canonical_hash"],
+            pow_proof_hash_prefix=pow_details["proof_hash_prefix"],
         )
         return {
             "route_strategy": "random_walk_ttl_based",

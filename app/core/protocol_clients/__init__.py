@@ -8,7 +8,6 @@ from .physical import (
     PhysicalPingClient,
     PhysicalNodeInfoClient,
     PhysicalNodeInfoExchangeClient,
-    PhysicalRelayClient,
     PhysicalSessionClient,
     RouteBuildClient,
     RouteExecuteClient,
@@ -25,7 +24,6 @@ class PhysicalProtocolClients:
     ping: PhysicalPingClient
     node_info: PhysicalNodeInfoClient
     node_info_exchange: PhysicalNodeInfoExchangeClient
-    relay: PhysicalRelayClient
     session: PhysicalSessionClient
     route_build: RouteBuildClient
     route_execute: RouteExecuteClient
@@ -35,7 +33,6 @@ class PhysicalProtocolClients:
         self.ping = PhysicalPingClient(engine)
         self.node_info = PhysicalNodeInfoClient(engine)
         self.node_info_exchange = PhysicalNodeInfoExchangeClient(engine)
-        self.relay = PhysicalRelayClient(engine)
         self.session = PhysicalSessionClient(engine)
         self.route_build = RouteBuildClient(engine)
         self.route_execute = RouteExecuteClient(engine)
@@ -66,7 +63,6 @@ __all__ = [
     "PhysicalNodeInfoClient",
     "PhysicalNodeInfoExchangeClient",
     "PhysicalProtocolClients",
-    "PhysicalRelayClient",
     "PhysicalSessionClient",
     "ProtocolClients",
     "RouteBuildClient",

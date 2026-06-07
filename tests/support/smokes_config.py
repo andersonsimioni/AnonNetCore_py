@@ -13,7 +13,6 @@ class SmokesConfig:
     """
 
     min_cluster_nodes: int = 8
-    network_pow_difficulty_bits: int = 8
     ready_cluster_ratio: float = 0.3
     network_ready_base_timeout_seconds: float = 90.0
     network_ready_seconds_per_node: float = 8.0
@@ -34,8 +33,9 @@ class SmokesConfig:
     test_core_route_pending_base_timeout_seconds: float = 18.0
     test_core_route_pending_seconds_per_node: float = 1.0
     test_core_route_pending_expected_ttl_multiplier: float = 4.0
+    test_core_route_pending_dht_timeout_multiplier: float = 2.0
+    test_core_route_pending_dht_visibility_margin_seconds: float = 12.0
     test_core_route_min_online_routes: int = 2
-    test_core_route_max_pending_before_first_route: int = 2
     test_core_route_acceptance_error_base_ms: int = 20_000
     test_core_route_acceptance_error_ms_per_node: int = 2_000
     test_core_route_runtime_interval_seconds: float = 1.0
@@ -43,9 +43,11 @@ class SmokesConfig:
     test_core_route_candidate_limit: int = 16
     test_core_route_ok_drt_visibility_base_timeout_seconds: float = 6.0
     test_core_route_ok_drt_visibility_seconds_per_node: float = 0.6
+    test_core_route_ok_drt_visibility_dht_timeout_multiplier: float = 2.0
     test_core_route_ok_drt_visibility_retry_seconds: float = 1.0
     test_core_virtual_session_drt_lookup_timeout_seconds: float = 45.0
-    test_core_session_handshake_timeout_seconds: float = 60.0
+    test_core_physical_session_handshake_timeout_seconds: float = 8.0
+    test_core_virtual_session_handshake_timeout_seconds: float = 60.0
     test_core_physical_node_validation_interval_seconds: float = 0.5
     test_core_physical_ping_base_timeout_seconds: float = 4.0
     test_core_physical_ping_seconds_per_node: float = 0.25
@@ -79,6 +81,7 @@ class SmokesConfig:
     virtual_message_route_build_multiplier: float = 2.0
     generic_wait_poll_seconds: float = 0.25
     network_ready_poll_seconds: float = 1.0
+    network_ready_diagnostic_interval_seconds: float = 10.0
     stable_drt_poll_seconds: float = 1.0
     route_candidate_ping_limit: int = 32
     route_candidate_query_limit: int = 32
@@ -111,47 +114,17 @@ class SmokesConfig:
     physical_relay_private_node_port: int = 19303
     physical_relay_short_poll_seconds: float = 0.1
     physical_relay_medium_poll_seconds: float = 0.5
-    physical_relay_registration_poll_seconds: float = 1.0
 
     physical_udp_core_a_tcp_port: int = 19801
     physical_udp_core_b_tcp_port: int = 19802
     physical_udp_core_a_udp_port: int = 29801
     physical_udp_core_b_udp_port: int = 29802
-    physical_udp_chunk_payload_size: int = 384
     physical_udp_seed: int = 517_009
-    physical_udp_max_stress_payload_size: int = 384_000
     physical_udp_datagram_size: int = 1200
-    physical_udp_reassembly_timeout_seconds: float = 20.0
-    physical_udp_max_frame_size: int = 2 * 1024 * 1024
     physical_udp_dpnt_timeout_seconds: float = 35.0
     physical_udp_session_timeout_seconds: float = 10.0
     physical_udp_reliable_ack_timeout_seconds: float = 45.0
     physical_udp_keepalive_ack_timeout_seconds: float = 6.0
-    physical_udp_concurrent_batch_sizes: tuple[int, ...] = (
-        4096,
-        8192,
-        16_384,
-        32_768,
-        65_536,
-        131_072,
-    )
-    physical_udp_boundary_payload_sizes: tuple[int, ...] = (
-        1,
-        128,
-        1199,
-        1200,
-        1201,
-        1300,
-        2048,
-        4096,
-        8192,
-        16_384,
-        32_768,
-        65_536,
-        131_072,
-    )
-    physical_udp_random_payload_min_size: int = 1500
-    physical_udp_random_payload_count: int = 16
 
     reliable_seed: int = 742_931
     reliable_short_timeout_seconds: float = 5.0
@@ -267,27 +240,33 @@ class SmokesConfig:
         )
 
     def route_build_timeout_seconds(self, cluster_nodes: int) -> float:
-        return (
+        route_round_trip_seconds = self.route_expected_round_trip_ttl_ms(cluster_nodes) / 1000
+        base_timeout = (
             self.test_core_route_pending_base_timeout_seconds
             + (cluster_nodes * self.test_core_route_pending_seconds_per_node)
             + (
-                self.route_expected_round_trip_ttl_ms(cluster_nodes)
-                / 1000
+                route_round_trip_seconds
                 * self.test_core_route_pending_expected_ttl_multiplier
             )
         )
+        dht_bound_timeout = (
+            self.dht_request_timeout_seconds(cluster_nodes)
+            * self.test_core_route_pending_dht_timeout_multiplier
+            + self.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
+            + self.test_core_route_pending_dht_visibility_margin_seconds
+        )
+        return max(base_timeout, dht_bound_timeout)
 
     def route_ok_drt_visibility_timeout_seconds(self, cluster_nodes: int) -> float:
-        return self.test_core_route_ok_drt_visibility_base_timeout_seconds + (
+        base_timeout = self.test_core_route_ok_drt_visibility_base_timeout_seconds + (
             cluster_nodes * self.test_core_route_ok_drt_visibility_seconds_per_node
         )
-
-    def route_max_pending_before_first_route(self, cluster_nodes: int) -> int:
-        scaled_limit = math.ceil(cluster_nodes * 0.25)
-        return max(
-            self.test_core_route_max_pending_before_first_route,
-            min(3, scaled_limit),
+        dht_bound_timeout = (
+            self.dht_request_timeout_seconds(cluster_nodes)
+            * self.test_core_route_ok_drt_visibility_dht_timeout_multiplier
+            + self.test_core_route_ok_drt_visibility_retry_seconds
         )
+        return max(base_timeout, dht_bound_timeout)
 
     def route_expected_round_trip_ttl_ms(self, cluster_nodes: int) -> int:
         return self.test_core_route_expected_round_trip_base_ttl_ms + (
@@ -327,7 +306,7 @@ class SmokesConfig:
     def virtual_session_handshake_timeout_seconds(self, cluster_nodes: int) -> float:
         route_round_trip_seconds = self.route_expected_round_trip_ttl_ms(cluster_nodes) / 1000
         base_timeout = (
-            self.virtual_session_handshake_base_timeout_seconds
+            self.test_core_virtual_session_handshake_timeout_seconds
             + (cluster_nodes * self.virtual_session_handshake_seconds_per_node)
             + (route_round_trip_seconds * 4)
         )

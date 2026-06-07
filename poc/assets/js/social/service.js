@@ -99,6 +99,7 @@ class SocialService {
     logSocialInfo("publish_local_user_state_started", {
       localVirtualNodeId: localVirtualNode.id,
       postCount: feedPosts.length,
+      postTexts: feedPosts.map((post) => post.text),
       friendCount: profile?.friend_virtual_node_ids?.length || 0,
     });
     const savedState = await this.saveUserState({
@@ -138,7 +139,9 @@ class SocialService {
       localVirtualNodeId: localVirtualNode.id,
       contentId: savedState.content.content_id,
       dptLogicalKey: dpt.logicalKey,
+      dptTargetRef: dpt.record.target_ref,
       dptStatus: dpt.publishResult?.status,
+      postCount: feedPosts.length,
     });
 
     return {
@@ -569,6 +572,8 @@ class SocialService {
       targetRef: pointer.record.target_ref,
       sessionId: session.sessionId,
       sessionReused: session.reused,
+      downloadedPostCount: published.userState.feed_posts?.length || 0,
+      downloadedPostTexts: (published.userState.feed_posts || []).map((post) => post.text),
     });
 
     return {
@@ -748,9 +753,17 @@ class SocialService {
       status: download.status,
       sizeBytes: download.size_bytes,
     });
+    const userState = await this.readLocalUserState(contentId);
+    logSocialDebug("content_download_user_state_loaded", {
+      sessionId,
+      contentId,
+      profileId: userState.profile?.virtual_node_id || null,
+      postCount: userState.feed_posts?.length || 0,
+      postTexts: (userState.feed_posts || []).map((post) => post.text),
+    });
     return {
       download,
-      userState: await this.readLocalUserState(contentId),
+      userState,
     };
   }
 

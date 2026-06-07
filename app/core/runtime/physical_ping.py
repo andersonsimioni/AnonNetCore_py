@@ -21,6 +21,26 @@ class PhysicalPingRuntime(PeriodicRuntime):
         if candidate is None:
             return
 
+        endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+            candidate.node_id,
+            only_active=True,
+        )
+        self.engine.services.log_service.debug(
+            "physical_ping_runtime",
+            "selected physical ping candidate",
+            remote_physical_node_id=candidate.node_id,
+            endpoint_count=len(endpoints),
+            endpoints=[
+                {
+                    "transport": endpoint.transport,
+                    "host": endpoint.host,
+                    "port": endpoint.port,
+                    "priority": endpoint.priority,
+                    "metadata": endpoint.metadata_json,
+                }
+                for endpoint in endpoints
+            ],
+        )
         try:
             ping_result = await self.engine.services.protocol_clients.physical.ping.ping_physical_node(
                 remote_physical_node_id=candidate.node_id,

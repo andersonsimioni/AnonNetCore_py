@@ -73,6 +73,11 @@ def validate_and_merge_drt_fragment(
             "Cannot merge DRT fragments from different virtual nodes."
         )
 
+    valid_parent_entries = [
+        route_entry
+        for route_entry in parent.route_entries
+        if _is_valid_drt_route_entry(route_entry, parent.pk_virtual_node)
+    ]
     valid_fragment_entries = [
         route_entry
         for route_entry in fragment.route_entries
@@ -80,7 +85,7 @@ def validate_and_merge_drt_fragment(
     ]
 
     merged_entries = _deduplicate_drt_route_entries(
-        [*parent.route_entries, *valid_fragment_entries]
+        [*valid_parent_entries, *valid_fragment_entries]
     )
     merged_last_update = datetime.now(timezone.utc).isoformat()
 
@@ -394,16 +399,18 @@ def _is_valid_ddt_holder(key: str, holder: DdtHolderRecord) -> bool:
 def _deduplicate_drt_route_entries(
     route_entries: list[DrtRouteEntryRecord],
 ) -> list[DrtRouteEntryRecord]:
-    unique_entries: dict[DrtRouteEntryRecord, None] = {}
+    unique_entries: dict[str, DrtRouteEntryRecord] = {}
 
     for route_entry in route_entries:
-        unique_entries[route_entry] = None
+        current_entry = unique_entries.get(route_entry.final_path_id)
+        if current_entry is None or _is_better_drt_route_entry(route_entry, current_entry):
+            unique_entries[route_entry.final_path_id] = route_entry
 
     return sorted(
-        unique_entries.keys(),
+        unique_entries.values(),
         key=lambda item: (
-            item.pk_physical_node,
             item.final_path_id,
+            item.pk_physical_node,
             item.expires_at,
             item.rtt,
             item.physical_node_signature,
@@ -413,6 +420,20 @@ def _deduplicate_drt_route_entries(
             item.rtt_physical_node_signature,
         ),
     )
+
+
+def _is_better_drt_route_entry(
+    candidate: DrtRouteEntryRecord,
+    current: DrtRouteEntryRecord,
+) -> bool:
+    candidate_expires_at = _parse_datetime(candidate.expires_at)
+    current_expires_at = _parse_datetime(current.expires_at)
+    if candidate_expires_at is not None and current_expires_at is not None:
+        if candidate_expires_at != current_expires_at:
+            return candidate_expires_at > current_expires_at
+    if candidate.rtt != current.rtt:
+        return candidate.rtt < current.rtt
+    return candidate.pk_physical_node < current.pk_physical_node
 
 
 def _deduplicate_exact_ddt_holders(

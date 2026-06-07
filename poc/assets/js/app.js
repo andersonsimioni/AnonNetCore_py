@@ -307,6 +307,13 @@ async function publishLocalPost(event) {
     authorPhotoDataUrl: active.profile.photo_data_url || active.profilePhotoPreview || null,
     text,
   }));
+  logWeb("info", "local_post_added", {
+    profileId: active.localVirtualNode.id,
+    postCount: active.feedPosts.length,
+    latestPostText: text,
+    currentPublishedContentId: active.userStateContent?.content_id || null,
+    currentDptTargetRef: active.profilePointer?.record?.target_ref || null,
+  });
   saveLocalState();
   render();
   event.currentTarget.reset();

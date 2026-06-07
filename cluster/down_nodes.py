@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import subprocess
+import time
 
 
 CLUSTER_ROOT = Path(__file__).resolve().parent
@@ -30,12 +31,27 @@ def main() -> int:
 
 
 def verify_docker_is_available() -> None:
-    subprocess.run(
-        ["docker", "info"],
-        cwd=PROJECT_ROOT,
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    last_result: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(1, 6):
+        last_result = subprocess.run(
+            ["docker", "info"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if last_result.returncode == 0:
+            return
+
+        print(
+            "waiting for Docker daemon: "
+            f"attempt={attempt}/5 "
+            f"error={(last_result.stderr or last_result.stdout or '').strip()}"
+        )
+        time.sleep(2)
+
+    raise RuntimeError(
+        "Docker is not available. "
+        f"Last error: {(last_result.stderr or last_result.stdout or '').strip() if last_result else ''}"
     )
 
 

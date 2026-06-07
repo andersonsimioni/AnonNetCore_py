@@ -222,16 +222,17 @@ class SessionRuntime(PeriodicRuntime):
 
     def _should_close_virtual_session(self, session) -> bool:
         route_rtt_ms = self._resolve_virtual_session_route_rtt_ms(session)
-        if route_rtt_ms is None:
-            return True
-
         timeout_seconds = max(
             float(self.engine.services.config.virtual_session_timeout_min_seconds),
             session.keepalive_interval_seconds * 3.0,
-            route_rtt_ms
-            / 1000.0
-            * float(self.engine.services.config.virtual_session_timeout_rtt_multiplier),
         )
+        if route_rtt_ms is not None:
+            timeout_seconds = max(
+                timeout_seconds,
+                route_rtt_ms
+                / 1000.0
+                * float(self.engine.services.config.virtual_session_timeout_rtt_multiplier),
+            )
         expires_at = session.last_activity_at + timedelta(seconds=timeout_seconds)
         if expires_at <= self_now():
             return True
@@ -241,7 +242,7 @@ class SessionRuntime(PeriodicRuntime):
             "kept virtual session open using route-aware timeout",
             session_id=session.session_id,
             bound_route_id=session.bound_route_id,
-            route_rtt_ms=round(route_rtt_ms, 3),
+            route_rtt_ms=round(route_rtt_ms, 3) if route_rtt_ms is not None else None,
             timeout_seconds=round(timeout_seconds, 3),
             keepalive_interval_seconds=session.keepalive_interval_seconds,
         )

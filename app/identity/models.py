@@ -37,6 +37,10 @@ class RemotePhysicalNodeEndpointResult:
     port: int
     priority: int
     metadata_json: str | None = None
+    is_active: bool = False
+    failure_count: int = 0
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -46,6 +50,11 @@ class RemotePhysicalNodeExchangeCandidate:
 
 @dataclass(slots=True, frozen=True)
 class RemotePhysicalNodePingCandidate:
+    node_id: str
+
+
+@dataclass(slots=True, frozen=True)
+class RemotePhysicalRelayCandidate:
     node_id: str
 
 

@@ -170,6 +170,29 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             remote_port=context.remote_port,
         )
         advertised_endpoints = _build_response_endpoints(context, services)
+        if not advertised_endpoints:
+            services.log_service.warning(
+                "physical_node_info",
+                "ignored physical node info request because local node has no advertised endpoint",
+                requester_node_id=requester_node_id if isinstance(requester_node_id, str) else None,
+                remote_host=context.remote_host,
+                remote_port=context.remote_port,
+                local_reachability=(
+                    services.engine.services.config.node_reachability
+                    if services.engine is not None
+                    else None
+                ),
+            )
+            return PacketProcessingResult(
+                protocol_name=envelope.protocol_name,
+                handled=True,
+                message_type=envelope.message_type,
+                metadata={
+                    "protocol_family": self.protocol_family,
+                    "reason": "local_node_has_no_advertised_endpoint",
+                },
+            )
+
         services.log_service.debug(
             "physical_node_info",
             "built local advertised endpoints for info response",
@@ -440,8 +463,6 @@ def _build_response_endpoints(
     context: PacketContext,
     services: EngineServices,
 ) -> list[dict[str, object]]:
-    if services.engine is not None and services.engine.is_private_physical_node():
-        return []
     if services.engine is not None:
         return services.engine.build_local_physical_endpoints()
 

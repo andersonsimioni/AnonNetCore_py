@@ -28,26 +28,6 @@ def build_default_bootstrap_public_endpoints() -> list[BootstrapEndpoint]:
     ]
 
 
-def _read_int_env(name: str, default: int) -> int:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    try:
-        return int(raw_value)
-    except ValueError:
-        return default
-
-
-def _read_optional_int_env(name: str) -> int | None:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return None
-    try:
-        return int(raw_value)
-    except ValueError:
-        return None
-
-
 def _read_bool_env(name: str, default: bool) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -67,16 +47,19 @@ class CoreConfig:
 
     tcp_transport_enabled: bool = _read_bool_env("ANONNET_TCP_TRANSPORT_ENABLED", True)
     udp_transport_enabled: bool = _read_bool_env("ANONNET_UDP_TRANSPORT_ENABLED", True)
-    relay_service_enabled: bool = _read_bool_env("ANONNET_RELAY_SERVICE_ENABLED", True)
+    physical_relay_enabled: bool = _read_bool_env("ANONNET_RELAY_SERVICE_ENABLED", True)
 
     physical_listen_host: str = "0.0.0.0"
     physical_tcp_listen_port: int = 19001
-    physical_udp_listen_port: int | None = _read_optional_int_env("ANONNET_PHYSICAL_UDP_LISTEN_PORT")
+    physical_udp_listen_port: int = 19002
+    physical_tcp_backlog: int = 100
+    physical_tcp_idle_timeout_seconds: int = 60
 
     udp_max_datagram_size: int = 1200
-    udp_chunk_payload_size: int = 512
-    udp_max_frame_size: int = 1024 * 1024
-    udp_reassembly_timeout_seconds: float = 10.0
+    udp_keepalive_interval_seconds: float = 1.0
+    udp_fragment_payload_size: int = 500
+    udp_fragment_send_delay_seconds: float = 0.005
+    udp_fragment_reassembly_timeout_seconds: float = 15.0
 
     log_dir: str | Path = "data/local/logs"
     runtime_stop_timeout_seconds: float = 3.0
@@ -93,18 +76,17 @@ class CoreConfig:
     physical_ping_runtime_candidate_limit: int = 4
 
     random_walk_candidate_limit: int = 32
-    random_walk_ttl_acceptance_error_ms: int = 1000
+    random_walk_ttl_acceptance_error_ms: int = 30_000
     random_walk_previous_hop_fallback_rtt_ms: float = 40.0
 
     virtual_route_maintenance_interval_seconds: float = 5.0
     virtual_route_min_published_routes: int = 5
-    virtual_route_build_timeout_seconds: float = 45.0
-    route_create_ok_drt_visibility_timeout_seconds: float = 10.0
+    virtual_route_build_timeout_seconds: float = 90.0
+    route_create_ok_drt_visibility_timeout_seconds: float = 45.0
     route_create_ok_drt_visibility_retry_seconds: float = 1.0
-    virtual_route_max_pending_builds_before_first_route: int = 2
     default_random_walk_ttl_ms: int = 500
 
-    network_pow_difficulty_bits: int = _read_int_env("ANONNET_NETWORK_POW_DIFFICULTY_BITS", 16)
+    network_pow_difficulty_bits: int = 16
 
     session_keepalive_seconds: int = 20
     session_runtime_interval_seconds: float = 2.0
@@ -116,7 +98,8 @@ class CoreConfig:
     virtual_session_timeout_min_seconds: float = 60.0
     virtual_session_timeout_rtt_multiplier: float = 6.0
     reliable_delivery_max_attempts: int = 5
-    session_handshake_timeout_seconds: float = 20.0
+    physical_session_handshake_timeout_seconds: float = 12.0
+    virtual_session_handshake_timeout_seconds: float = 60.0
     session_handshake_poll_interval_seconds: float = 0.25
 
     physical_node_validation_runtime_interval_seconds: float = 3.0
@@ -127,14 +110,13 @@ class CoreConfig:
     physical_node_info_exchange_runtime_interval_seconds: float = 2.0
     physical_node_info_exchange_max_records: int = 32
 
-    physical_relay_challenge_ttl_seconds: int = 60
-    physical_relay_registration_ttl_seconds: int = 30 * 60
-    physical_relay_channel_ttl_seconds: int = 10 * 60
+    physical_relay_maintenance_interval_seconds: float = 5.0
+    physical_relay_candidate_limit: int = 8
 
     dht_replication_factor: int = 3
     dht_maintenance_interval_seconds: float = 5.0
     dht_republish_interval_seconds: float = 120.0
-    dht_request_timeout_seconds: float = 5.0
+    dht_request_timeout_seconds: float = 20.0
     dht_request_max_forward_hops: int = 60
 
     virtual_session_drt_lookup_timeout_seconds: float = 20.0
@@ -150,7 +132,7 @@ class CoreConfig:
     api_websocket_path: str = "/v1/events"
 
     content_storage_dir: str | Path = "data/local/content"
-    content_download_range_size: int = 64 * 1024
+    content_download_range_size: int = 4 * 1024
     content_provider_record_ttl_seconds: int = 30 * 24 * 60 * 60
     content_provider_publish_retry_attempts: int = 4
     content_provider_publish_retry_delay_seconds: float = 2.0

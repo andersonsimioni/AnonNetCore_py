@@ -167,7 +167,6 @@ def run_smoke(
     started_at = time.monotonic()
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    env["ANONNET_NETWORK_POW_DIFFICULTY_BITS"] = str(SMOKES_CONFIG.network_pow_difficulty_bits)
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         log_file.write(f"$ {format_command(spec.command)}\n\n")
         log_file.flush()
