@@ -351,12 +351,20 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             hole_punch_capable=bool(requester_hole_punch_capable),
             notes_json=json.dumps(notes, separators=(",", ":")),
         )
+        known_endpoints = services.identity_service.list_remote_physical_node_endpoints(
+            requester_node_id,
+            only_active=False,
+        )
         services.log_service.info(
             "physical_node_info",
             "persisted requester physical node from request",
             requester_node_id=requester_node_id,
             endpoint_count=len(requester_endpoints),
             endpoints=requester_endpoints,
+            known_endpoint_state=_summarize_known_endpoint_results(known_endpoints),
+            active_known_endpoint_count=sum(1 for endpoint in known_endpoints if endpoint.is_active),
+            inactive_known_endpoint_count=sum(1 for endpoint in known_endpoints if not endpoint.is_active),
+            source="physical_node_info_request",
         )
 
     async def _handle_response(
@@ -439,12 +447,20 @@ class PhysicalNodeInfoProtocolHandler(ProtocolMessageHandler):
             hole_punch_capable=bool(hole_punch_capable),
             notes_json=json.dumps(notes, separators=(",", ":")),
         )
+        known_endpoints = services.identity_service.list_remote_physical_node_endpoints(
+            remote_node_id,
+            only_active=False,
+        )
         services.log_service.info(
             "physical_node_info",
             "persisted remote physical node info",
             remote_node_id=remote_node_id,
             endpoint_count=len(valid_endpoints),
             endpoints=valid_endpoints,
+            known_endpoint_state=_summarize_known_endpoint_results(known_endpoints),
+            active_known_endpoint_count=sum(1 for endpoint in known_endpoints if endpoint.is_active),
+            inactive_known_endpoint_count=sum(1 for endpoint in known_endpoints if not endpoint.is_active),
+            source="physical_node_info_response",
         )
         return PacketProcessingResult(
             protocol_name=envelope.protocol_name,
@@ -476,6 +492,20 @@ def _build_response_endpoints(
             "port": context.local_port,
             "priority": 0,
         }
+    ]
+
+
+def _summarize_known_endpoint_results(endpoints) -> list[dict[str, object]]:
+    return [
+        {
+            "transport": endpoint.transport,
+            "host": endpoint.host,
+            "port": endpoint.port,
+            "is_active": endpoint.is_active,
+            "failure_count": endpoint.failure_count,
+            "metadata": endpoint.metadata_json,
+        }
+        for endpoint in endpoints
     ]
 
 

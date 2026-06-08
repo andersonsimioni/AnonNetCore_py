@@ -21,9 +21,11 @@ class PhysicalDhtClient:
             self.engine.services.config.dht_request_timeout_seconds
         )
         self._publish_attempt_timeout_seconds = self._response_timeout_seconds
-        self._publish_attempt_count = 3
+        self._publish_attempt_count = (
+            self.engine.services.config.dht_publish_attempt_count
+        )
         self._query_attempt_timeout_seconds = self._response_timeout_seconds
-        self._query_attempt_count = 6
+        self._query_attempt_count = self.engine.services.config.dht_query_attempt_count
         self._request_ttl = self.engine.services.config.dht_request_max_forward_hops
 
     async def publish(
@@ -527,12 +529,30 @@ class PhysicalDhtClient:
             key=key_hex,
             candidate_count=len(responsible_nodes),
             attempted_count=len(attempted_remote_node_ids),
+            candidates=[
+                {
+                    "node_id": node.get("node_id"),
+                    "is_local": node.get("is_local"),
+                    "distance_hex": node.get("distance_hex"),
+                    "node_endpoint_count": len(node.get("endpoints") or []),
+                    "known_endpoint_state": self._summarize_known_endpoint_state(node.get("node_id")),
+                }
+                for node in responsible_nodes
+                if isinstance(node.get("node_id"), str)
+            ],
         )
         for node in responsible_nodes:
             node_id = node.get("node_id")
             if not isinstance(node_id, str) or not node_id:
                 continue
             if node_id in attempted_remote_node_ids:
+                self.engine.services.log_service.debug(
+                    "physical_dht_client",
+                    "skipping already attempted closest dht node",
+                    key=key_hex,
+                    remote_physical_node_id=node_id,
+                    known_endpoint_state=self._summarize_known_endpoint_state(node_id),
+                )
                 continue
 
             existing_session = self._get_preferred_active_physical_session(node_id)
@@ -544,10 +564,18 @@ class PhysicalDhtClient:
                     remote_physical_node_id=node_id,
                     session_id=existing_session.session_id,
                     transport=existing_session.transport,
+                    known_endpoint_state=self._summarize_known_endpoint_state(node_id),
                 )
                 return existing_session
 
             try:
+                self.engine.services.log_service.debug(
+                    "physical_dht_client",
+                    "opening closest known dht request session",
+                    key=key_hex,
+                    remote_physical_node_id=node_id,
+                    known_endpoint_state=self._summarize_known_endpoint_state(node_id),
+                )
                 session_id = await self.engine.services.protocol_clients.physical.session.start_session(
                     remote_physical_node_id=node_id,
                 )
@@ -560,6 +588,7 @@ class PhysicalDhtClient:
                     remote_physical_node_id=node_id,
                     error_type=type(error).__name__,
                     error=repr(error),
+                    known_endpoint_state=self._summarize_known_endpoint_state(node_id),
                 )
                 continue
 
@@ -571,8 +600,20 @@ class PhysicalDhtClient:
                     key=key_hex,
                     remote_physical_node_id=node_id,
                     session_id=session.session_id,
+                    transport=session.transport,
+                    known_endpoint_state=self._summarize_known_endpoint_state(node_id),
                 )
                 return session
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "closest known dht request session did not become active",
+                key=key_hex,
+                remote_physical_node_id=node_id,
+                session_id=session_id,
+                session_state=(session.session_state if session is not None else None),
+                transport=(session.transport if session is not None else None),
+                known_endpoint_state=self._summarize_known_endpoint_state(node_id),
+            )
 
         return None
 
@@ -616,9 +657,22 @@ class PhysicalDhtClient:
             "physical_dht_client",
             "opening random initial dht session from known candidates",
             candidate_count=len(candidates),
+            candidates=[
+                {
+                    "node_id": candidate.node_id,
+                    "known_endpoint_state": self._summarize_known_endpoint_state(candidate.node_id),
+                }
+                for candidate in candidates
+            ],
         )
         for candidate in candidates:
             if candidate.node_id in ignored_remote_node_ids:
+                self.engine.services.log_service.debug(
+                    "physical_dht_client",
+                    "skipping ignored random dht candidate",
+                    remote_physical_node_id=candidate.node_id,
+                    known_endpoint_state=self._summarize_known_endpoint_state(candidate.node_id),
+                )
                 continue
             try:
                 session_id = await self.engine.services.protocol_clients.physical.session.start_session(
@@ -630,6 +684,7 @@ class PhysicalDhtClient:
                     "failed to open random initial dht session",
                     remote_physical_node_id=candidate.node_id,
                     error=repr(error),
+                    known_endpoint_state=self._summarize_known_endpoint_state(candidate.node_id),
                 )
                 continue
 
@@ -640,8 +695,19 @@ class PhysicalDhtClient:
                     "opened random initial dht session",
                     remote_physical_node_id=candidate.node_id,
                     session_id=session.session_id,
+                    transport=session.transport,
+                    known_endpoint_state=self._summarize_known_endpoint_state(candidate.node_id),
                 )
                 return session
+            self.engine.services.log_service.warning(
+                "physical_dht_client",
+                "random initial dht session did not become active",
+                remote_physical_node_id=candidate.node_id,
+                session_id=session_id,
+                session_state=(session.session_state if session is not None else None),
+                transport=(session.transport if session is not None else None),
+                known_endpoint_state=self._summarize_known_endpoint_state(candidate.node_id),
+            )
 
         return None
 
@@ -665,6 +731,40 @@ class PhysicalDhtClient:
         if transport_name == "udp":
             return 2
         return 3
+
+    def _summarize_known_endpoint_state(self, node_id: object) -> dict[str, object]:
+        if not isinstance(node_id, str) or not node_id:
+            return {"known_endpoint_count": 0, "active_endpoint_count": 0, "endpoints": []}
+        endpoints = self.engine.services.identity_service.list_remote_physical_node_endpoints(
+            node_id,
+            only_active=False,
+        )
+        return {
+            "known_endpoint_count": len(endpoints),
+            "active_endpoint_count": sum(1 for endpoint in endpoints if endpoint.is_active),
+            "inactive_endpoint_count": sum(1 for endpoint in endpoints if not endpoint.is_active),
+            "endpoints": [
+                {
+                    "transport": endpoint.transport,
+                    "host": endpoint.host,
+                    "port": endpoint.port,
+                    "is_active": endpoint.is_active,
+                    "failure_count": endpoint.failure_count,
+                    "last_success_at": (
+                        endpoint.last_success_at.isoformat()
+                        if endpoint.last_success_at is not None
+                        else None
+                    ),
+                    "last_failure_at": (
+                        endpoint.last_failure_at.isoformat()
+                        if endpoint.last_failure_at is not None
+                        else None
+                    ),
+                    "metadata": endpoint.metadata_json,
+                }
+                for endpoint in endpoints
+            ],
+        }
 
     def _publish_locally_if_responsible(
         self,

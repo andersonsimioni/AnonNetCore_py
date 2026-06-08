@@ -52,6 +52,9 @@ def build_engine_from_args() -> CoreEngine:
     args = parse_args()
     engine = CoreEngine()
     engine.services.config.physical_tcp_listen_port = args.listen_port
+    if args.enable_log_error_reporting:
+        engine.services.config.log_error_report_enabled = True
+        engine.services.config.log_error_report_endpoint = args.log_error_report_endpoint
     return engine
 
 
@@ -63,6 +66,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=default_config.physical_tcp_listen_port,
         help="Porta TCP local do node.",
+    )
+    parser.add_argument(
+        "--enable-log-error-reporting",
+        action="store_true",
+        help="Enable smoke/debug HTTP reporting for WARNING and ERROR log events.",
+    )
+    parser.add_argument(
+        "--log-error-report-endpoint",
+        default=default_config.log_error_report_endpoint,
+        help="HTTP endpoint used when smoke/debug log error reporting is enabled.",
     )
     return parser.parse_args()
 

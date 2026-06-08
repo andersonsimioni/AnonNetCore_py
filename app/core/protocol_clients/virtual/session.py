@@ -69,12 +69,30 @@ class VirtualSessionClient:
         for attempt, entry_point in enumerate(entry_points, start=1):
             try:
                 await self._ensure_entry_point_physical_node(entry_point)
+                timeout_seconds = self._entry_point_handshake_timeout_seconds(entry_point)
+                self.engine.services.log_service.debug(
+                    "virtual_session_client",
+                    "calculated virtual session drt handshake timeout",
+                    local_virtual_node_id=local_virtual_node_id,
+                    remote_virtual_node_id=remote_virtual_node_id,
+                    entry_point_physical_node_id=entry_point.physical_node_id,
+                    final_path_id=entry_point.final_path_id,
+                    route_rtt_ms=entry_point.rtt,
+                    timeout_seconds=timeout_seconds,
+                    handshake_timeout_seconds=self._handshake_timeout_seconds,
+                    virtual_timeout_min_seconds=(
+                        self.engine.services.config.virtual_session_timeout_min_seconds
+                    ),
+                    rtt_multiplier=(
+                        self.engine.services.config.virtual_session_timeout_rtt_multiplier
+                    ),
+                )
                 return await self._start_session_over_entry_point(
                     local_virtual_node_id=local_virtual_node_id,
                     remote_virtual_node_id=remote_virtual_node_id,
                     remote_public_key=remote_virtual_node.public_key if remote_virtual_node else None,
                     entry_point=entry_point,
-                    timeout_seconds=self._entry_point_handshake_timeout_seconds(entry_point),
+                    timeout_seconds=timeout_seconds,
                     attempt=attempt,
                     max_attempts=len(entry_points),
                 )
@@ -768,11 +786,15 @@ class VirtualSessionClient:
         entry_point: "VirtualRouteEntryPoint",
     ) -> float:
         route_rtt_seconds = max(0.001, entry_point.rtt / 1000.0)
-        route_timeout_seconds = max(
-            self.engine.services.config.session_keepalive_seconds,
-            route_rtt_seconds * self.engine.services.config.virtual_session_timeout_rtt_multiplier,
+        route_timeout_seconds = (
+            route_rtt_seconds
+            * self.engine.services.config.virtual_session_timeout_rtt_multiplier
         )
-        return min(self._handshake_timeout_seconds, route_timeout_seconds)
+        return max(
+            self._handshake_timeout_seconds,
+            self.engine.services.config.virtual_session_timeout_min_seconds,
+            route_timeout_seconds,
+        )
 
     @staticmethod
     def _transport_preference(transport_name: str | None) -> int:

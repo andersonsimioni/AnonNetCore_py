@@ -274,6 +274,52 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             route_create_ok=route_create_ok,
         )
 
+    async def handle_route_create_fail(
+        self,
+        *,
+        envelope,
+        context,
+        services,
+    ) -> PacketProcessingResult:
+        del context
+
+        route_create_fail = self._parse_route_create_fail(envelope.payload)
+        reverse_path = self._resolve_reverse_path(
+            services=services,
+            path_id=route_create_fail.path_id,
+        )
+        if reverse_path is not None:
+            invalidated = services.route_service.invalidate_hop_resolution_by_path_id(
+                path_id=route_create_fail.path_id,
+                reason=route_create_fail.reason,
+            )
+            services.log_service.info(
+                "route_build",
+                "route create fail invalidated hop and will continue reverse path",
+                path_id=route_create_fail.path_id,
+                next_path_id=reverse_path.next_path_id,
+                target_remote_physical_node_id=reverse_path.target_remote_physical_node_id,
+                reason=route_create_fail.reason,
+                invalidated=invalidated is not None,
+            )
+            return self._build_forward_result(
+                envelope=envelope,
+                target_remote_physical_node_id=reverse_path.target_remote_physical_node_id,
+                target_physical_session_id=reverse_path.target_physical_session_id,
+                forward_message_type="ROUTE_CREATE_FAIL",
+                forward_payload=route_create_fail.to_payload(
+                    strategy_name=self.strategy_name,
+                    path_id=reverse_path.next_path_id,
+                ),
+                route_build_action=reverse_path.action,
+            )
+
+        return self._handle_local_route_create_fail(
+            envelope=envelope,
+            services=services,
+            route_create_fail=route_create_fail,
+        )
+
     async def handle_route_create_ping(
         self,
         *,
@@ -825,6 +871,40 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
             },
         )
 
+    def _handle_local_route_create_fail(
+        self,
+        *,
+        envelope,
+        services,
+        route_create_fail: "RandomWalkTtlRouteCreateFail",
+    ) -> PacketProcessingResult:
+        invalidated = services.route_service.invalidate_initiator_resolution(
+            initial_path_id=route_create_fail.path_id,
+            reason=route_create_fail.reason,
+        )
+        services.log_service.warning(
+            "route_build",
+            "route create fail reached initiator",
+            path_id=route_create_fail.path_id,
+            reason=route_create_fail.reason,
+            invalidated=invalidated is not None,
+        )
+        if invalidated is None:
+            return self._build_invalid_result(envelope, reason="route_initiator_state_not_found")
+
+        return PacketProcessingResult(
+            protocol_name=envelope.protocol_name,
+            handled=True,
+            message_type=envelope.message_type,
+            metadata={
+                "protocol_family": "route_build",
+                "route_build_action": "route_create_failed",
+                "route_strategy": self.strategy_name,
+                "path_id": route_create_fail.path_id,
+                "reason": route_create_fail.reason,
+            },
+        )
+
     async def _is_route_visible_in_drt(
         self,
         *,
@@ -1042,7 +1122,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 received_ping_id=route_create_pong.ping_id,
                 expected_ping_id=last_ping_id,
             )
-            return self._build_invalid_result(envelope, reason="unexpected_route_create_pong")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="unexpected_route_create_pong",
+            )
         if not isinstance(started_at_monotonic_ms, (int, float)):
             services.log_service.warning(
                 "route_build",
@@ -1051,7 +1137,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 ping_id=route_create_pong.ping_id,
                 ping_started_at_monotonic_ms=started_at_monotonic_ms,
             )
-            return self._build_invalid_result(envelope, reason="missing_route_ping_start_time")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="missing_route_ping_start_time",
+            )
         if not isinstance(remote_virtual_node_id, str) or not remote_virtual_node_id:
             services.log_service.warning(
                 "route_build",
@@ -1060,7 +1152,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 ping_id=route_create_pong.ping_id,
                 remote_virtual_node_id=remote_virtual_node_id,
             )
-            return self._build_invalid_result(envelope, reason="missing_remote_virtual_node_id")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="missing_remote_virtual_node_id",
+            )
 
         observed_round_trip_ms = (monotonic() * 1000.0) - float(started_at_monotonic_ms)
         if not isinstance(expected_round_trip_ttl_ms, (int, float)):
@@ -1072,7 +1170,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 expected_round_trip_ttl_ms=expected_round_trip_ttl_ms,
                 observed_round_trip_ms=round(observed_round_trip_ms, 3),
             )
-            return self._build_invalid_result(envelope, reason="missing_expected_round_trip_ttl_ms")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="missing_expected_round_trip_ttl_ms",
+            )
 
         route_error_ms = services.config.random_walk_ttl_acceptance_error_ms
         lower = float(expected_round_trip_ttl_ms - route_error_ms)
@@ -1102,7 +1206,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 allowed_lower_ms=lower,
                 allowed_upper_ms=upper,
             )
-            return self._build_invalid_result(envelope, reason="route_round_trip_ttl_exceeded")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="route_round_trip_ttl_exceeded",
+            )
 
         route_endpoint_state = services.route_service.mark_endpoint_resolution_active(
             route_path_id=route_create_pong.path_id,
@@ -1170,7 +1280,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 has_physical_node_signature=bool(route_endpoint_state.physical_node_signature),
                 has_final_path_id=bool(route_endpoint_state.final_path_id),
             )
-            return self._build_invalid_result(envelope, reason="drt_publish_request_not_available")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="drt_publish_request_not_available",
+            )
 
         services.log_service.debug(
             "route_build",
@@ -1223,7 +1339,13 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                     else None
                 ),
             )
-            return self._build_invalid_result(envelope, reason="drt_publish_failed")
+            return self._build_route_create_fail_result(
+                envelope=envelope,
+                services=services,
+                route_path_id=route_create_pong.path_id,
+                route_endpoint_state=route_endpoint_state,
+                reason="drt_publish_failed",
+            )
 
         services.log_service.info(
             "route_build",
@@ -1285,6 +1407,52 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 "is_within_expected_ttl": True,
                 "final_path_id": route_endpoint_state.final_path_id,
             },
+        )
+
+    def _build_route_create_fail_result(
+        self,
+        *,
+        envelope,
+        services,
+        route_path_id: str,
+        route_endpoint_state,
+        reason: str,
+    ) -> PacketProcessingResult:
+        if not route_endpoint_state.previous_physical_node_id:
+            services.log_service.warning(
+                "route_build",
+                "route create fail cannot be sent because previous hop is missing",
+                path_id=route_path_id,
+                reason=reason,
+            )
+            return self._build_invalid_result(envelope, reason=reason)
+
+        route_create_fail = RandomWalkTtlRouteCreateFail(
+            path_id=route_path_id,
+            reason=reason,
+        )
+        invalidated_endpoint = services.route_service.invalidate_endpoint_resolution(
+            route_path_id=route_path_id,
+            reason=reason,
+        )
+        services.log_service.warning(
+            "route_build",
+            "sending route create fail through reverse path",
+            path_id=route_path_id,
+            final_path_id=route_endpoint_state.final_path_id,
+            previous_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            reason=reason,
+            invalidated_endpoint=invalidated_endpoint is not None,
+        )
+        return self._build_forward_result(
+            envelope=envelope,
+            target_remote_physical_node_id=route_endpoint_state.previous_physical_node_id,
+            forward_message_type="ROUTE_CREATE_FAIL",
+            forward_payload=route_create_fail.to_payload(
+                strategy_name=self.strategy_name,
+                path_id=route_path_id,
+            ),
+            route_build_action="send_route_create_fail",
         )
 
     async def _publish_drt_route_after_pong(
@@ -1464,6 +1632,16 @@ class RandomWalkTtlRouteStrategy(RouteStrategy):
                 payload_dict,
                 "public_route_acceptance_signature",
             ),
+        )
+
+    def _parse_route_create_fail(
+        self,
+        payload: object,
+    ) -> "RandomWalkTtlRouteCreateFail":
+        payload_dict = payload if isinstance(payload, dict) else {}
+        return RandomWalkTtlRouteCreateFail(
+            path_id=_read_required_string(payload_dict, "path_id"),
+            reason=_read_required_string(payload_dict, "reason"),
         )
 
     def _parse_route_create_ping(
@@ -1821,6 +1999,19 @@ class RandomWalkTtlRouteCreateOk:
             "path_id": path_id,
             "encrypted_payload_hex": self.encrypted_payload_hex,
             "public_route_acceptance_signature": self.public_route_acceptance_signature,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class RandomWalkTtlRouteCreateFail:
+    path_id: str
+    reason: str
+
+    def to_payload(self, *, strategy_name: str, path_id: str) -> dict[str, object]:
+        return {
+            "route_strategy": strategy_name,
+            "path_id": path_id,
+            "reason": self.reason,
         }
 
 

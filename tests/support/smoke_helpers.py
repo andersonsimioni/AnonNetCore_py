@@ -310,8 +310,15 @@ async def wait_for_cluster_network_maturity(
         return
 
     minimum_ready_nodes = max(1, required_ready_nodes or 1)
+    resolved_cluster_nodes = cluster_nodes or minimum_ready_nodes
     warmup_seconds = warmup_seconds or SMOKES_CONFIG.cluster_network_maturity_seconds(
-        cluster_nodes or minimum_ready_nodes
+        resolved_cluster_nodes
+    )
+    print(
+        "smoke timing model: "
+        f"nodes={resolved_cluster_nodes} "
+        f"cluster_maturity={warmup_seconds:.1f}s "
+        f"exchange_interval={SMOKES_CONFIG.test_core_physical_node_info_exchange_interval_seconds}s"
     )
     stable_ticks = 0
     deadline = asyncio.get_running_loop().time() + warmup_seconds
@@ -437,9 +444,19 @@ async def wait_for_runtime_route_active(
     cluster_nodes: int | None = None,
     timeout_seconds: float | None = None,
 ):
+    resolved_cluster_nodes = cluster_nodes or DEFAULT_CLUSTER_NODES
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.route_active_timeout_seconds(
-        cluster_nodes or DEFAULT_CLUSTER_NODES
+        resolved_cluster_nodes
     )
+    print(
+        "smoke timing model: "
+        f"nodes={resolved_cluster_nodes} "
+        f"route_build={SMOKES_CONFIG.route_build_timeout_seconds(resolved_cluster_nodes):.1f}s "
+        f"route_ok_visibility={SMOKES_CONFIG.route_ok_drt_visibility_timeout_seconds(resolved_cluster_nodes):.1f}s "
+        f"dht_request={SMOKES_CONFIG.dht_request_timeout_seconds(resolved_cluster_nodes):.1f}s "
+        f"route_active={timeout_seconds:.1f}s"
+    )
+
     async def load_active_route():
         return engine.services.route_service.get_active_initiator_resolution_for_local_virtual_node(
             local_virtual_node_id=local_virtual_node_id,
@@ -569,6 +586,15 @@ async def wait_for_stable_drt_online_route_count(
 
     timeout_seconds = timeout_seconds or SMOKES_CONFIG.drt_online_route_count_timeout_seconds(
         cluster_nodes or DEFAULT_CLUSTER_NODES
+    )
+    resolved_cluster_nodes = cluster_nodes or DEFAULT_CLUSTER_NODES
+    print(
+        "smoke timing model: "
+        f"nodes={resolved_cluster_nodes} "
+        f"dht_request={SMOKES_CONFIG.dht_request_timeout_seconds(resolved_cluster_nodes):.1f}s "
+        f"drt_stable_reads={SMOKES_CONFIG.drt_stable_reads} "
+        f"drt_query_attempts={SMOKES_CONFIG.drt_query_attempt_count} "
+        f"drt_online={timeout_seconds:.1f}s"
     )
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     consecutive_reads = 0

@@ -84,6 +84,16 @@ class VirtualRouteMaintenanceRuntime(PeriodicRuntime):
             )
         )
         if active_route is None:
+            if pending_route_count >= self._route_min_online_routes:
+                self.engine.services.log_service.debug(
+                    "virtual_route_maintenance_runtime",
+                    "virtual node is waiting for pending routes before first active route",
+                    local_virtual_node_id=local_virtual_node_id,
+                    pending_route_count=pending_route_count,
+                    min_online_routes=self._route_min_online_routes,
+                )
+                return False
+
             self.engine.services.log_service.info(
                 "virtual_route_maintenance_runtime",
                 "virtual node has no active route; scheduling route build",

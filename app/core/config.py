@@ -55,12 +55,20 @@ class CoreConfig:
     physical_tcp_backlog: int = 100
     physical_tcp_idle_timeout_seconds: int = 60
 
-    udp_max_datagram_size: int = 1200
     udp_keepalive_interval_seconds: float = 1.0
-    udp_fragment_payload_size: int = 800
-    udp_fragment_send_delay_seconds: float = 0.001
+    udp_fragment_payload_size: int = 900
     udp_fragment_reassembly_timeout_seconds: float = 15.0
 
+    log_enabled: bool = True
+    log_print_enabled: bool = False
+    log_async_enabled: bool = True
+    log_queue_max_size: int = 20_000
+    log_batch_size: int = 256
+    log_error_report_enabled: bool = False
+    log_error_report_endpoint: str = "http://127.0.0.1:18999/v1/smoke-log-events"
+    log_error_report_levels: tuple[str, ...] = ("WARNING", "ERROR")
+    log_error_report_timeout_seconds: float = 0.25
+    log_error_report_batch_size: int = 64
     log_dir: str | Path = "data/local/logs"
     runtime_stop_timeout_seconds: float = 3.0
 
@@ -117,6 +125,9 @@ class CoreConfig:
     dht_maintenance_interval_seconds: float = 1.0
     dht_republish_interval_seconds: float = 30.0
     dht_request_timeout_seconds: float = 60.0
+    dht_publish_attempt_count: int = 3
+    dht_query_attempt_count: int = 6
+    dht_forward_return_path_grace_seconds: float = 30.0
     dht_request_max_forward_hops: int = 60
 
     virtual_session_drt_lookup_timeout_seconds: float = 20.0

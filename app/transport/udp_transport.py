@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import json
 import os
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Callable
-from uuid import uuid4
 
 from common import utc_now
 from .interfaces import InboundPacketHandler, TransportAdapter
@@ -15,11 +12,13 @@ from .models import OutboundMessage, TransportEndpoint, TransportPacket, Transpo
 
 
 UDP_KEEPALIVE_PAYLOAD = b"ANUDP_KEEPALIVE_V1"
-UDP_DATA_FRAME_TYPE = "ANUDP_DATA_V1"
+UINT32_MAX = 4_294_967_295
+UDP_DATA_HEADER_SIZE = 12
 
 
 @dataclass(slots=True)
 class _PartialUdpFrame:
+    frame_id: int
     total_parts: int
     parts: dict[int, bytes]
     created_at: float
@@ -32,12 +31,7 @@ class _PartialUdpFrame:
 
 
 class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
-    """Minimal UDP transport.
-
-    UDP currently sends one application payload per datagram. Payloads larger
-    than the configured datagram limit are rejected by design; reliability and
-    future packet fragmentation should live above this basic transport adapter.
-    """
+    """Minimal UDP transport with fixed-size binary fragmentation headers."""
 
     transport_name = "udp"
 
@@ -49,8 +43,6 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
         listen_enabled: bool,
         max_datagram_size: int,
         keepalive_interval_seconds: float,
-        fragment_payload_size: int,
-        fragment_send_delay_seconds: float,
         fragment_reassembly_timeout_seconds: float,
     ) -> None:
         self.listen_host = listen_host
@@ -58,15 +50,13 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
         self.listen_enabled = listen_enabled
         self.max_datagram_size = max_datagram_size
         self.keepalive_interval_seconds = keepalive_interval_seconds
-        self.fragment_payload_size = fragment_payload_size
-        self.fragment_send_delay_seconds = fragment_send_delay_seconds
         self.fragment_reassembly_timeout_seconds = fragment_reassembly_timeout_seconds
         self._state = TransportState.STOPPED
         self._inbound_packet_handler: InboundPacketHandler | None = None
         self._transport: asyncio.DatagramTransport | None = None
         self._local_endpoint: TransportEndpoint | None = None
         self._known_peers: set[tuple[str, int]] = set()
-        self._partial_frames: dict[tuple[str, int, str], _PartialUdpFrame] = {}
+        self._partial_frames: dict[tuple[str, int, int], _PartialUdpFrame] = {}
         self._keepalive_task: asyncio.Task[None] | None = None
         self.debug_logger: Callable[[str, dict[str, Any]], None] | None = None
 
@@ -110,8 +100,8 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
                 "bound_port": int(bound_port),
                 "max_datagram_size": self.max_datagram_size,
                 "keepalive_interval_seconds": self.keepalive_interval_seconds,
-                "fragment_payload_size": self.fragment_payload_size,
-                "fragment_send_delay_seconds": self.fragment_send_delay_seconds,
+                "fragment_header_size": UDP_DATA_HEADER_SIZE,
+                "max_fragment_payload_size": self._max_fragment_payload_size(),
                 "fragment_reassembly_timeout_seconds": self.fragment_reassembly_timeout_seconds,
             },
         )
@@ -146,16 +136,15 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
                 "payload_size_bytes": len(message.payload),
                 "datagram_count": len(datagrams),
                 "max_datagram_size": self.max_datagram_size,
-                "fragment_payload_size": self.fragment_payload_size,
+                "fragment_header_size": UDP_DATA_HEADER_SIZE,
+                "max_fragment_payload_size": self._max_fragment_payload_size(),
             },
         )
-        for index, datagram in enumerate(datagrams, start=1):
+        for datagram in datagrams:
             self._transport.sendto(
                 datagram,
                 (self._resolve_dial_host(remote.host), remote.port),
             )
-            if index < len(datagrams) and self.fragment_send_delay_seconds > 0:
-                await asyncio.sleep(self.fragment_send_delay_seconds)
 
     def datagram_received(self, data: bytes, addr) -> None:
         host, port = str(addr[0]), int(addr[1])
@@ -220,13 +209,18 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
         )
 
     def _build_data_datagrams(self, payload: bytes) -> list[bytes]:
-        frame_id = str(uuid4())
-        chunk_size = max(1, self.fragment_payload_size)
+        chunk_size = self._max_fragment_payload_size()
         chunks = [
             payload[index:index + chunk_size]
             for index in range(0, len(payload), chunk_size)
         ] or [b""]
+        if len(chunks) > UINT32_MAX:
+            raise ValueError(
+                "UDP payload requires more fragments than uint32 can represent: "
+                f"fragments={len(chunks)} max={UINT32_MAX}"
+            )
 
+        frame_id = _new_udp_frame_id()
         datagrams = [
             self._encode_data_frame(
                 frame_id=frame_id,
@@ -244,29 +238,40 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
                 )
         return datagrams
 
+    def _max_fragment_payload_size(self) -> int:
+        if self.max_datagram_size <= UDP_DATA_HEADER_SIZE:
+            raise ValueError(
+                "UDP max datagram size must be larger than the binary fragment header: "
+                f"size={self.max_datagram_size} header_size={UDP_DATA_HEADER_SIZE}"
+            )
+        return self.max_datagram_size - UDP_DATA_HEADER_SIZE
+
     @staticmethod
     def _encode_data_frame(
         *,
-        frame_id: str,
+        frame_id: int,
         part: int,
         total_parts: int,
         payload: bytes,
     ) -> bytes:
-        frame = {
-            "type": UDP_DATA_FRAME_TYPE,
-            "frame_id": frame_id,
-            "part": part,
-            "total_parts": total_parts,
-            "payload_b64": base64.b64encode(payload).decode("ascii"),
-        }
-        return json.dumps(frame, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        if not _is_valid_uint32(frame_id):
+            raise ValueError(f"UDP frame id must fit uint32: frame_id={frame_id}")
+        if not _is_valid_uint32_fragment_position(part, total_parts):
+            raise ValueError(
+                "UDP fragment position must fit uint32 and be within total parts: "
+                f"part={part} total_parts={total_parts}"
+            )
+        return (
+            frame_id.to_bytes(4, byteorder="big", signed=False)
+            + part.to_bytes(4, byteorder="big", signed=False)
+            + total_parts.to_bytes(4, byteorder="big", signed=False)
+            + payload
+        )
 
     def _try_reassemble_data_frame(self, datagram: bytes, host: str, port: int) -> bytes | None:
-        try:
-            frame = json.loads(datagram.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        if len(datagram) < UDP_DATA_HEADER_SIZE:
             self._log_debug(
-                "dropped non udp-frame datagram",
+                "dropped short udp data frame",
                 {
                     "remote_host": host,
                     "remote_port": port,
@@ -275,47 +280,22 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
             )
             return None
 
-        if not isinstance(frame, dict) or frame.get("type") != UDP_DATA_FRAME_TYPE:
+        frame_id = int.from_bytes(datagram[0:4], byteorder="big", signed=False)
+        part = int.from_bytes(datagram[4:8], byteorder="big", signed=False)
+        total_parts = int.from_bytes(datagram[8:12], byteorder="big", signed=False)
+        if not _is_valid_uint32(frame_id):
             self._log_debug(
-                "dropped unknown udp-frame datagram",
+                "dropped invalid udp data frame id",
                 {
                     "remote_host": host,
                     "remote_port": port,
-                    "datagram_size_bytes": len(datagram),
+                    "frame_id": frame_id,
                 },
             )
             return None
-
-        frame_id = frame.get("frame_id")
-        part = frame.get("part")
-        total_parts = frame.get("total_parts")
-        payload_b64 = frame.get("payload_b64")
-        if (
-            not isinstance(frame_id, str)
-            or not isinstance(part, int)
-            or not isinstance(total_parts, int)
-            or not isinstance(payload_b64, str)
-            or part < 1
-            or total_parts < 1
-            or part > total_parts
-        ):
+        if not _is_valid_uint32_fragment_position(part, total_parts):
             self._log_debug(
                 "dropped invalid udp data frame",
-                {
-                    "remote_host": host,
-                    "remote_port": port,
-                    "frame_id": frame_id if isinstance(frame_id, str) else None,
-                    "part": part if isinstance(part, int) else None,
-                    "total_parts": total_parts if isinstance(total_parts, int) else None,
-                },
-            )
-            return None
-
-        try:
-            payload_part = base64.b64decode(payload_b64.encode("ascii"), validate=True)
-        except ValueError:
-            self._log_debug(
-                "dropped udp data frame with invalid base64 payload",
                 {
                     "remote_host": host,
                     "remote_port": port,
@@ -326,10 +306,18 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
             )
             return None
 
+        payload_part = datagram[UDP_DATA_HEADER_SIZE:]
+        if total_parts == 1:
+            return payload_part
+
         partial_key = (host, port, frame_id)
+        if part == 1 and partial_key in self._partial_frames:
+            self._partial_frames.pop(partial_key, None)
+
         partial_frame = self._partial_frames.get(partial_key)
         if partial_frame is None:
             partial_frame = _PartialUdpFrame(
+                frame_id=frame_id,
                 total_parts=total_parts,
                 parts={},
                 created_at=asyncio.get_running_loop().time(),
@@ -451,3 +439,19 @@ class UdpTransportAdapter(TransportAdapter, asyncio.DatagramProtocol):
     def _log_debug(self, message: str, metadata: dict[str, Any]) -> None:
         if self.debug_logger is not None:
             self.debug_logger(message, metadata)
+
+
+def _is_valid_uint32_fragment_position(part: int, total_parts: int) -> bool:
+    return (
+        1 <= part <= UINT32_MAX
+        and 1 <= total_parts <= UINT32_MAX
+        and part <= total_parts
+    )
+
+
+def _is_valid_uint32(value: int) -> bool:
+    return 1 <= value <= UINT32_MAX
+
+
+def _new_udp_frame_id() -> int:
+    return int.from_bytes(os.urandom(4), byteorder="big", signed=False) or 1

@@ -24,6 +24,10 @@ class RandomWalkMaxHopRouteStrategy(RouteStrategy):
         del context, services
         return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_ok")
 
+    async def handle_route_create_fail(self, *, envelope, context, services):
+        del context, services
+        return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_fail")
+
     async def handle_route_create_ping(self, *, envelope, context, services):
         del context, services
         return self._not_implemented(envelope, "implement_random_walk_max_hop_route_create_ping")

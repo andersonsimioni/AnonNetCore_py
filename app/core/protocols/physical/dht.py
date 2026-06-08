@@ -20,7 +20,6 @@ from ..helpers import read_string_or_none as _read_optional_string
 
 class DhtProtocolHandler(ProtocolMessageHandler):
     protocol_family = "dht"
-    _pending_forward_ttl_seconds = 120.0
 
     supported_message_types = {
         "DHT_PUBLISH",
@@ -484,7 +483,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         payload = _as_payload_dict(envelope)
         response_to_message_id = envelope.header.get("response_to_message_id")
         if isinstance(response_to_message_id, str):
-            forwarded_result = self._pop_pending_forward(response_to_message_id)
+            forwarded_result = self._pop_pending_forward(response_to_message_id, services)
             if forwarded_result is not None:
                 trace_context = _read_trace_context(payload)
                 response_payload = self.build_result_payload(
@@ -725,6 +724,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 forward_message_id=forward_header["message_id"],
                 previous_session_id=previous_session_id,
                 previous_message_id=previous_message_id,
+                services=services,
             )
             services.log_service.debug(
                 "dht",
@@ -844,6 +844,18 @@ class DhtProtocolHandler(ProtocolMessageHandler):
             node_id = node.get("node_id")
             if not isinstance(node_id, str) or not node_id:
                 continue
+            endpoint_state = _summarize_known_endpoint_state(services, node_id)
+            services.log_service.debug(
+                "dht",
+                "evaluating dht responsible node for forward",
+                remote_physical_node_id=node_id,
+                node_distance_hex=node.get("distance_hex"),
+                node_endpoint_count=len(node.get("endpoints") or []),
+                known_endpoint_state=endpoint_state,
+                previous_remote_physical_node_id=previous_remote_physical_node_id,
+                stored_by=stored_by,
+                query_cursor_distance_hex=query_cursor_distance_hex,
+            )
             if query_cursor_distance is not None:
                 node_distance = node.get("distance_int")
                 if isinstance(node_distance, int) and node_distance <= query_cursor_distance:
@@ -852,6 +864,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                         "skipping dht responsible node behind query cursor",
                         remote_physical_node_id=node_id,
                         node_distance_hex=node.get("distance_hex"),
+                        known_endpoint_state=endpoint_state,
                         query_cursor_distance_hex=query_cursor_distance_hex,
                     )
                     continue
@@ -861,6 +874,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "skipping previous dht forward node",
                     remote_physical_node_id=node_id,
                     previous_remote_physical_node_id=previous_remote_physical_node_id,
+                    known_endpoint_state=endpoint_state,
                 )
                 continue
             if node_id in stored_by:
@@ -869,6 +883,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     "skipping already stored dht responsible node",
                     remote_physical_node_id=node_id,
                     stored_by=stored_by,
+                    known_endpoint_state=endpoint_state,
                 )
                 continue
 
@@ -883,6 +898,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                         transport=existing_session.transport,
                         remote_host=existing_session.remote_host,
                         remote_port=existing_session.remote_port,
+                        known_endpoint_state=endpoint_state,
                     )
                     return existing_session
                 services.log_service.debug(
@@ -892,6 +908,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     remote_physical_node_id=node_id,
                     remote_host=existing_session.remote_host,
                     remote_port=existing_session.remote_port,
+                    known_endpoint_state=endpoint_state,
                 )
 
             if services.protocol_clients is None:
@@ -905,6 +922,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     responsible_nodes=_summarize_responsible_nodes(responsible_nodes),
                     previous_remote_physical_node_id=previous_remote_physical_node_id,
                     stored_by=stored_by,
+                    known_endpoint_state=endpoint_state,
                 )
                 session_id = await services.protocol_clients.physical.session.start_session(
                     remote_physical_node_id=node_id,
@@ -919,6 +937,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     stored_by=stored_by,
                     error_type=type(error).__name__,
                     error=repr(error),
+                    known_endpoint_state=endpoint_state,
                 )
                 continue
 
@@ -932,6 +951,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                     transport=session.transport,
                     remote_host=session.remote_host,
                     remote_port=session.remote_port,
+                    known_endpoint_state=endpoint_state,
                 )
                 return session
             services.log_service.warning(
@@ -941,6 +961,7 @@ class DhtProtocolHandler(ProtocolMessageHandler):
                 session_id=session_id,
                 session_state=(session.session_state if session is not None else None),
                 transport=(session.transport if session is not None else None),
+                known_endpoint_state=endpoint_state,
             )
 
         return None
@@ -1021,27 +1042,57 @@ class DhtProtocolHandler(ProtocolMessageHandler):
         forward_message_id: str,
         previous_session_id: str,
         previous_message_id: str,
+        services: EngineServices,
     ) -> None:
-        self._cleanup_pending_forwards()
+        self._cleanup_pending_forwards(services)
         self._pending_forwards[forward_message_id] = PendingDhtForward(
             previous_session_id=previous_session_id,
             previous_message_id=previous_message_id,
             created_at=time.monotonic(),
         )
 
-    def _pop_pending_forward(self, forward_message_id: str) -> "PendingDhtForward | None":
-        self._cleanup_pending_forwards()
+    def _pop_pending_forward(
+        self,
+        forward_message_id: str,
+        services: EngineServices,
+    ) -> "PendingDhtForward | None":
+        self._cleanup_pending_forwards(services)
         return self._pending_forwards.pop(forward_message_id, None)
 
-    def _cleanup_pending_forwards(self) -> None:
+    def _cleanup_pending_forwards(self, services: EngineServices | None = None) -> None:
         now = time.monotonic()
-        expired = [
-            message_id
-            for message_id, pending in self._pending_forwards.items()
-            if now - pending.created_at > self._pending_forward_ttl_seconds
-        ]
-        for message_id in expired:
+        ttl_seconds = self._get_pending_forward_ttl_seconds(services)
+        expired: list[tuple[str, PendingDhtForward, float]] = []
+        for message_id, pending in self._pending_forwards.items():
+            age_seconds = now - pending.created_at
+            if age_seconds > ttl_seconds:
+                expired.append((message_id, pending, age_seconds))
+        for message_id, pending, age_seconds in expired:
             self._pending_forwards.pop(message_id, None)
+            if services is not None:
+                services.log_service.warning(
+                    "dht",
+                    "expired pending dht forward return path",
+                    forward_message_id=message_id,
+                    previous_session_id=pending.previous_session_id,
+                    previous_message_id=pending.previous_message_id,
+                    age_seconds=round(age_seconds, 3),
+                    ttl_seconds=ttl_seconds,
+                    pending_forward_count=len(self._pending_forwards),
+                )
+
+    @staticmethod
+    def _get_pending_forward_ttl_seconds(
+        services: EngineServices | None,
+    ) -> float:
+        if services is None:
+            return 120.0
+
+        return (
+            services.config.dht_request_timeout_seconds
+            * services.config.dht_query_attempt_count
+            + services.config.dht_forward_return_path_grace_seconds
+        )
 
     @classmethod
     def _upsert_local_record(
@@ -1263,6 +1314,42 @@ def _summarize_responsible_nodes(nodes: list[dict[str, object]]) -> list[dict[st
         }
         for node in nodes
     ]
+
+
+def _summarize_known_endpoint_state(
+    services: EngineServices,
+    node_id: str,
+) -> dict[str, object]:
+    endpoints = services.identity_service.list_remote_physical_node_endpoints(
+        node_id,
+        only_active=False,
+    )
+    return {
+        "known_endpoint_count": len(endpoints),
+        "active_endpoint_count": sum(1 for endpoint in endpoints if endpoint.is_active),
+        "inactive_endpoint_count": sum(1 for endpoint in endpoints if not endpoint.is_active),
+        "endpoints": [
+            {
+                "transport": endpoint.transport,
+                "host": endpoint.host,
+                "port": endpoint.port,
+                "is_active": endpoint.is_active,
+                "failure_count": endpoint.failure_count,
+                "last_success_at": (
+                    endpoint.last_success_at.isoformat()
+                    if endpoint.last_success_at is not None
+                    else None
+                ),
+                "last_failure_at": (
+                    endpoint.last_failure_at.isoformat()
+                    if endpoint.last_failure_at is not None
+                    else None
+                ),
+                "metadata": endpoint.metadata_json,
+            }
+            for endpoint in endpoints
+        ],
+    }
 
 
 def _is_observed_only_physical_session(session) -> bool:

@@ -49,13 +49,18 @@ async def main() -> int:
         minimum_remote_nodes=args.minimum_remote_nodes,
     )
 
+    print_step(1, f"reset local PoC smoke data at {TEST_DATA_ROOT}")
     reset_data_dir(TEST_DATA_ROOT)
     cluster_started_by_smoke = False
     if not args.skip_cluster:
+        print_step(2, f"start docker cluster with {cluster_nodes} nodes for the PoC flow")
         start_cluster(node_count=cluster_nodes)
         cluster_started_by_smoke = True
         wait_for_cluster_containers(expected_count=cluster_nodes)
+    else:
+        print_step(2, "reuse already running docker cluster for the PoC flow")
 
+    print_step(3, "create local API-enabled core used by the social PoC")
     core_a = create_api_core(
         data_dir=TEST_DATA_ROOT / "core-a",
         listen_port=SMOKES_CONFIG.social_core_listen_port,
@@ -65,9 +70,11 @@ async def main() -> int:
         cluster_nodes=cluster_nodes,
     )
     try:
+        print_step(4, "start the API core runtime")
         await core_a.start()
         print("checkpoint 0 OK: API core A started")
 
+        print_step(5, "wait until the API core discovers and validates the physical network")
         await wait_for_network_ready(
             core_a,
             minimum_remote_nodes=required_ready_nodes,
@@ -80,6 +87,7 @@ async def main() -> int:
         )
         print("checkpoint 0 OK: physical network ready for social smoke")
 
+        print_step(6, "create two local social virtual nodes in the same core")
         local_vn_a = create_local_virtual_node(
             core_a,
             kind="social",
@@ -95,6 +103,7 @@ async def main() -> int:
             f"localA={local_vn_a.id} localB={local_vn_b.id}"
         )
 
+        print_step(7, "wait until the route runtime publishes routes for both local social VNs")
         active_route_local_a_task = asyncio.create_task(
             wait_for_runtime_route_active(
                 core_a,
@@ -115,6 +124,7 @@ async def main() -> int:
         )
         print("checkpoint 2 OK: same-core runtime routes are active")
 
+        print_step(8, "verify both local social VN routes are visible through DRT")
         await asyncio.gather(
             wait_for_stable_drt_online_route_count(
                 core_a,
@@ -131,6 +141,7 @@ async def main() -> int:
         )
         print("checkpoint 3 OK: same-core routes are visible through DRT")
 
+        print_step(9, "run the shared JS social flow against the real core HTTP API")
         await run_js_smoke(
             local_vn_a=local_vn_a,
             local_vn_b=local_vn_b,
@@ -168,6 +179,8 @@ def create_api_core(
         physical_tcp_listen_port=listen_port,
         log_dir=log_dir,
     )
+    config.log_error_report_enabled = True
+    config.log_error_report_endpoint = "http://127.0.0.1:18999/v1/smoke-log-events"
     config.api_enabled = True
     config.api_host = "127.0.0.1"
     config.api_port = api_port
@@ -254,6 +267,10 @@ async def run_js_smoke(*, local_vn_a, local_vn_b) -> None:
 
     print(f"social JS smoke log: {js_log_path}")
     print("checkpoint 4 OK: social JS smoke passed")
+
+
+def print_step(step_number: int, message: str) -> None:
+    print(f"STEP {step_number}: {message}")
 
 
 def reset_data_dir(path: Path) -> None:

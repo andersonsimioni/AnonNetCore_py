@@ -34,6 +34,7 @@ class SmokesConfig:
     test_core_route_pending_expected_ttl_multiplier: float = 4.0
     test_core_route_pending_dht_timeout_multiplier: float = 2.0
     test_core_route_pending_dht_visibility_margin_seconds: float = 12.0
+    test_core_route_active_safety_margin_seconds: float = 15.0
     test_core_route_min_online_routes: int = 2
     test_core_route_acceptance_error_base_ms: int = 20_000
     test_core_route_acceptance_error_ms_per_node: int = 2_000
@@ -65,6 +66,8 @@ class SmokesConfig:
     drt_online_route_count_seconds_per_node: float = 6.0
     drt_stable_reads: int = 2
     drt_stable_single_read_timeout_seconds: float = 6.0
+    drt_query_attempt_count: int = 6
+    drt_online_route_count_safety_margin_seconds: float = 15.0
     virtual_session_active_base_timeout_seconds: float = 10.0
     virtual_session_active_seconds_per_node: float = 0.75
     virtual_session_handshake_base_timeout_seconds: float = 60.0
@@ -234,9 +237,11 @@ class SmokesConfig:
         )
 
     def cluster_network_maturity_seconds(self, cluster_nodes: int) -> float:
-        return self.cluster_network_maturity_base_seconds + (
+        linear_timeout = self.cluster_network_maturity_base_seconds + (
             cluster_nodes * self.cluster_network_maturity_seconds_per_node
         )
+        exchange_cycle_timeout = self.test_core_physical_node_info_exchange_interval_seconds * 3
+        return max(linear_timeout, exchange_cycle_timeout)
 
     def route_build_timeout_seconds(self, cluster_nodes: int) -> float:
         route_round_trip_seconds = self.route_expected_round_trip_ttl_ms(cluster_nodes) / 1000
@@ -278,9 +283,16 @@ class SmokesConfig:
         )
 
     def route_active_timeout_seconds(self, cluster_nodes: int) -> float:
-        return self.route_active_base_timeout_seconds + (
+        linear_timeout = self.route_active_base_timeout_seconds + (
             cluster_nodes * self.route_active_seconds_per_node
         )
+        route_pipeline_timeout = (
+            (self.route_build_timeout_seconds(cluster_nodes) * 2)
+            + self.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
+            + self.dht_request_timeout_seconds(cluster_nodes)
+            + self.test_core_route_active_safety_margin_seconds
+        )
+        return max(linear_timeout, route_pipeline_timeout)
 
     def dht_request_timeout_seconds(self, cluster_nodes: int) -> float:
         return self.test_core_dht_request_base_timeout_seconds + (
@@ -293,9 +305,20 @@ class SmokesConfig:
         )
 
     def drt_online_route_count_timeout_seconds(self, cluster_nodes: int) -> float:
-        return self.drt_online_route_count_base_timeout_seconds + (
+        linear_timeout = self.drt_online_route_count_base_timeout_seconds + (
             cluster_nodes * self.drt_online_route_count_seconds_per_node
         )
+        dht_query_timeout = (
+            self.dht_request_timeout_seconds(cluster_nodes)
+            * self.drt_query_attempt_count
+            * self.drt_stable_reads
+        )
+        dht_bound_timeout = (
+            dht_query_timeout
+            + self.route_ok_drt_visibility_timeout_seconds(cluster_nodes)
+            + self.drt_online_route_count_safety_margin_seconds
+        )
+        return max(linear_timeout, dht_bound_timeout)
 
     def virtual_session_active_timeout_seconds(self, cluster_nodes: int) -> float:
         return self.virtual_session_active_base_timeout_seconds + (

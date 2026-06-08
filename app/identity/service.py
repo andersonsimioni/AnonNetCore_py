@@ -372,6 +372,7 @@ class IdentityService:
                 )
                 .where(RemotePhysicalNodeIdentity.status == "active")
                 .where(RemotePhysicalNodeIdentity.last_validated_at.is_not(None))
+                .where(NodeEndpoint.is_active.is_(True))
                 .where(NodeEndpoint.transport.is_not(None))
                 .where(NodeEndpoint.host.is_not(None))
                 .where(NodeEndpoint.port.is_not(None))

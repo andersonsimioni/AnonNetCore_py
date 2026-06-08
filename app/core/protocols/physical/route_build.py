@@ -12,6 +12,7 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
         "ROUTE_CREATE_KEM_INFO",
         "ROUTE_CREATE_VALIDATE_AND_PUBLISH",
         "ROUTE_CREATE_OK",
+        "ROUTE_CREATE_FAIL",
         "ROUTE_CREATE_PING",
         "ROUTE_CREATE_PONG",
     }
@@ -107,6 +108,8 @@ class RouteBuildProtocolHandler(ProtocolMessageHandler):
             return strategy.handle_route_create_validate_and_publish
         if message_type == "ROUTE_CREATE_OK":
             return strategy.handle_route_create_ok
+        if message_type == "ROUTE_CREATE_FAIL":
+            return strategy.handle_route_create_fail
         if message_type == "ROUTE_CREATE_PING":
             return strategy.handle_route_create_ping
         if message_type == "ROUTE_CREATE_PONG":

@@ -53,11 +53,14 @@ async def main() -> None:
     )
 
     reset_core_data_dir(TEST_DATA_ROOT)
+    print_step(1, f"reset local smoke data at {TEST_DATA_ROOT}")
     print(f"reset test data: {TEST_DATA_ROOT}")
+    print_step(2, f"start docker cluster with {cluster_nodes} nodes")
     reset_cluster()
     start_cluster(node_count=cluster_nodes)
     wait_for_cluster_containers(expected_count=cluster_nodes)
 
+    print_step(3, "create two local cores connected to the physical test network")
     core_a = create_test_core(
         data_dir=TEST_DATA_ROOT / "core-a",
         listen_port=CORE_A_PORT,
@@ -72,9 +75,11 @@ async def main() -> None:
     )
 
     try:
+        print_step(4, "start core A and core B runtimes")
         await asyncio.gather(core_a.start(), core_b.start())
         print("checkpoint 1 OK: cores A/B started")
 
+        print_step(5, "create one local virtual node in each core")
         vn_a = create_local_virtual_node(
             core_a,
             kind="full-flow-vn-a",
@@ -87,6 +92,7 @@ async def main() -> None:
         )
         print(f"checkpoint 2 OK: virtual nodes created: vn_a={vn_a.id} vn_b={vn_b.id}")
 
+        print_step(6, "wait until both cores discover and validate enough physical nodes")
         await asyncio.gather(
             wait_for_network_ready(
                 core_a,
@@ -101,6 +107,7 @@ async def main() -> None:
         )
         print(f"checkpoint 3 OK: network ready: required_ready_nodes={required_ready_nodes}")
 
+        print_step(7, "wait until the cluster reaches a stable physical-network maturity state")
         await wait_for_cluster_network_maturity(
             core_a,
             core_b,
@@ -109,6 +116,7 @@ async def main() -> None:
         )
         print("checkpoint 4 OK: cluster network maturity reached")
 
+        print_step(8, "wait for the virtual route maintenance runtime to publish routes for both VNs")
         active_route_a = await wait_for_runtime_route_active(
             core_a,
             local_virtual_node_id=vn_a.id,
@@ -127,6 +135,7 @@ async def main() -> None:
             f"vn_b_final_path_id={active_route_b.final_path_id}"
         )
 
+        print_step(9, "query DRT from the opposite cores and verify that both VN routes are visible")
         await asyncio.gather(
             wait_for_stable_drt_online_route_count(
                 core_b,
@@ -143,6 +152,7 @@ async def main() -> None:
         )
         print("checkpoint 6 OK: DRT entries discovered from opposite cores")
 
+        print_step(10, "share VN A identity with core B to simulate out-of-band identity discovery")
         core_b.services.identity_service.upsert_remote_virtual_node(
             node_id=vn_a.id,
             public_key=vn_a.public_key,
@@ -152,6 +162,7 @@ async def main() -> None:
         )
         print("checkpoint 7 OK: core B learned VN A identity")
 
+        print_step(11, "establish a virtual session from VN B to VN A through DRT-discovered routes")
         session_id = await core_b.services.protocol_clients.virtual.session.start_session_to_virtual_node(
             local_virtual_node_id=vn_b.id,
             remote_virtual_node_id=vn_a.id,
@@ -159,11 +170,11 @@ async def main() -> None:
         await wait_for_virtual_session_active(core_b, session_id, cluster_nodes=cluster_nodes)
         print(f"checkpoint 8 OK: virtual session active: session_id={session_id}")
 
-        print("running virtual session keepalive validation with reused cluster and cores")
+        print_step(12, "validate virtual session keepalive and keepalive ack")
         await validate_virtual_session_keepalive(core_b, session_id, cluster_nodes=cluster_nodes)
         print("checkpoint 9 OK: virtual session keepalive passed")
 
-        print("running virtual message validation with reused cluster and cores")
+        print_step(13, "validate end-to-end virtual application message exchange")
         await validate_virtual_message_exchange(
             core_a,
             core_b,
@@ -172,7 +183,7 @@ async def main() -> None:
         )
         print("checkpoint 10 OK: virtual message exchange passed")
 
-        print("running virtual content validation with reused cluster and cores")
+        print_step(14, "validate virtual content info, byte-range download, and content completion")
         downloaded_bytes = await validate_virtual_content_download(
             provider_engine=core_a,
             downloader_engine=core_b,
@@ -193,6 +204,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cluster-nodes", type=int, default=DEFAULT_CLUSTER_NODES)
     parser.add_argument("--minimum-remote-nodes", type=int, default=None)
     return parser.parse_args()
+
+
+def print_step(step_number: int, message: str) -> None:
+    print(f"STEP {step_number}: {message}")
 
 
 if __name__ == "__main__":

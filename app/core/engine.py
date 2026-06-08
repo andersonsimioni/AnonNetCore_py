@@ -88,6 +88,7 @@ class CoreEngine:
             await self.services.runtime_services.stop()
         await self.services.transport.stop()
         self.services.log_service.info("engine", "engine stopped")
+        self.services.log_service.shutdown()
 
     async def send_packet(self, message: OutboundMessage) -> None:
         prepared_message = self._prepare_outbound_message(message)
@@ -356,8 +357,8 @@ class CoreEngine:
             self.services.log_service.info("core_api", "http api server stopped")
 
     def _configure_runtime_environment(self) -> None:
-        self._configure_transport_listener()
         self._configure_log_service()
+        self._configure_transport_listener()
 
     def _configure_transport_listener(self) -> None:
         config = self.services.config
@@ -376,10 +377,8 @@ class CoreEngine:
                 listen_host=config.physical_listen_host,
                 listen_port=self.get_configured_udp_listen_port(),
                 listen_enabled=config.udp_transport_enabled and not self.is_private_physical_node(),
-                max_datagram_size=config.udp_max_datagram_size,
+                max_datagram_size=config.udp_fragment_payload_size,
                 keepalive_interval_seconds=config.udp_keepalive_interval_seconds,
-                fragment_payload_size=config.udp_fragment_payload_size,
-                fragment_send_delay_seconds=config.udp_fragment_send_delay_seconds,
                 fragment_reassembly_timeout_seconds=config.udp_fragment_reassembly_timeout_seconds,
             )
         )
@@ -414,6 +413,18 @@ class CoreEngine:
         self.services.log_service.configure(
             node_name=node_name,
             log_file_path=log_file_path,
+            enabled=self.services.config.log_enabled,
+            print_enabled=self.services.config.log_print_enabled,
+            async_enabled=self.services.config.log_async_enabled,
+            queue_max_size=self.services.config.log_queue_max_size,
+            batch_size=self.services.config.log_batch_size,
+            error_report_enabled=self.services.config.log_error_report_enabled,
+            error_report_endpoint=self.services.config.log_error_report_endpoint,
+            error_report_levels=self.services.config.log_error_report_levels,
+            error_report_timeout_seconds=(
+                self.services.config.log_error_report_timeout_seconds
+            ),
+            error_report_batch_size=self.services.config.log_error_report_batch_size,
         )
 
     def _log_loaded_bootstrap_targets(self) -> None:

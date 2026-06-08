@@ -78,6 +78,39 @@ class RouteService:
                 .first()
             )
 
+    def invalidate_hop_resolution_by_path_id(
+        self,
+        *,
+        path_id: str,
+        reason: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            resolution = (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "intermediary",
+                    RouteResolution.is_valid.is_(True),
+                    (
+                        (RouteResolution.received_path_id == path_id)
+                        | (RouteResolution.generated_path_id == path_id)
+                    ),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+            if resolution is None:
+                return None
+
+            metadata = _load_metadata(resolution.metadata_json)
+            metadata["invalidated_reason"] = reason
+            metadata["invalidated_at"] = datetime.now(timezone.utc).isoformat()
+            resolution.status = "invalid"
+            resolution.is_valid = False
+            resolution.metadata_json = _dump_metadata(metadata)
+            session.flush()
+            session.refresh(resolution)
+            return resolution
+
     def create_endpoint_resolution(
         self,
         *,
@@ -139,6 +172,36 @@ class RouteService:
                 .order_by(RouteResolution.id.desc())
                 .first()
             )
+
+    def invalidate_endpoint_resolution(
+        self,
+        *,
+        route_path_id: str,
+        reason: str,
+    ) -> RouteResolution | None:
+        with self.database.session_scope() as session:
+            resolution = (
+                session.query(RouteResolution)
+                .filter(
+                    RouteResolution.local_role == "final_endpoint",
+                    RouteResolution.route_path_id == route_path_id,
+                    RouteResolution.is_valid.is_(True),
+                )
+                .order_by(RouteResolution.id.desc())
+                .first()
+            )
+            if resolution is None:
+                return None
+
+            metadata = _load_metadata(resolution.metadata_json)
+            metadata["invalidated_reason"] = reason
+            metadata["invalidated_at"] = datetime.now(timezone.utc).isoformat()
+            resolution.status = "invalid"
+            resolution.is_valid = False
+            resolution.metadata_json = _dump_metadata(metadata)
+            session.flush()
+            session.refresh(resolution)
+            return resolution
 
     def get_initiator_resolution_by_final_path_id(
         self,

@@ -78,6 +78,16 @@ class RouteStrategy(ABC):
         """Processes ROUTE_CREATE_OK for this strategy."""
 
     @abstractmethod
+    async def handle_route_create_fail(
+        self,
+        *,
+        envelope: ProtocolEnvelope,
+        context: PacketContext,
+        services: EngineServices,
+    ) -> PacketProcessingResult:
+        """Processes ROUTE_CREATE_FAIL for this strategy."""
+
+    @abstractmethod
     async def handle_route_create_ping(
         self,
         *,

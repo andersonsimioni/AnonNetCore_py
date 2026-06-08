@@ -88,6 +88,8 @@ def create_isolated_core(
         physical_udp_listen_port=physical_udp_listen_port,
         log_dir=log_dir or data_dir / "logs",
     )
+    config.log_error_report_enabled = True
+    config.log_error_report_endpoint = "http://127.0.0.1:18999/v1/smoke-log-events"
     if udp_enabled is not None:
         config.udp_transport_enabled = udp_enabled
     config.api_enabled = False
