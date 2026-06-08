@@ -201,7 +201,7 @@ class SmokesConfig:
 
     virtual_content_info_timeout_seconds: float = 90.0
     virtual_content_download_timeout_seconds: float = 60.0
-    virtual_content_line_repetitions: int = 4096
+    virtual_content_line_repetitions: int = 100
 
     social_cluster_nodes: int = 8
     social_core_listen_port: int = 19601
