@@ -24,8 +24,9 @@ Main configuration fields:
 CoreConfig.api_enabled
 CoreConfig.api_host
 CoreConfig.api_port
+CoreConfig.api_cors_allow_origin
+CoreConfig.debug_api_enabled
 CoreConfig.api_websocket_enabled
-CoreConfig.api_websocket_host
 CoreConfig.api_websocket_port
 CoreConfig.api_websocket_path
 ```
@@ -36,8 +37,8 @@ CoreConfig.api_websocket_path
 - The front-end can run directly as a local `.html` file.
 - CORS is open in the MVP to simplify external app integration.
 - Long operations can use jobs or WebSocket events.
-- The API does not replace internal protocols; it delegates to core clients and
-  services.
+- The API delegates to core clients and services instead of bypassing internal
+  protocol flows.
 
 ## Status Endpoints
 
@@ -84,11 +85,12 @@ Upserts a known remote virtual node.
 
 ### `POST /v1/dht/publish`
 
-Publishes a DHT record through the physical DHT client.
+Publishes a DHT record through the physical DHT client. Publication may require
+multi-hop forwarding, proof-of-work validation, and K-node replication.
 
 ### `POST /v1/dht/query`
 
-Queries a DHT namespace/logical key.
+Queries a DHT namespace/logical key through the physical DHT client.
 
 ### `GET /v1/dht/jobs/{job_id}`
 
@@ -128,7 +130,8 @@ Publishes in DDT that a local virtual node holds that content.
 
 Starts a virtual content download. The core uses `VIRTUAL_CONTENT_*` messages
 over an active virtual session and requests byte ranges until the file is
-complete.
+complete. After a successful download, the downloader can publish itself as a
+DDT holder.
 
 ## WebSocket Events
 

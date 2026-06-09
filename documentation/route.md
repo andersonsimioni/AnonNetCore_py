@@ -21,12 +21,18 @@ ROUTE_CREATE_VALIDATE_AND_PUBLISH
 ROUTE_CREATE_PING
 ROUTE_CREATE_PONG
 ROUTE_CREATE_OK
+ROUTE_CREATE_FAIL
 ```
 
 The current functional strategy is `random_walk_ttl`. The route builder forwards
 `ROUTE_CREATE` hop-by-hop until the strategy decides to stop at a final physical
 node. The final physical node returns KEM information, validates the VN request,
-measures RTT with ping/pong, publishes the DRT entry, and sends `ROUTE_CREATE_OK`.
+measures RTT with ping/pong, publishes the DRT entry, and sends
+`ROUTE_CREATE_OK`.
+
+If final validation fails, the final physical node sends `ROUTE_CREATE_FAIL`
+back through the same route-build path so intermediate hops can discard pending
+state quickly.
 
 ## DRT Publication
 
@@ -37,8 +43,9 @@ The final physical node publishes a DRT route entry that includes:
 - final path id;
 - measured RTT;
 - expiration time;
+- semantic proof-of-work nonce for the route entry;
 - virtual-node signature accepting the final path id and final physical node;
-- final physical-node signatures accepting the route and RTT.
+- final physical-node signatures accepting the route and measured RTT.
 
 Those signatures prove that both the VN and the final PN agreed on that route.
 

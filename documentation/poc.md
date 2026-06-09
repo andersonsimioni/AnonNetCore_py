@@ -9,10 +9,11 @@ web server.
 - multiple local social profiles;
 - one virtual node per profile;
 - profile picture, display name, bio, friends, and posts;
-- profile publication through DDT and signed DPT;
+- full profile-state publication through DDT and signed DPT;
 - friend feed built by resolving each friend's DPT/DDT state;
 - direct messages through virtual sessions;
-- WebSocket event handling for incoming messages.
+- WebSocket event handling for incoming messages;
+- local cache reset for demos.
 
 ## Running
 
@@ -31,13 +32,26 @@ The model is:
 1 virtual node = 1 social profile
 ```
 
-The full profile state is stored as content. The profile DPT logical key is:
+The full profile state is stored as content. It includes profile data and feed
+posts:
 
 ```text
-dpt|anonnet.social|<virtual_node_id>
+profile + feed_posts + friend_virtual_node_ids
 ```
 
-The DPT `target_ref` points to the latest DDT/content key for that profile state.
+The current social profile DPT logical key is:
+
+```text
+<virtual_node_id>|profile
+```
+
+The physical DHT key is derived by the core as:
+
+```text
+sha512("dpt|<virtual_node_id>|profile")
+```
+
+The DPT `target_ref` points to the latest content id for that profile state.
 
 ## Publication Flow
 
@@ -45,14 +59,17 @@ The DPT `target_ref` points to the latest DDT/content key for that profile state
 2. Publish in DDT that the local VN holds that content.
 3. Publish or update the signed DPT pointer to the latest content id.
 
+The background sync repeats this logic when the local state changes or when the
+page needs to refresh DHT visibility.
+
 ## Friend Feed Flow
 
 For each friend virtual-node id:
 
-1. Query the friend's DPT.
+1. Query the friend's DPT using `<friend_virtual_node_id>|profile`.
 2. Validate the DPT signature.
-3. Resolve the DPT `target_ref`.
-4. Query DDT holders for that content.
+3. Read the DPT `target_ref`.
+4. Query DDT holders for that content id.
 5. Start or reuse a virtual session with a holder.
 6. Download the profile state file.
 7. Render profile data and posts.

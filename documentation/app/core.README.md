@@ -20,7 +20,10 @@ Startup flow:
 
 1. Load `CoreConfig`.
 2. Prepare logging, storage, identity, DHT, sessions, routes, and transports.
-3. Start public listeners when enabled.
+3. Start TCP/UDP listeners according to node reachability and enabled adapters.
 4. Start API and WebSocket servers when enabled.
-5. Start runtimes for bootstrap, DHT, physical sessions, virtual sessions, and
-   virtual route maintenance.
+5. Start runtimes for bootstrap, DHT, relay maintenance, physical sessions,
+   virtual sessions, and virtual route maintenance.
+
+The engine keeps protocol dispatch centralized. Transport adapters decide how to
+move physical envelopes; protocol handlers decide what each message means.

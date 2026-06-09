@@ -8,8 +8,9 @@ two layers:
   payloads.
 
 The MVP validates bootstrap, physical-node discovery, DHT publication/query,
-route construction, route execution, virtual sessions, virtual messages, virtual
-content transfer, a local API, and a social PoC.
+route construction, route execution, virtual sessions, reliable message
+delivery, virtual content transfer, a local API, a debug console, and a social
+PoC.
 
 ## Architecture
 
@@ -17,15 +18,16 @@ Main packages:
 
 - `app/core`: engine, configuration, protocol routing, runtimes, and strategy
   registry.
-- `app/transport`: transport adapters and shared transport models.
+- `app/transport`: TCP, UDP, relay, and shared transport models.
 - `app/identity`: physical and virtual identity management.
-- `app/dht`: distributed records, key generation, merge rules, and storage
-  helpers.
-- `app/route`: route-resolution management.
+- `app/dht`: distributed records, key generation, proof-of-work, merge rules,
+  and storage helpers.
+- `app/route`: route-resolution management and DRT publication helpers.
 - `app/sessions`: physical and virtual session state, keepalive, and reliable
   delivery metadata.
 - `app/content`: local content storage and virtual content downloads.
 - `app/api`: HTTP and WebSocket API for external applications.
+- `app/debug`: local Debug Console server.
 - `poc`: local HTML/JS social PoC.
 - `tests`: integration smokes and shared test helpers.
 - `cluster`: Docker cluster generation and lifecycle scripts.
@@ -35,35 +37,46 @@ Main packages:
 1. Load `CoreConfig`.
 2. Initialize logging, storage, identity, DHT, sessions, routes, content, and
    transport services.
-3. Start physical transport listeners when the node is public.
+3. Start physical transport listeners according to node reachability and enabled
+   adapters.
 4. Start API and WebSocket listeners when enabled.
 5. Start bootstrap and peer-discovery runtimes.
-6. Start DHT, physical-session, virtual-session, and virtual-route maintenance.
+6. Start DHT, relay, physical-session, virtual-session, and virtual-route
+   maintenance.
 7. Accept protocol envelopes and dispatch handlers by message type.
 
 ## Physical Layer
 
-Physical nodes represent real processes. They own physical identities, listen on
-advertised endpoints, exchange physical-node information, validate peers, start
-physical sessions, and publish DPNT records.
+Physical nodes represent real processes. They own physical identities, advertise
+stable listener or relay endpoints, exchange physical-node information, validate
+peers, start physical sessions, and publish DPNT records.
+
+The physical layer can use:
+
+- direct TCP;
+- UDP with simple fragmentation/reassembly and keepalive;
+- `relay_tcp`, where a private node advertises a public relay endpoint and
+  receives packets through `PHYSICAL_RELAY_DATA`.
 
 ## Virtual Layer
 
 Virtual nodes are logical identities. They request routes, publish DRT entries
 through final physical nodes, establish virtual sessions, exchange application
-messages, and transfer content.
+messages, and transfer content. A virtual packet is carried inside physical
+`ROUTE_DATA`.
 
 ## DHT
 
 The DHT uses namespaces for physical-node discovery, route discovery, content
-discovery, and mutable pointers. Publication targets the K closest nodes by XOR
-distance and includes a simple proof-of-work cost.
+discovery, mutable pointers, and future structured data. Publication targets the
+K closest nodes by XOR distance and includes a semantic proof-of-work nonce on
+the payload or payload fragment being published.
 
 ## Routes
 
 Route build is strategy-based. The main strategy is `random_walk_ttl`, but the
 architecture allows other strategies such as max-hop, latency-aware,
-bandwidth-aware, onion-like, or relay-preferred routing.
+bandwidth-aware, onion-like, relay-preferred, or policy-driven routing.
 
 Route execute is strategy-agnostic. It maps a path id, checks direction, and
 either forwards the physical envelope or delivers the embedded virtual envelope
@@ -85,8 +98,12 @@ nodes and local cores:
 .\.venv\Scripts\python.exe scripts\run_smokes.py 10
 ```
 
+The runner prints the validation steps, captures logs, reports node
+warnings/errors through a local collector, summarizes the randomized topology,
+and stops the cluster at the end.
+
 ## Limits
 
-The MVP is not production-ready. NAT traversal, abuse protection, global
-adversary resistance, large-scale DHT behavior, formal cryptographic audits, and
-production-grade UI/application hardening remain future work.
+The MVP is not production-ready. Abuse protection, global adversary resistance,
+large-scale DHT behavior, mature relay/NAT traversal, formal cryptographic
+audits, and production-grade UI/application hardening remain future work.
