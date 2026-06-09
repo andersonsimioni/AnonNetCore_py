@@ -149,3 +149,5 @@ require security audits, stronger abuse controls, mature NAT traversal, resource
 governance, long-running Internet-scale validation, and operational hardening.
 
 Repository: <https://github.com/andersonsimioni/AnonNetCore_py>
+
+Institutional mirror: <https://codigos.ufsc.br/anderson.simioni/anonnetcore_py>
