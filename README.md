@@ -9,6 +9,16 @@ The repository is intentionally practical: it includes the core, a Docker
 cluster runner, a local HTTP/WebSocket API, a debug console, integration smokes,
 and a browser-only social PoC that opens directly from `poc/index.html`.
 
+## Social PoC Preview
+
+The MVP includes a local social-network proof of concept backed by real core
+flows: virtual nodes as profiles, DHT-published profile state, friend feeds, and
+direct messages over virtual sessions.
+
+![AnonNet social PoC profile and feed](thesis/assets/img/poc-1.png)
+
+![AnonNet social PoC direct messages and profile flow](thesis/assets/img/poc-2.png)
+
 ## What It Proves
 
 - A physical P2P layer with bootstrap, peer exchange, validation, sessions,
