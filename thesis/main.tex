@@ -151,7 +151,7 @@ Decentralized communication systems have emerged as an alternative to traditiona
 
 This work proposes a modular architecture for decentralized peer-to-peer overlay networks designed to support secure and anonymous communication, data persistence, and decentralized applications. The proposed design separates the networking, persistence, and security concerns into modular components, allowing the system to support different connection strategies, storage models, and cryptographic schemes without requiring changes to the overall architecture.
 
-To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows in local and Docker-based environments using TCP, an experimental UDP transport with packet fragmentation, and relay-assisted physical connectivity. The broader architecture still treats complete NAT traversal mechanisms such as UDP hole punching, STUN/TURN integration, and QUIC as future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
+To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows in local and Docker-based environments using TCP, an experimental UDP transport with compact binary fragmentation, and relay-assisted physical connectivity. The broader architecture still treats complete NAT traversal mechanisms such as UDP hole punching, STUN/TURN integration, and QUIC as future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
 
 The results indicate that the modular architecture can support heterogeneous networking environments while preserving secure and privacy-oriented communication between peers, as well as providing a foundation for persistent decentralized services. The proposed approach contributes to the design of future decentralized systems by enabling flexible integration of emerging networking, storage, and cryptographic technologies.
 \end{abstracten}
@@ -163,7 +163,7 @@ Sistemas de comunicação descentralizados têm emergido como uma alternativa à
 
 Este trabalho propõe uma arquitetura modular para redes overlay peer-to-peer descentralizadas projetada para suportar comunicação segura e anônima, persistência de dados e aplicações descentralizadas. O projeto proposto separa os componentes de rede, persistência e segurança em módulos independentes, permitindo que o sistema suporte diferentes estratégias de conexão, modelos de armazenamento e esquemas criptográficos sem necessidade de modificar a arquitetura geral.
 
-Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay em ambientes locais e baseados em Docker usando TCP, transporte UDP experimental com fragmentação de pacotes e conectividade física assistida por relays. A arquitetura mais ampla ainda trata mecanismos completos de travessia de NAT, como UDP hole punching, integração STUN/TURN e QUIC, como extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
+Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay em ambientes locais e baseados em Docker usando TCP, transporte UDP experimental com fragmentação binária compacta e conectividade física assistida por relays. A arquitetura mais ampla ainda trata mecanismos completos de travessia de NAT, como UDP hole punching, integração STUN/TURN e QUIC, como extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
 
 Os resultados indicam que a arquitetura modular pode suportar ambientes de rede heterogêneos mantendo comunicação segura e orientada à privacidade entre pares, além de fornecer uma base para serviços descentralizados com persistência de dados. A abordagem proposta contribui para o desenvolvimento de futuros sistemas descentralizados ao permitir a integração flexível de novas tecnologias de rede, armazenamento e criptografia.
 \end{resumopt}
@@ -187,7 +187,7 @@ Several existing systems, such as Tor, I2P, and IPFS, attempt to address some of
 
 This work proposes the design and implementation of a decentralized network layer focused on anonymous communication and distributed data persistence. The proposed architecture is based on a peer-to-peer overlay network where nodes communicate without relying on centralized infrastructure. The system incorporates multiple distributed discovery structures, probabilistic routing mechanisms, and cryptographic identity models in order to preserve user privacy while enabling efficient communication.
 
-In the proposed model, nodes are identified through cryptographic keys rather than network addresses, and routing information is stored using distributed hash table--based structures that allow scalable discovery of peers, routes, and published data. The full architecture is designed to support NAT traversal mechanisms such as UDP hole punching and relay-assisted communication, while the experimental MVP validates the main overlay behavior over TCP. Cryptographic protocols, including post-quantum primitives, are used to protect communication confidentiality, authentication, and integrity.
+In the proposed model, nodes are identified through cryptographic keys rather than network addresses, and routing information is stored using distributed hash table--based structures that allow scalable discovery of peers, routes, and published data. The full architecture is designed to support NAT traversal mechanisms such as UDP hole punching and relay-assisted communication, while the experimental MVP validates the main overlay behavior over TCP, experimental UDP transport, and relay-assisted physical forwarding. Cryptographic protocols, including post-quantum primitives, are used to protect communication confidentiality, authentication, and integrity.
 
 To evaluate the feasibility of the proposed architecture, this work also presents a prototype application in the form of a decentralized social network, implemented as a proof of concept over the proposed network layer. The prototype allows experimental evaluation of communication flows, routing behavior, and security properties of the system.
 
@@ -2106,6 +2106,12 @@ Finally, reply traffic should not be forced to reuse the same path in reverse. I
 
 This chapter presents the implementation of the proposed architecture as an experimental Minimum Viable Product (MVP). The implementation, named \textit{AnonNetCore Python MVP}, was developed to validate the main architectural decisions proposed in this work: the separation between physical and virtual identities, distributed discovery through DHT namespaces, route construction for virtual nodes, end-to-end virtual sessions, content publication and retrieval, and integration with an external decentralized application.
 
+The source code repository for the implemented prototype is available at:
+
+\begin{center}
+\url{https://github.com/andersonsimioni/AnonNetCore_py}
+\end{center}
+
 The prototype should not be interpreted as a production-ready network. Its purpose is experimental and methodological: to demonstrate that the proposed layered architecture can be implemented as a functional system and that its main protocols can interoperate in a controlled environment. Therefore, the evaluation focuses on functional validation, protocol integration, observability, and proof-of-concept execution rather than on large-scale Internet deployment.
 
 \subsection{Implementation Methodology}
@@ -2129,7 +2135,7 @@ The methodology adopted in the implementation can be summarized as follows:
 
 The implementation was intentionally optimized for clarity, protocol validation, and observability. As a result, some decisions were simplified when compared to a production network. For example, the prototype currently uses local or Docker-based clusters, SQLite persistence, TCP transport, experimental UDP transport, relay-assisted physical connectivity, and a simplified DHT routing model. More advanced features such as complete NAT traversal, QUIC transport, full Kademlia routing tables, mature anti-abuse mechanisms, and security auditing are treated as future work.
 
-Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, and earlier cryptographic choices such as Kyber-1024 and SHA3-512, the experimental implementation prioritizes validation of the architectural model in a controlled environment. Therefore, the MVP adopts Python, TCP transport, experimental UDP datagram transport with JSON fragmentation, relay-assisted physical forwarding, SQLite persistence, SHA-512-based identifiers, ML-KEM/ML-DSA through the selected cryptographic backend, AES-256-GCM-SIV for authenticated symmetric encryption, AAD binding for selected public protocol metadata, DHT publication proof-of-work, and a lightweight reliable-session wrapper for ordered delivery and acknowledgments. This distinction separates the proposed architecture from the current proof-of-concept implementation and avoids presenting the MVP as a production-ready public network.
+Although the original work plan considered UDP hole punching, STUN/TURN, QUIC, and earlier cryptographic choices such as Kyber-1024 and SHA3-512, the experimental implementation prioritizes validation of the architectural model in a controlled environment. Therefore, the MVP adopts Python, TCP transport, experimental UDP datagram transport with compact binary fragmentation and reassembly, relay-assisted physical forwarding, SQLite persistence, SHA-512-based identifiers, ML-KEM/ML-DSA through the selected cryptographic backend, AES-256-GCM-SIV for authenticated symmetric encryption, AAD binding for selected public protocol metadata, DHT publication proof-of-work, and a lightweight reliable-session wrapper for ordered delivery and acknowledgments. This distinction separates the proposed architecture from the current proof-of-concept implementation and avoids presenting the MVP as a production-ready public network.
 
 \subsection{Implementation Scope}
 \label{sec:implementation-scope}
@@ -2169,7 +2175,7 @@ Table~\ref{tab:implementation-stack} summarizes the main implementation choices.
 \toprule
 \textbf{Component} & \textbf{Implementation choice} \\
 \midrule
-Transport & TCP sockets with length-prefixed frames, experimental UDP datagrams with JSON fragmentation, and relay-assisted TCP forwarding. \\
+Transport & TCP sockets with length-prefixed frames, experimental UDP datagrams with compact binary fragmentation, and relay-assisted TCP forwarding. \\
 Protocol envelope & JSON-based protocol envelope for physical and virtual messages. \\
 Local persistence & SQLite through SQLAlchemy. \\
 Content storage & Filesystem storage, with metadata persisted in the local database. \\
@@ -2260,7 +2266,7 @@ The physical layer implements the following responsibilities:
 \begin{itemize}
     \item TCP listener initialization and frame parsing;
     \item experimental UDP listener initialization, datagram fragmentation, and reassembly;
-    \item relay-assisted physical forwarding through registered public relay nodes;
+    \item relay-assisted physical forwarding through selected public relay-capable nodes;
     \item direct peer communication through physical envelopes;
     \item bootstrap from known endpoints;
     \item exchange of physical node descriptors;
@@ -2271,6 +2277,45 @@ The physical layer implements the following responsibilities:
 \end{itemize}
 
 The MVP no longer uses TCP as the only transport. TCP remains the primary validated transport, but the implementation also includes an experimental UDP transport and a relay-assisted TCP transport. UDP hole punching, STUN/TURN integration, QUIC, and mature Internet-scale NAT traversal remain future implementation targets.
+
+Encrypted physical payloads use AES-256-GCM-SIV with a 96-bit nonce and a 128-bit authentication tag. The implementation generates a fresh nonce for each encryption operation and rejects nonce reuse for the same key within the running process. Associated authenticated data (AAD) binds the encrypted payload to the public physical envelope header, excluding only the \codebreak{payload\_\allowbreak{}encrypted} marker. This prevents visible routing and session metadata that must remain outside the ciphertext from being altered without detection.
+
+\subsubsection{Relay-Assisted Physical Transport}
+\label{subsec:relay-assisted-physical-transport}
+
+The implemented relay mechanism is modeled as a physical transport adapter named \codebreak{relay\_\allowbreak{}tcp}. It does not replace the physical session protocol and does not create an application-level shortcut. Instead, it encapsulates an ordinary physical packet inside a relay envelope and transports it through a public physical node that already has active physical sessions with the participants.
+
+In the current MVP, a node can act as a physical relay only when it is public, TCP-enabled, and configured with relay service enabled. Private physical nodes do not open public TCP or UDP listeners for other cores. They still initialize the available transport adapters locally, but they only advertise a physical endpoint after selecting a public relay. This selection is performed by the \codebreak{Physical\_\allowbreak{}Relay\_\allowbreak{}Maintenance\_\allowbreak{}Runtime}, which periodically searches for relay-capable peers, opens or refreshes a physical session with the selected relay, and publishes a local endpoint of the following form:
+
+\begin{verbatim}
+{
+    "transport": "relay_tcp",
+    "host": relay_host,
+    "port": relay_port,
+    "metadata": {
+        "relay_physical_node_id": relay_id,
+        "target_physical_node_id": private_node_id
+    }
+}
+\end{verbatim}
+
+This endpoint is then included in physical-node information exchange and in DPNT records. Therefore, other peers do not need to know a direct address for the private node. They only need to know which relay endpoint can be used to reach it.
+
+When a peer sends data to a relay endpoint, the local transport layer builds a \codebreak{PHYSICAL\_\allowbreak{}RELAY\_\allowbreak{}DATA} message containing the target physical node identifier and the encapsulated packet bytes. Before sending this relay message, the sender establishes or reuses a normal physical session with the relay. The relay accepts the message only if the sender's physical session is active. It then checks whether it has an active physical session with the target physical node. If such a session exists, the relay forwards another \codebreak{PHYSICAL\_\allowbreak{}RELAY\_\allowbreak{}DATA} message through that target session. When the target node receives a relay message addressed to its own physical identifier, the payload is injected into the local \codebreak{relay\_\allowbreak{}tcp} adapter and processed as an ordinary inbound physical packet.
+
+The resulting path can be summarized as:
+
+\begin{equation}
+    A \leftrightarrow R \leftrightarrow B
+\end{equation}
+
+where \(A\) is the sender, \(R\) is the relay-capable public physical node, and \(B\) is the private target. Both \(A \leftrightarrow R\) and \(B \leftrightarrow R\) are ordinary authenticated physical sessions. The relay forwards encrypted physical packets and is not treated as the final application endpoint. Higher-level payloads remain layered normally, so a virtual message may still be represented as a virtual envelope inside a physical route packet inside a relay packet:
+
+\begin{equation}
+    relay\_packet(physical\_packet(virtual\_envelope))
+\end{equation}
+
+This design keeps relay behavior inside the physical transport layer and preserves the same protocol flow used by direct communication. It also makes the relay mechanism observable through the same peer discovery, session, DPNT, and route-building logic used by the rest of the core.
 
 \subsubsection{Virtual Layer}
 \label{subsec:virtual-layer-implementation}
@@ -2312,10 +2357,22 @@ The $K$ physical nodes with the lowest distances are considered responsible for 
     K = 3
 \end{equation}
 
-Before a DHT publication is accepted, the publisher must include a lightweight proof-of-work nonce. The implemented proof is intentionally simple and is computed over the physical DHT key, the canonical record JSON, and the nonce:
+Before a DHT publication is accepted, the publisher must include lightweight proof-of-work nonces. The current implementation does not treat every DHT record as a single opaque blob. Instead, proof-of-work is attached to the semantic payloads that may be independently published, merged, or replicated. This is important because some namespaces aggregate lists of entries or holders, and peers may receive only a fragment of a larger logical record.
+
+The payload types that currently carry a \codebreak{pow\_\allowbreak{}nonce} are:
+
+\begin{itemize}
+    \item \codebreak{Dpnt\_\allowbreak{}Record\_\allowbreak{}Payload};
+    \item \codebreak{Drt\_\allowbreak{}Route\_\allowbreak{}Entry\_\allowbreak{}Record};
+    \item \codebreak{Ddt\_\allowbreak{}Holder\_\allowbreak{}Record};
+    \item \codebreak{Dtt\_\allowbreak{}Entry\_\allowbreak{}Record};
+    \item \codebreak{Dpt\_\allowbreak{}Record\_\allowbreak{}Payload}.
+\end{itemize}
+
+For example, a DRT record may contain multiple route entries, but the proof is validated per \codebreak{Drt\_\allowbreak{}Route\_\allowbreak{}Entry\_\allowbreak{}Record}. Similarly, DDT and DTT records validate individual holders or entries. The canonical proof material is built from the namespace, the physical DHT key, the canonical payload without its nonce, and any required parent identity context. The implemented proof can be summarized as:
 
 \begin{equation}
-    proof = SHA512(dht\_key \parallel record\_json \parallel nonce)
+    proof = SHA512(canonical\_payload\_material \parallel nonce)
 \end{equation}
 
 The publication is accepted only when the proof hash satisfies the configured number of leading zero bits:
@@ -2324,7 +2381,7 @@ The publication is accepted only when the proof hash satisfies the configured nu
     leading\_zero\_bits(proof) \geq network\_pow\_difficulty\_bits
 \end{equation}
 
-This mechanism does not provide a complete anti-abuse system, but it introduces a measurable computational cost before records can be inserted or refreshed in the distributed tables. Responsible nodes can verify the proof cheaply before storing the record, while publishers must search for a valid nonce.
+This mechanism does not provide a complete anti-abuse system, but it introduces a measurable computational cost before records can be inserted or refreshed in the distributed tables. Responsible nodes can verify the proof cheaply before storing or merging the payload, while publishers must search for a valid nonce before starting publication.
 
 Table~\ref{tab:dht-namespaces-implementation} summarizes the implemented namespaces.
 
@@ -2472,10 +2529,12 @@ This separation is important because the protocol messages do not need to be red
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} \\
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG} \\
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}OK}
+\quad \text{or} \quad
+\codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}FAIL}
 \end{aligned}
 \end{equation}
 
-In this model, the protocol defines what must happen for a route to become valid: path construction, final physical node validation, virtual node authorization, route ping/pong validation, RTT measurement, and DRT publication. The strategy defines how the next hop is selected, which constraints must be respected, and which metric should be optimized during route construction.
+In this model, the protocol defines what must happen for a route to become valid: path construction, final physical node validation, virtual node authorization, route ping/pong validation, RTT measurement, DRT publication, and failure propagation when validation cannot be completed. The strategy defines how the next hop is selected, which constraints must be respected, and which metric should be optimized during route construction.
 
 Therefore, the implemented architecture follows the principle:
 
@@ -2549,7 +2608,7 @@ Figure~\ref{fig:route-strategy-abstraction} illustrates this separation between 
 \node[lifecycle, below=1.15cm of controlMid, fill=gray!20] (messages) {
     \textbf{Route lifecycle messages}\\[0.12cm]
     {\ttfamily ROUTE\_CREATE} $\rightarrow$ {\ttfamily ROUTE\_CREATE\_KEM\_INFO}\\
-    {\ttfamily ROUTE\_CREATE\_VALIDATE\_AND\_PUBLISH} $\rightarrow$ {\ttfamily ROUTE\_CREATE\_OK}
+    {\ttfamily ROUTE\_CREATE\_VALIDATE\_AND\_PUBLISH} $\rightarrow$ {\ttfamily ROUTE\_CREATE\_OK} or {\ttfamily ROUTE\_CREATE\_FAIL}
 };
 
 \node[widebox, below=0.8cm of messages, fill=gray!25] (published) {
@@ -2579,7 +2638,7 @@ Figure~\ref{fig:route-strategy-abstraction} illustrates this separation between 
 \label{fig:route-strategy-abstraction}
 \end{figure}
 
-The current MVP primarily implements the \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl} strategy. In this strategy, the virtual node starts route creation with an expected temporal budget, expressed in milliseconds. Each intermediate physical node forwards the \codebreak{ROUTE\_\allowbreak{}CREATE} message to another physical node while the route remains within the expected construction constraints. The TTL value is therefore interpreted as a strategy-specific construction budget, not as a fixed rule of the routing layer. When the final physical node is reached, the route is validated through \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} and \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}. The observed round-trip time is compared against the expected budget, including an acceptable error window. If the measured RTT is valid, the final physical node signs the route information and publishes the route entry in the DRT.
+The current MVP primarily implements the \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl} strategy. In this strategy, the virtual node starts route creation with an expected temporal budget, expressed in milliseconds. Each intermediate physical node forwards the \codebreak{ROUTE\_\allowbreak{}CREATE} message to another physical node while the route remains within the expected construction constraints. The TTL value is therefore interpreted as a strategy-specific construction budget, not as a fixed rule of the routing layer. When the final physical node is reached, the route is validated through \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} and \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}. The observed round-trip time is compared against the expected budget, including an acceptable error window. If the measured RTT is valid, the final physical node signs the route information and publishes the route entry in the DRT. If validation fails, \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}FAIL} is propagated back through the route so intermediate hops can discard pending route state instead of waiting for timeout expiration.
 
 This strategy is useful for the MVP because it is simple, dynamic, and capable of creating relatively unpredictable paths without requiring global knowledge of the network. It also fits the experimental nature of the prototype, since it can be evaluated through local clusters, route logs, DRT records, and smoke tests. However, the same route lifecycle can be reused by future strategies that terminate by hop count, bandwidth threshold, reliability score, or onion-like path definition.
 
@@ -2665,10 +2724,12 @@ The implemented route build message sequence is:
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING} \\
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG} \\
 &\rightarrow \codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}OK}
+\quad \text{or} \quad
+\codemath{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}FAIL}
 \end{aligned}
 \end{equation}
 
-During route creation, each intermediate physical node stores only the local mapping required to forward packets. For example, an intermediate hop stores a mapping from a received \texttt{path\_id} to a generated \texttt{path\_id}, together with the next physical forwarding action. It does not need to know the full path or the final virtual identity. This design preserves the separation between physical routing and virtual semantics. The TTL used by the implemented strategy limits construction and validation for \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}, but packet execution after publication depends on local route state rather than on recomputing the random walk.
+During route creation, each intermediate physical node stores only the local mapping required to forward packets. For example, an intermediate hop stores a mapping from a received \texttt{path\_id} to a generated \texttt{path\_id}, together with the next physical forwarding action. It does not need to know the full path or the final virtual identity. This design preserves the separation between physical routing and virtual semantics. The TTL used by the implemented strategy limits construction and validation for \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}, but packet execution after publication depends on local route state rather than on recomputing the random walk. If the final validation fails, \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}FAIL} follows the same reverse notification role as \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}OK}, but causes pending mappings to be rejected instead of activated.
 
 After a route is created, virtual envelopes are transported inside physical \codebreak{ROUTE\_\allowbreak{}DATA} messages. Conceptually, the physical envelope has the following structure:
 
@@ -2718,6 +2779,39 @@ In the social PoC, direct messages use the application message type:
     \codemath{social.direct\_\allowbreak{}message}
 \end{equation}
 
+\subsection{Reliable Session Payloads}
+\label{sec:reliable-session-payloads}
+
+The current MVP implements a lightweight reliability layer on top of active physical and virtual sessions. This mechanism is not a replacement for TCP reliability and does not attempt to solve all route-level failures. Its purpose is narrower: to provide ordered delivery, duplicate suppression, acknowledgments, and bounded retransmission for protected session payloads in a way that can also support less reliable transports in future iterations.
+
+Reliable transmission is implemented with two envelope families:
+
+\begin{itemize}
+    \item \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA} and \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} for hop-by-hop physical sessions;
+    \item \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA} and \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} for end-to-end virtual sessions.
+\end{itemize}
+
+Each reliable payload wraps an inner protocol message:
+
+\begin{verbatim}
+{
+    "reliable_message_id": "...",
+    "sequence_number": 1,
+    "inner_message_type": "...",
+    "inner_payload": { ... },
+    "created_at": "...",
+    "attempt": 1
+}
+\end{verbatim}
+
+The session manager maintains in-memory reliability state per session, including the next outbound sequence number, the next expected inbound sequence number, pending outbound messages, buffered out-of-order inbound messages, and already delivered message identifiers. When a reliable payload arrives, the receiver immediately prepares an acknowledgment containing the received message identifier and sequence number. Duplicate messages are acknowledged again but not delivered twice. Out-of-order messages are buffered until the missing previous sequence numbers arrive, preserving ordered delivery to the inner protocol handler.
+
+Retransmission is handled by \codebreak{Session\_\allowbreak{}Runtime}. The runtime periodically scans pending reliable messages and resends messages whose retry deadline has expired. Physical sessions use a fixed retry interval because they represent adjacent hop-by-hop communication. Virtual sessions use a dynamic retry interval derived from the route RTT when available, bounded by minimum and maximum configuration values. This distinction is necessary because an end-to-end virtual session may traverse a longer route than a direct physical session.
+
+For virtual reliable payloads, an acknowledgment may also carry synchronous inner virtual responses produced while processing the delivered message. This keeps the protocol flow compact without bypassing the normal virtual-session processing path: the response is still represented as a virtual envelope and is dispatched by the virtual session handler after the reliable acknowledgment is processed.
+
+The reliable state is runtime-only. It is not persisted as durable storage, because it represents live session delivery state and depends on active session keys, active routes, and currently reachable peers. If a session is lost, higher layers must establish a new session or retry the application-level operation.
+
 \subsection{Protocol Message Types}
 \label{sec:protocol-message-types}
 
@@ -2753,12 +2847,20 @@ Physical & Physical session &
 \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}INIT}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}INIT\_\allowbreak{}OK}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}KEY\_\allowbreak{}CONFIRM}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}READY}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}KEEPALIVE}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}KEEPALIVE\_\allowbreak{}ACK}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}CLOSE} &
 Creates and maintains secure hop-by-hop sessions between adjacent physical nodes. \\
 
+Physical & Physical reliable session &
+\codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA}\newline \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} &
+Wraps physical-session payloads with sequence numbers, acknowledgments, duplicate suppression, ordered delivery, and bounded retransmission. \\
+
+Physical & Physical relay &
+\codebreak{PHYSICAL\_\allowbreak{}RELAY\_\allowbreak{}DATA} &
+Encapsulates a physical packet through a relay-capable public physical node using active physical sessions with the sender and target. \\
+
 Physical & DHT &
 \codebreak{DHT\_\allowbreak{}PUBLISH}\newline \codebreak{DHT\_\allowbreak{}QUERY}\newline \codebreak{DHT\_\allowbreak{}RESULT} &
 Publishes and retrieves distributed records across DPNT, DRT, DDT, DPT, and DTT namespaces. \\
 
 Physical & Route build &
-\codebreak{ROUTE\_\allowbreak{}CREATE}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}KEM\_\allowbreak{}INFO}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}VALIDATE\_\allowbreak{}AND\_\allowbreak{}PUBLISH}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}OK} &
+\codebreak{ROUTE\_\allowbreak{}CREATE}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}KEM\_\allowbreak{}INFO}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}VALIDATE\_\allowbreak{}AND\_\allowbreak{}PUBLISH}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PING}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}PONG}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}OK}\newline \codebreak{ROUTE\_\allowbreak{}CREATE\_\allowbreak{}FAIL} &
 Creates physical routes that allow virtual nodes to publish entry points in the DRT. \\
 
 Physical & Route execute &
@@ -2768,6 +2870,10 @@ Carries virtual envelopes through already created physical routes. \\
 Virtual & Virtual session &
 \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}INIT}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}INIT\_\allowbreak{}OK}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}KEY\_\allowbreak{}CONFIRM}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}READY}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}KEEPALIVE}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}KEEPALIVE\_\allowbreak{}ACK}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}CLOSE} &
 Establishes and maintains end-to-end sessions between virtual nodes. \\
+
+Virtual & Virtual reliable session &
+\codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA}\newline \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} &
+Wraps virtual-session payloads with ordered delivery, acknowledgments, retransmission, and optional synchronous inner virtual responses carried by acknowledgments. \\
 
 Virtual & Virtual message &
 \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}DATA} &
@@ -2783,9 +2889,9 @@ Retrieves content metadata and byte ranges from virtual content holders. \\
 \subsection{Local Persistence Model}
 \label{sec:local-persistence-model}
 
-Local persistence is implemented with SQLite through SQLAlchemy. Persistent state includes identities, endpoints, DHT records, route metadata, content metadata, and operational logs. Runtime-only state such as active sockets, handshake state, cryptographic session secrets, and temporary buffers remains in memory.
+Local persistence is implemented with SQLite through SQLAlchemy. Persistent state includes identities, endpoints, DHT records, route metadata, content metadata, and operational logs. Runtime-only state such as active sockets, handshake state, cryptographic session secrets, temporary buffers, and reliable-session delivery windows remains in memory.
 
-The main persistence rule is that stable identifiers and metadata are persisted, while active cryptographic material and live network resources are not persisted without protection.
+The main persistence rule is that stable identifiers and metadata are persisted, while active cryptographic material, live network resources, pending reliable acknowledgments, in-flight retransmission state, and ordered-delivery buffers are not persisted without protection.
 
 Table~\ref{tab:persistence-summary} summarizes the main persistence entities.
 
@@ -2871,10 +2977,16 @@ The social model is intentionally simple:
 
 A profile state contains name, biography, profile photo, friend list, posts, and local metadata. The current profile state is stored as a local content object. The virtual node then publishes itself as a holder of that content in the DDT and updates a DPT pointer to reference the most recent state object.
 
-The DPT key used by the PoC is:
+The DPT logical key used by the PoC is:
 
 \begin{equation}
-    logical\_key = \texttt{anonnet.social|}virtual\_node\_id
+    logical\_key = \texttt{virtual\_node\_id|profile}
+\end{equation}
+
+The physical DHT key is derived from this logical key:
+
+\begin{equation}
+    dpt\_key = SHA512(\texttt{dpt|virtual\_node\_id|profile})
 \end{equation}
 
 The DPT record contains:
@@ -2883,7 +2995,7 @@ The DPT record contains:
     target\_ref = content\_id
 \end{equation}
 
-Since the DPT is signed by the owner virtual node, other peers can verify that the pointer belongs to the claimed profile. To read a friend's profile, the application queries the friend's DPT, validates the pointer, resolves the referenced content in the DDT, downloads the content from a holder, and renders the posts in the feed.
+Since the DPT is signed by the owner virtual node, other peers can verify that the pointer belongs to the claimed profile. During validation, peers compute \codebreak{SHA\allowbreak{}512(pk\_\allowbreak{}virtual\_\allowbreak{}node\_\allowbreak{}owner)} and confirm that it matches the \texttt{virtual\_node\_id} used in the DPT key. To read a friend's profile, the application queries the friend's DPT, validates the pointer, resolves the referenced content in the DDT, downloads the content from a holder, and renders the posts in the feed.
 
 Direct messages use virtual sessions. The application requests a session with a friend virtual node, the core resolves the friend's DRT entry, resolves the entry point in the DPNT, establishes the virtual session through \codebreak{ROUTE\_\allowbreak{}DATA}, and sends the message using \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}DATA} with the application type \codebreak{social.direct\_\allowbreak{}message}.
 
@@ -2917,15 +3029,9 @@ Table~\ref{tab:smoke-tests} summarizes the main validation tests.
 \toprule
 \textbf{Test} & \textbf{Validation goal} \\
 \midrule
-\codebreak{virtual\_\allowbreak{}session\_\allowbreak{}smoke.\allowbreak{}py} & Validates physical cluster setup, VN creation, route publication in DRT, virtual session establishment, and virtual keepalive. \\
-\codebreak{virtual\_\allowbreak{}message\_\allowbreak{}smoke.\allowbreak{}py} & Validates active virtual sessions, message delivery through \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}DATA}, and handler response. \\
-\codebreak{virtual\_\allowbreak{}content\_\allowbreak{}smoke.\allowbreak{}py} & Validates local content storage, DDT holder publication, virtual content metadata request, byte-range download, and DDT holder publication after download completion. \\
-\codebreak{virtual\_\allowbreak{}api\_\allowbreak{}stress\_\allowbreak{}smoke.\allowbreak{}py} & Exercises the local API under repeated operations involving VN creation, DRT resolution, virtual sessions, and messages. \\
-\codebreak{virtual\_\allowbreak{}api\_\allowbreak{}local\_\allowbreak{}vn\_\allowbreak{}stress\_\allowbreak{}smoke.\allowbreak{}py} & Validates communication between two VNs hosted in the same core through the normal DRT/DPNT/route path, without local shortcuts. \\
-\codebreak{debug\_\allowbreak{}state\_\allowbreak{}smoke.\allowbreak{}py} & Validates operational sanity, including active nodes, unique peers, session limits, DHT duplication checks, and debug snapshots. \\
-\codebreak{core\_\allowbreak{}full\_\allowbreak{}flow\_\allowbreak{}smoke.\allowbreak{}py} & Executes the main integration smokes in sequence, reusing cluster and core instances when possible. \\
-\codebreak{social\_\allowbreak{}dom.\allowbreak{}js} & Validates front-end social handlers using a fake DOM. \\
-\codebreak{run\_\allowbreak{}social\_\allowbreak{}smoke.\allowbreak{}py} & Validates the social PoC with a real core, including profile creation, DPT/DDT publication, friendship, remote profile loading, feed construction, and direct message flow. \\
+\codebreak{core\_\allowbreak{}full\_\allowbreak{}flow\_\allowbreak{}smoke.\allowbreak{}py} & Validates the core as an integrated system, including Docker cluster startup, randomized transport topology, bootstrap, physical peer validation, DHT publish/query, route maintenance, DRT resolution, virtual sessions, virtual messages, content transfer, local API access, WebSocket events, reliable delivery, and debug-state inspection. \\
+\codebreak{poc\_\allowbreak{}full\_\allowbreak{}flow\_\allowbreak{}smoke.\allowbreak{}py} & Validates the external social PoC through the public local API, including creation of two virtual-node profiles, DPT/DDT publication, friendship, remote profile resolution, feed construction from a friend's posts, direct messages, and browser-facing JavaScript service behavior. \\
+\codebreak{scripts/\allowbreak{}run\_\allowbreak{}smokes.\allowbreak{}py} & Orchestrates the official smoke suite, resets local cluster data, starts the requested number of nodes, prints the randomized topology, runs the core and PoC flows in order, reports pass/fail status, and stops the cluster after execution. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -2966,22 +3072,38 @@ The observed result is that the MVP demonstrates the complete functional path ex
     \item the Debug Console can observe peers, sessions, DHT records, routes, runtimes, and operational warnings.
 \end{itemize}
 
-Figures~\ref{fig:cluster-log}, \ref{fig:poc-social-profile}, \ref{fig:poc-social-messaging}, \ref{fig:debug-console-overview}, \ref{fig:debug-console-network}, \ref{fig:debug-console-dht}, \ref{fig:debug-console-routes}, \ref{fig:debug-console-runtime}, and \ref{fig:smokes-passing} present screenshots collected from the repository or experimental execution.
+Figures~\ref{fig:cluster-log}, \ref{fig:cluster-log-details}, \ref{fig:poc-social-profile}, \ref{fig:poc-social-messaging}, \ref{fig:debug-console-overview}, \ref{fig:debug-console-network}, \ref{fig:debug-console-dht}, \ref{fig:debug-console-routes}, \ref{fig:debug-console-runtime}, and \ref{fig:smokes-passing}--\ref{fig:smokes-passing-7} present screenshots collected from real experimental execution.
 
 \begin{figure}[H]
 \centering
-\IfFileExists{assets/img/cluster-log.png}{
-    \thesisfiguregraphic{assets/img/cluster-log.png}
+\IfFileExists{assets/img/cluster-console-1.png}{
+    \thesisfiguregraphic{assets/img/cluster-console-1.png}
 }{
     \fbox{
         \parbox{0.9\textwidth}{
             \centering
-            Placeholder: cluster execution log showing multiple physical nodes, bootstrap, peer discovery, and route/DHT activity.
+            Placeholder: cluster execution console showing multiple physical nodes and randomized transport profiles.
         }
     }
 }
-\caption{Cluster execution log with multiple physical nodes running in the experimental environment.}
+\caption{Cluster execution console showing multiple physical nodes running in the experimental Docker environment.}
 \label{fig:cluster-log}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/cluster-console-2.png}{
+    \thesisfiguregraphic{assets/img/cluster-console-2.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: cluster execution console showing node startup and transport endpoint exposure.
+        }
+    }
+}
+\caption{Cluster execution console showing additional node startup and transport endpoint details.}
+\label{fig:cluster-log-details}
 \end{figure}
 
 \begin{figure}[H]
@@ -3098,18 +3220,114 @@ Figures~\ref{fig:cluster-log}, \ref{fig:poc-social-profile}, \ref{fig:poc-social
 
 \begin{figure}[H]
 \centering
-\IfFileExists{assets/img/smokes-passing.png}{
-    \thesisfiguregraphic{assets/img/smokes-passing.png}
+\IfFileExists{assets/img/smoke-console-1.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-1.png}
 }{
     \fbox{
         \parbox{0.9\textwidth}{
             \centering
-            Placeholder: terminal output showing integration smokes and social PoC smokes passing.
+            Placeholder: terminal output showing smoke execution progress.
         }
     }
 }
-\caption{Smoke tests validating the main protocol flows of the MVP.}
+\caption{Smoke execution console output, part 1.}
 \label{fig:smokes-passing}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-2.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-2.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing smoke execution progress.
+        }
+    }
+}
+\caption{Smoke execution console output, part 2.}
+\label{fig:smokes-passing-2}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-3.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-3.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing smoke execution progress.
+        }
+    }
+}
+\caption{Smoke execution console output, part 3.}
+\label{fig:smokes-passing-3}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-4.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-4.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing smoke execution progress.
+        }
+    }
+}
+\caption{Smoke execution console output, part 4.}
+\label{fig:smokes-passing-4}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-5.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-5.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing smoke execution progress.
+        }
+    }
+}
+\caption{Smoke execution console output, part 5.}
+\label{fig:smokes-passing-5}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-6.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-6.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing smoke execution progress.
+        }
+    }
+}
+\caption{Smoke execution console output, part 6.}
+\label{fig:smokes-passing-6}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{assets/img/smoke-console-7.png}{
+    \thesisfiguregraphic{assets/img/smoke-console-7.png}
+}{
+    \fbox{
+        \parbox{0.9\textwidth}{
+            \centering
+            Placeholder: terminal output showing final smoke pass/fail summary.
+        }
+    }
+}
+\caption{Smoke execution console output, part 7, showing the final validation summary.}
+\label{fig:smokes-passing-7}
 \end{figure}
 
 \subsection{Comparison with Related Systems and Concepts}

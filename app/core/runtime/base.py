@@ -48,7 +48,18 @@ class PeriodicRuntime:
 
     async def _run_loop(self) -> None:
         while not self._stop_event.is_set():
-            await self._run_once()
+            try:
+                await self._run_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                self.engine.services.log_service.error(
+                    "runtime",
+                    "periodic runtime iteration failed",
+                    task_name=self._task_name,
+                    error_type=type(error).__name__,
+                    error=repr(error),
+                )
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._loop_interval_seconds)
             except TimeoutError:

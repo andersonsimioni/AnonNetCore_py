@@ -214,14 +214,15 @@ def _ensure_dpt_key_matches_owner_and_title(
     pk_virtual_node_owner: str,
     title: str,
 ) -> None:
+    pk_id_virtual_node_owner = sha512(pk_virtual_node_owner.encode("utf-8")).hexdigest()
     expected_key = sha512(
-        f"dpt|{pk_virtual_node_owner}|{title}".encode("utf-8")
+        f"dpt|{pk_id_virtual_node_owner}|{title}".encode("utf-8")
     ).hexdigest()
     if key == expected_key:
         return
 
     raise ValueError(
-            "The DPT key does not match the provided pk_virtual_node_owner and title."
+            "The DPT key does not match the provided virtual node owner id and title."
     )
 
 

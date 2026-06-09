@@ -5,7 +5,10 @@ const SOCIAL_DIRECT_MESSAGE_TYPE = "social.direct_message";
 const SOCIAL_FEED_POST_TYPE = "social.feed_post";
 
 function buildProfileDptLogicalKey(virtualNodeId) {
-  return `${SOCIAL_APP_ID}|${virtualNodeId}`;
+  if (!virtualNodeId) {
+    throw new Error("virtualNodeId is required to build the social profile DPT key.");
+  }
+  return `${virtualNodeId}|${SOCIAL_PROFILE_DPT_TITLE}`;
 }
 
 function createProfile({

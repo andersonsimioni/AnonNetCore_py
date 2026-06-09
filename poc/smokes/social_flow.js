@@ -66,14 +66,14 @@ async function main() {
     localVirtualNode: vnA,
     displayName: "Smoke Alice",
     bio: "Profile A published through DDT and signed DPT.",
-    friendVirtualNodeIds: [vnB.id],
+    friends: [{ virtualNodeId: vnB.id, publicKey: vnB.public_key }],
     firstPostText: "primeiro post publico da Alice",
   });
   const stateB = createProfileRuntimeState({
     localVirtualNode: vnB,
     displayName: "Smoke Bob",
     bio: "Profile B published through DDT and signed DPT.",
-    friendVirtualNodeIds: [vnA.id],
+    friends: [{ virtualNodeId: vnA.id, publicKey: vnA.public_key }],
     firstPostText: "primeiro post publico do Bob",
   });
 
@@ -119,6 +119,7 @@ async function main() {
     socialService: socialB,
     localVirtualNodeId: vnB.id,
     remoteVirtualNodeId: vnA.id,
+    remotePublicKey: vnA.public_key,
     expectedProfileId: vnA.id,
     expectedPostTexts: ["primeiro post publico da Alice"],
     label: "core B downloads Alice",
@@ -127,6 +128,7 @@ async function main() {
     socialService: socialA,
     localVirtualNodeId: vnA.id,
     remoteVirtualNodeId: vnB.id,
+    remotePublicKey: vnB.public_key,
     expectedProfileId: vnB.id,
     expectedPostTexts: ["primeiro post publico do Bob"],
     label: "core A downloads Bob",
@@ -250,15 +252,20 @@ function createProfileRuntimeState({
   localVirtualNode,
   displayName,
   bio,
-  friendVirtualNodeIds,
+  friendVirtualNodeIds = null,
+  friends = null,
   firstPostText,
 }) {
+  const normalizedFriends = friends || (friendVirtualNodeIds || []).map((friendVirtualNodeId) => ({
+    virtualNodeId: friendVirtualNodeId,
+    publicKey: null,
+  }));
   const profile = window.AnonNetSocialModels.createProfile({
     virtualNodeId: localVirtualNode.id,
     publicKey: localVirtualNode.public_key,
     displayName,
     bio,
-    friendVirtualNodeIds,
+    friendVirtualNodeIds: normalizedFriends.map((friend) => friend.virtualNodeId),
   });
   const firstPost = window.AnonNetSocialModels.createFeedPost({
     authorVirtualNodeId: localVirtualNode.id,
@@ -267,10 +274,10 @@ function createProfileRuntimeState({
   });
   return window.AnonNetSocialRuntime.createSocialProfileState(localVirtualNode, {
     profile,
-    contacts: friendVirtualNodeIds.map((friendVirtualNodeId, index) => ({
-      virtual_node_id: friendVirtualNodeId,
+    contacts: normalizedFriends.map((friend, index) => ({
+      virtual_node_id: friend.virtualNodeId,
       display_name: `Friend ${index + 1}`,
-      public_key: null,
+      public_key: friend.publicKey || null,
       status: "pendente",
       feed_posts: [],
       user_state_content_id: null,
@@ -288,14 +295,14 @@ async function runSameCoreLocalPairScenario({ client, label }) {
     localVirtualNode: vnA,
     displayName: "Local Alice",
     bio: `${label} A`,
-    friendVirtualNodeIds: [vnB.id],
+    friends: [{ virtualNodeId: vnB.id, publicKey: vnB.public_key }],
     firstPostText: "post local do VN A no mesmo core",
   });
   const stateB = createProfileRuntimeState({
     localVirtualNode: vnB,
     displayName: "Local Bob",
     bio: `${label} B`,
-    friendVirtualNodeIds: [vnA.id],
+    friends: [{ virtualNodeId: vnA.id, publicKey: vnA.public_key }],
     firstPostText: "post local do VN B no mesmo core",
   });
   const syncA = createBackgroundSync("local A", socialService, stateA);
@@ -381,6 +388,7 @@ async function downloadAndAssertUserState({
   socialService,
   localVirtualNodeId,
   remoteVirtualNodeId,
+  remotePublicKey = null,
   expectedProfileId,
   expectedPostTexts,
   label,
@@ -388,6 +396,7 @@ async function downloadAndAssertUserState({
   const downloaded = await socialService.downloadUserStateFromPointer({
     localVirtualNodeId,
     remoteVirtualNodeId,
+    remotePublicKey,
   });
   assert.equal(downloaded.userState.profile.virtual_node_id, expectedProfileId);
   assertPostTexts(downloaded.userState.feed_posts, expectedPostTexts, label);

@@ -29,6 +29,15 @@ class AnonNetClient {
     });
   }
 
+  async listRemoteVirtualNodes({ status = null } = {}) {
+    const query = new URLSearchParams();
+    if (status) {
+      query.set("status", status);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.#get(`/v1/virtual-nodes/remote${suffix}`);
+  }
+
   async dhtPublish({ namespace, logicalKey, record, recordJson = null, expiresAt = null }) {
     return this.#post("/v1/dht/publish", {
       namespace,

@@ -943,6 +943,7 @@ class SocialService {
     });
     return session;
   }
+
 }
 
 window.SocialService = SocialService;

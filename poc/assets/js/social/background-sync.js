@@ -275,6 +275,7 @@ class SocialBackgroundSyncService {
     const result = await this.socialService.downloadUserStateFromPointer({
       localVirtualNodeId: profileState.localVirtualNode.id,
       remoteVirtualNodeId: contact.virtual_node_id,
+      remotePublicKey: contact.public_key,
     });
     const remoteProfile = result.userState.profile || {};
 
