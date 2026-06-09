@@ -149,7 +149,7 @@ Florianópolis -- SC -- Brasil
 \begin{abstracten}
 Decentralized communication systems have emerged as an alternative to traditional centralized network architectures, offering improved resilience, autonomy, privacy, and reduced dependence on central points of control. Peer-to-peer (P2P) overlay networks provide a promising foundation for secure communication, persistent data exchange, and the execution of decentralized applications. However, several challenges remain, including peer discovery, connectivity across heterogeneous network environments, data availability, and the integration of flexible security mechanisms.
 
-This work proposes a modular architecture for decentralized peer-to-peer overlay networks designed to support secure and anonymous communication, data persistence, and decentralized applications. The proposed design separates the networking, persistence, and security concerns into modular components, allowing the system to support different connection strategies, storage models, and cryptographic schemes without requiring changes to the overall architecture.
+This work proposes a modular architecture for decentralized peer-to-peer overlay networks designed to support secure and privacy-oriented communication, data persistence, and decentralized applications. The proposed design separates the networking, persistence, and security concerns into modular components, allowing the system to support different connection strategies, storage models, and cryptographic schemes without requiring changes to the overall architecture.
 
 To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows in local and Docker-based environments using TCP, an experimental UDP transport with compact binary fragmentation, and relay-assisted physical connectivity. The broader architecture still treats complete NAT traversal mechanisms such as UDP hole punching, STUN/TURN integration, and QUIC as future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
 
@@ -161,7 +161,7 @@ The results indicate that the modular architecture can support heterogeneous net
 \begin{resumopt}
 Sistemas de comunicação descentralizados têm emergido como uma alternativa às arquiteturas de rede centralizadas tradicionais, oferecendo maior resiliência, autonomia, privacidade e menor dependência de pontos centrais de controle. Redes overlay baseadas em comunicação peer-to-peer (P2P) fornecem uma base promissora para comunicação segura, troca persistente de dados e execução de aplicações descentralizadas. No entanto, diversos desafios permanecem, incluindo descoberta de pares, conectividade em ambientes de rede heterogêneos, disponibilidade de dados e integração de mecanismos de segurança flexíveis.
 
-Este trabalho propõe uma arquitetura modular para redes overlay peer-to-peer descentralizadas projetada para suportar comunicação segura e anônima, persistência de dados e aplicações descentralizadas. O projeto proposto separa os componentes de rede, persistência e segurança em módulos independentes, permitindo que o sistema suporte diferentes estratégias de conexão, modelos de armazenamento e esquemas criptográficos sem necessidade de modificar a arquitetura geral.
+Este trabalho propõe uma arquitetura modular para redes overlay peer-to-peer descentralizadas projetada para suportar comunicação segura e orientada à privacidade, persistência de dados e aplicações descentralizadas. O projeto proposto separa os componentes de rede, persistência e segurança em módulos independentes, permitindo que o sistema suporte diferentes estratégias de conexão, modelos de armazenamento e esquemas criptográficos sem necessidade de modificar a arquitetura geral.
 
 Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay em ambientes locais e baseados em Docker usando TCP, transporte UDP experimental com fragmentação binária compacta e conectividade física assistida por relays. A arquitetura mais ampla ainda trata mecanismos completos de travessia de NAT, como UDP hole punching, integração STUN/TURN e QUIC, como extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
 
@@ -185,7 +185,7 @@ Decentralized communication architectures offer a promising alternative to tradi
 
 Several existing systems, such as Tor, I2P, and IPFS, attempt to address some of these challenges by providing privacy-preserving communication or decentralized storage. Nevertheless, these systems often focus on specific aspects of the problem and may present limitations in terms of scalability, routing efficiency, or resistance to traffic analysis.
 
-This work proposes the design and implementation of a decentralized network layer focused on anonymous communication and distributed data persistence. The proposed architecture is based on a peer-to-peer overlay network where nodes communicate without relying on centralized infrastructure. The system incorporates multiple distributed discovery structures, probabilistic routing mechanisms, and cryptographic identity models in order to preserve user privacy while enabling efficient communication.
+This work proposes the design and implementation of a decentralized network layer focused on anonymity-oriented communication and distributed data persistence. The proposed architecture is based on a peer-to-peer overlay network where nodes communicate without relying on centralized infrastructure. The system incorporates multiple distributed discovery structures, probabilistic routing mechanisms, and cryptographic identity models in order to preserve user privacy while enabling efficient communication.
 
 In the proposed model, nodes are identified through cryptographic keys rather than network addresses, and routing information is stored using distributed hash table--based structures that allow scalable discovery of peers, routes, and published data. The full architecture is designed to support NAT traversal mechanisms such as UDP hole punching and relay-assisted communication, while the experimental MVP validates the main overlay behavior over TCP, experimental UDP transport, and relay-assisted physical forwarding. Cryptographic protocols, including post-quantum primitives, are used to protect communication confidentiality, authentication, and integrity.
 
@@ -438,6 +438,8 @@ Classical foundational works published before 2015 were not treated as primary s
 
 The study selection process was conducted according to the PRISMA methodology, which is organized into four main stages: identification, screening, eligibility, and inclusion. First, the search strategy retrieved a total of 2581 records across the selected sources. After removing 5 duplicate records, 2576 unique studies remained for screening. Titles and abstracts were then examined, resulting in the exclusion of 2559 records. The remaining 17 studies were assessed through full-text reading for eligibility. After this final evaluation, 6 studies were considered aligned with the objectives and inclusion criteria of this systematic literature review and were therefore included in the final synthesis.
 
+The small final set of six primary studies reflects the strict intersection imposed by the review scope: decentralized P2P architecture, anonymous or privacy-preserving communication, secure communication mechanisms, and relevance to routing, peer discovery, NAT traversal, or persistence. Studies that addressed only one of these dimensions were therefore excluded from the final synthesis.
+
 The process can be summarized as follows:
 
 \begin{itemize}
@@ -603,7 +605,7 @@ This hybrid design reflects an intentional effort to move beyond isolated soluti
 \subsection{System Requirements}
 \subsubsection{Functional Requirements}
 
-The proposed decentralized network layer must provide a set of core functionalities to enable secure, scalable, and anonymous peer-to-peer communication. The main functional requirements are described as follows:
+The proposed decentralized network layer must provide a set of core functionalities to enable secure, scalable, and anonymity-oriented peer-to-peer communication. The main functional requirements are described as follows:
 
 \begin{itemize}
 
@@ -750,7 +752,7 @@ The proposed architecture adopts a dual-identity model to decouple physical netw
 At the physical layer, each node is identified by a cryptographic key pair used exclusively for authentication and integrity [5], [9]. The public key ($pk\_physical\_node$) acts as the network-level identifier, while the corresponding secret key ($sk\_physical\_node$) is used for signing protocol messages and validating node authenticity [9]. This identity is responsible for transport-level interactions, including connection establishment, NAT traversal support, and relay coordination [5]. Since this layer interacts with the underlying network, it may be associated with transport-relevant information such as IP addresses and ports [5].
 
 \item \textbf{Virtual Node Identity ($pk\_virtual\_node$, $sk\_virtual\_node$):}  
-At the overlay layer, each virtual node is identified by a distinct cryptographic key pair used for logical identity and authentication [9], [10]. The public key ($pk\_virtual\_node$) defines the node's identity within the overlay, while the secret key ($sk\_virtual\_node$) is used to sign messages and validate ownership of that identity [9]. Virtual identities are independent of physical network location, ensuring anonymity and preventing direct linkage between overlay participants and their underlying network endpoints [9], [10].
+At the overlay layer, each virtual node is identified by a distinct cryptographic key pair used for logical identity and authentication [9], [10]. The public key ($pk\_virtual\_node$) defines the node's identity within the overlay, while the secret key ($sk\_virtual\_node$) is used to sign messages and validate ownership of that identity [9]. Virtual identities are independent of physical network location, supporting anonymity-oriented operation and preventing direct linkage between overlay participants and their underlying network endpoints [9], [10].
 
 In this architecture, encryption keys are not statically bound to node identities. Instead, they are dynamically established through protocol interactions [9], [13], [14]. When secure communication is required, nodes exchange encryption material through signed protocol messages, allowing the recipient to verify authenticity using the sender's public key before using the provided encryption key [9], [13], [14]. This approach eliminates the need for a dedicated key-binding structure while preserving security and flexibility [9].
 
@@ -758,7 +760,7 @@ To improve storage efficiency and reduce routing overhead, Distributed Hash Tabl
 
 \end{itemize}
 
-This separation between physical and virtual identities enhances privacy, security, and flexibility, allowing the system to operate as a fully decentralized and anonymous overlay network [5], [9], [10].
+This separation between physical and virtual identities enhances privacy, security, and flexibility, allowing the system to operate as a decentralized, privacy-oriented overlay network [5], [9], [10].
 
 \subsubsection{Overlay Abstraction}
 
@@ -785,7 +787,7 @@ In the proposed model, every DHT record is addressed by a deterministic key deri
 from a namespace and a logical identifier:
 
 \[
-dht\_key = H(namespace \parallel logical\_key)
+\texttt{dht\_key} = H(\texttt{namespace} \parallel \texttt{logical\_key})
 \]
 
 The \textit{namespace} identifies the logical table or protocol domain, such as
@@ -798,7 +800,7 @@ Responsibility for each DHT key is assigned to the \(K\) active peers whose
 identifiers are closest to that key according to the XOR distance metric:
 
 \[
-distance(node\_id, dht\_key) = node\_id \oplus dht\_key
+\operatorname{distance}(\texttt{node\_id}, \texttt{dht\_key}) = \texttt{node\_id} \oplus \texttt{dht\_key}
 \]
 
 The \(K\) peers with the smallest resulting distances are considered responsible for
@@ -830,13 +832,13 @@ lightweight root record and multiple shard records. The root record stores only
 metadata about the logical collection:
 
 \[
-root\_key = H(namespace \parallel logical\_key)
+\texttt{root\_key} = H(\texttt{namespace} \parallel \texttt{logical\_key})
 \]
 
 Each shard stores only a bounded portion of the full item list:
 
 \[
-shard\_key_i = H(namespace \parallel logical\_key \parallel i)
+\texttt{shard\_key}_i = H(\texttt{namespace} \parallel \texttt{logical\_key} \parallel i)
 \]
 
 where \(i\) represents the shard index. Since each shard has its own DHT key, shards
@@ -866,15 +868,15 @@ In addition to the semantic discovery provided by the DTT, the architecture may 
 Conceptually, the DPT maps a stable owner-scoped identifier to a signed pointer record that indicates the current reference associated with that resource. The structure may be represented as:
 
 \[
-H(\mathrm{pk\_virtual\_node\_owner} \parallel \mathrm{title}) \mapsto
+H(\texttt{pk\_virtual\_node\_owner} \parallel \texttt{title}) \mapsto
 \left\{
 \begin{aligned}
-&\mathrm{pk\_virtual\_node\_owner}: \mathrm{str},\\
-&\mathrm{title}: \mathrm{str},\\
-&\mathrm{type}: \mathrm{str},\\
-&\mathrm{last\_modified}: \mathrm{str},\\
-&\mathrm{target\_ref}: \mathrm{str},\\
-&\mathrm{signature}: \mathrm{str}
+&\texttt{pk\_virtual\_node\_owner}: \texttt{str},\\
+&\texttt{title}: \texttt{str},\\
+&\texttt{type}: \texttt{str},\\
+&\texttt{last\_modified}: \texttt{str},\\
+&\texttt{target\_ref}: \texttt{str},\\
+&\texttt{signature}: \texttt{str}
 \end{aligned}
 \right\}
 \]
@@ -994,22 +996,22 @@ Conceptually, the DPNT maps the identifier of a physical node to a record contai
 H(\mathrm{pk\_physical\_node}) \mapsto
 \left\{
 \begin{aligned}
-&\mathrm{pk\_physical\_node}: \mathrm{str},\\
-&\mathrm{endpoints}: \mathrm{list}[\mathrm{dict}[\mathrm{str}, \mathrm{object}]],\\
-&\mathrm{transport\_methods}: \mathrm{list}[\mathrm{str}],\\
-&\mathrm{reachability\_class}: \mathrm{str},\\
-&\mathrm{relay\_capable}: \mathrm{bool},\\
-&\mathrm{hole\_punch\_capable}: \mathrm{bool},\\
-&\mathrm{protocol\_version}: \mathrm{str},\\
-&\mathrm{feature\_flags}: \mathrm{list}[\mathrm{str}],\\
-&\mathrm{last\_validated\_at}: \mathrm{str},\\
-&\mathrm{status}: \mathrm{str},\\
-&\mathrm{signature}: \mathrm{str}
+&\texttt{pk\_physical\_node}: \texttt{str},\\
+&\texttt{endpoints}: \texttt{list}[\texttt{dict}[\texttt{str}, \texttt{object}]],\\
+&\texttt{transport\_methods}: \texttt{list}[\texttt{str}],\\
+&\texttt{reachability\_class}: \texttt{str},\\
+&\texttt{relay\_capable}: \texttt{bool},\\
+&\texttt{hole\_punch\_capable}: \texttt{bool},\\
+&\texttt{protocol\_version}: \texttt{str},\\
+&\texttt{feature\_flags}: \texttt{list}[\texttt{str}],\\
+&\texttt{last\_validated\_at}: \texttt{str},\\
+&\texttt{status}: \texttt{str},\\
+&\texttt{signature}: \texttt{str}
 \end{aligned}
 \right\}
 \]
 
-where \(H(pk_{physical\_node})\) identifies the physical node, \(endpoints[]\) contains known communication endpoints, \(transport\_methods[]\) indicates supported communication mechanisms, \(reachability\_class\) describes the observed connectivity condition of the node, \(relay\_capable\) and \(hole\_punch\_capable\) indicate forwarding and NAT traversal capabilities, \(protocol\_version\) and \(feature\_flags[]\) describe compatibility properties, \(last\_validated\_at\) records the most recent successful validation time, and \(status\) reflects the currently known operational condition.
+where \(H(pk_{physical\_node})\) identifies the physical node, \texttt{endpoints[]} contains known communication endpoints, \texttt{transport\_methods[]} indicates supported communication mechanisms, \texttt{reachability\_class} describes the observed connectivity condition of the node, \texttt{relay\_capable} and \texttt{hole\_punch\_capable} indicate forwarding and NAT traversal capabilities, \texttt{protocol\_version} and \texttt{feature\_flags[]} describe compatibility properties, \texttt{last\_validated\_at} records the most recent successful validation time, and \texttt{status} reflects the currently known operational condition.
 
 
 
@@ -1383,7 +1385,7 @@ Overall, the introduction of the DPNT allows the architecture to combine two com
 
 The Cryptographic Module is responsible for providing confidentiality, authenticity, integrity support, and replay resistance for both end-to-end communication and distributed records maintained by the overlay [9], [10], [13], [14]. Its design separates operational network identity from logical overlay identity, treating the virtual node as the primary cryptographic identity of the system, while the physical node remains restricted to operational functions such as connectivity, entry point authorization, and publication of routing records [5], [9]. 
 
-At the overlay level, each virtual node is identified by its own public key pair, which is used as the stable logical identity for communication and routing [9]. Physical nodes may host multiple virtual nodes, including persistent and ephemeral instances, but the association between a physical node and the virtual nodes it hosts must not be exposed by the cryptographic layer [9], [10]. This separation is a central requirement of the architecture, since preserving anonymity depends not only on indirect routing, but also on preventing explicit cryptographic linkage between network presence and logical participation [9], [10].
+At the overlay level, each virtual node is identified by its own public key pair, which is used as the stable logical identity for communication and routing [9]. Physical nodes may host multiple virtual nodes, including persistent and ephemeral instances, but the association between a physical node and the virtual nodes it hosts must not be exposed by the cryptographic layer [9], [10]. This separation is a central requirement of the architecture, since anonymity-oriented operation depends not only on indirect routing, but also on preventing explicit cryptographic linkage between network presence and logical participation [9], [10].
 
 For session establishment, the module adopts an authenticated key exchange process in which ephemeral key material is generated for each new communication session [9], [13], [14]. The exchanged ephemeral encryption keys are authenticated through digital signatures, allowing peers to validate the origin of the handshake without relying on a static binding structure such as an SBC [9]. This approach enables dynamic session creation while preserving forward secrecy, since compromise of long-term keys must not reveal previously established session keys [9], [13], [14].
 
@@ -1541,7 +1543,7 @@ Path construction is temporally constrained during its creation phase [8], [10].
 
 The number of forwarding hops is not fixed in advance and may vary according to the TTL selected for route creation [6], [8], [10]. This allows route depth to remain flexible while avoiding rigid path-length assumptions. Next-hop selection during route construction is performed randomly, which helps reduce predictability and avoids deterministic forwarding patterns that could facilitate path inference [6], [9], [10]. Cycle avoidance is treated implicitly through the route construction logic rather than through a separately exposed protocol mechanism [8], [10].
 
-For data retrieval, lookup and routing remain logically distinct but operationally connected [8], [10]. The DDT is queried first to discover which ephemeral virtual nodes currently store the content identified by the requested hash [8], [10]. After that, the initiator performs DRT resolution for one of those storage virtual nodes in order to obtain an initial entry point and create an indirect route toward it [5], [8], [9], [10]. Thus, content retrieval is not performed directly from the DDT itself, but through a two-step procedure in which DDT provides storage holders and DRT enables anonymous communication with them [8], [10].
+For data retrieval, lookup and routing remain logically distinct but operationally connected [8], [10]. The DDT is queried first to discover which ephemeral virtual nodes currently store the content identified by the requested hash [8], [10]. After that, the initiator performs DRT resolution for one of those storage virtual nodes in order to obtain an initial entry point and create an indirect route toward it [5], [8], [9], [10]. Thus, content retrieval is not performed directly from the DDT itself, but through a two-step procedure in which DDT provides storage holders and DRT enables privacy-oriented communication with them [8], [10].
 
 Overall, the Routing and Lookup protocol separates destination discovery from route realization, limits the information learned by initiators and intermediate hops, and preserves indirect communication through per-hop path remapping [5], [9], [10]. By combining DRT-based entry-point resolution, DDT-based storage discovery, and locally scoped forwarding state, the protocol supports both message delivery and content access without reverting to globally visible paths or classical flooding behavior [7], [8], [9], [10].
 
@@ -1737,12 +1739,12 @@ A simplified local abuse policy may be represented as:
 
 \[
 \begin{aligned}
-score(peer) ={}&
-w_1 \cdot invalid\_signatures \\
-&+ w_2 \cdot request\_rate \\
-&+ w_3 \cdot failed\_lookups \\
-&+ w_4 \cdot origin\_concentration \\
-&+ w_5 \cdot malformed\_messages
+\operatorname{score}(\texttt{peer}) ={}&
+w_1 \cdot \texttt{invalid\_signatures} \\
+&+ w_2 \cdot \texttt{request\_rate} \\
+&+ w_3 \cdot \texttt{failed\_lookups} \\
+&+ w_4 \cdot \texttt{origin\_concentration} \\
+&+ w_5 \cdot \texttt{malformed\_messages}
 \end{aligned}
 \]
 
@@ -1779,14 +1781,14 @@ For each DHT publication, the record key is first derived according to the stand
 DHT key derivation rule:
 
 \[
-record\_key = H(namespace \parallel logical\_key)
+\texttt{record\_key} = H(\texttt{namespace} \parallel \texttt{logical\_key})
 \]
 
 The publisher must then find a nonce such that the hash of the record key
 concatenated with the nonce satisfies the required difficulty condition:
 
 \[
-P = H(record\_key \parallel payload \parallel nonce)
+P = H(\texttt{record\_key} \parallel \texttt{payload} \parallel \texttt{nonce})
 \]
 
 The publication proof is considered valid only if the resulting hash satisfies the
@@ -1800,24 +1802,24 @@ Equivalently, this condition may be interpreted as requiring the proof hash to
 contain at least \(N\) leading zero bits:
 
 \[
-leading\_zero\_bits(P) \geq N
+\operatorname{leading\_zero\_bits}(P) \geq N
 \]
 
 Thus, a DHT write may be represented as a record containing the published payload
 and its associated proof nonce:
 
 \[
-record\_key \rightarrow
+\texttt{record\_key} \rightarrow
 \{
-payload,
-nonce,
-signature,
-expires\_at
+\texttt{payload},
+\texttt{nonce},
+\texttt{signature},
+\texttt{expires\_at}
 \}
 \]
 
 Responsible peers can verify the publication proof efficiently by recomputing
-\(H(record\_key \parallel payload \parallel nonce)\) and checking whether the result satisfies the
+\(H(\texttt{record\_key} \parallel \texttt{payload} \parallel \texttt{nonce})\) and checking whether the result satisfies the
 required target. This makes verification inexpensive while forcing publishers to
 spend computational effort before inserting or refreshing records in the DHT.
 
@@ -1834,6 +1836,8 @@ attacker attempting to flood the distributed tables must spend resources not onl
 create identities, but also to produce valid publication proofs for the records being
 inserted or refreshed.
 
+The proof-of-work rule used in the implementation should be interpreted as a refinement of the generic architectural model. While this section describes publication work abstractly as a hash over the record key, payload, and nonce, the implemented version derives the hashed material from a canonical payload representation, namespace information, the physical DHT key, and, when required, the relevant identity context. This avoids ambiguity when records aggregate multiple independently signed entries while preserving the same architectural purpose: making DHT writes inexpensive to verify but more costly to flood.
+
 
 
 
@@ -1843,7 +1847,7 @@ inserted or refreshed.
 
 The distributed storage model of the proposed architecture is designed to balance decentralized persistence, anonymity, and low participation requirements [8], [10]. Instead of forcing nodes to act as generic storage providers for arbitrary third-party data, the architecture adopts a consumer-driven approach in which nodes primarily store and serve content that they have explicitly retrieved and decided to keep locally [8], [10]. All stored data is treated as an opaque sequence of bytes, allowing the system to support arbitrary application-level objects without imposing a fixed semantic structure on the storage layer [8].
 
-To preserve anonymity, content publication and content serving are not directly bound to the long-term identity of the node [9], [10]. Rather, a node may create ephemeral virtual nodes dedicated to advertising and serving specific content objects [10]. As a result, the storage layer integrates content discovery, opportunistic replication, and identity obfuscation into a unified design [8], [10].
+To preserve privacy-oriented operation, content publication and content serving are not directly bound to the long-term identity of the node [9], [10]. Rather, a node may create ephemeral virtual nodes dedicated to advertising and serving specific content objects [10]. As a result, the storage layer integrates content discovery, opportunistic replication, and identity obfuscation into a unified design [8], [10].
 
 \subsubsection{Data Distribution Strategy}
 
@@ -1911,10 +1915,10 @@ The purpose of this organization is to preserve low lookup cost while still supp
 The \textit{Distributed Tag Table} (DTT) acts as the semantic entry point for search. It maps normalized tags to candidate resource identifiers, not directly to providers. Conceptually, the structure may be represented as:
 
 \[
-H(tag) \rightarrow \{resource\_id_1, resource\_id_2, \dots\}
+H(\texttt{tag}) \rightarrow \{\texttt{resource\_id}_1, \texttt{resource\_id}_2, \dots\}
 \]
 
-Each returned \(resource\_id\) is interpreted according to its associated resource kind. If the resource represents immutable content, the identifier may already be \(H(content)\), and the requester can resolve it directly through the DDT. If the resource represents a mutable logical object, such as a profile, feed, collection, or application state, the identifier may be a DPT key, and the requester must first resolve the pointer in the DPT to obtain the current \(target\_ref\).
+Each returned \texttt{resource\_id} is interpreted according to its associated resource kind. If the resource represents immutable content, the identifier may already be \(H(content)\), and the requester can resolve it directly through the DDT. If the resource represents a mutable logical object, such as a profile, feed, collection, or application state, the identifier may be a DPT key, and the requester must first resolve the pointer in the DPT to obtain the current \texttt{target\_ref}.
 
 The \textit{Distributed Pointer Table} (DPT) provides this stable indirection layer for mutable resources. A DPT record maps an owner-scoped pointer key to the current content reference that represents the latest known state of that logical resource. Therefore, mutable application objects evolve by updating signed pointers toward new immutable state objects, rather than by mutating the stored content object itself.
 
@@ -1947,7 +1951,7 @@ However, virtual nodes do not necessarily disappear from the logical network at 
 
 The architecture assumes that departures are generally abrupt rather than graceful. Nodes are not expected to perform a formal leave procedure before disconnecting [8]. For this reason, the system relies on indirect evidence to infer node departure, including timeouts, failed responses, missing keepalive activity, broken paths, and expiration of DHT advertisements [5], [8], [10]. Even so, none of these signals provides absolute certainty that a virtual node has truly left the network, because the same observable symptoms may also result from route breakage, intermediate node failure, or temporary communication problems [5], [8].
 
-This ambiguity is intentionally tolerated by the architecture [9], [10]. Stronger certainty about the exact online and offline intervals of virtual nodes could facilitate probabilistic correlation attacks between virtual-node activity and physical-node availability. Therefore, imperfect observability is not merely a limitation of the system, but also a useful property for preserving anonymity [9], [10].
+This ambiguity is intentionally tolerated by the architecture [9], [10]. Stronger certainty about the exact online and offline intervals of virtual nodes could facilitate probabilistic correlation attacks between virtual-node activity and physical-node availability. Therefore, imperfect observability is not merely a limitation of the system, but also a useful property for preserving anonymity-oriented routing properties [9], [10].
 
 For ordinary content-serving virtual nodes, the architecture supports both implicit and explicit disappearance from the network [8], [10]. A content-serving ephemeral virtual node may vanish naturally when its advertisements expire, but explicit withdrawal mechanisms may also be used in order to reduce unnecessary load on the DDT [8], [10]. Active communication sessions are more resilient than simple advertisements: when a path fails, a session may continue through a new route without requiring a new session establishment, provided that an alternative route is found before the keepalive window expires [5], [8], [9].
 
@@ -1997,7 +2001,7 @@ Outside of critical metadata, traffic distribution is handled more naturally tha
 
 Rebalancing is triggered mainly when replicas fail or when new peers enter the network and become available to share responsibility [8]. During this process, the architecture prefers temporary over-replication over under-replication: it is safer to keep more than the minimum number of copies for a short time than to risk leaving a critical structure below its intended redundancy level [8]. New peers may also receive older metadata state so that they can participate both in maintaining existing records and in handling future republications [8].
 
-Overall, network rebalancing in the proposed architecture means keeping critical metadata and access paths as uniformly distributed as reasonably possible, while allowing ordinary content and most traffic patterns to remain decentralized, opportunistic, and lightweight [6], [8], [10]. This choice reflects the broader philosophy of the architecture: avoid single points of failure, preserve anonymity, and maintain acceptable operational continuity without imposing unnecessarily heavy coordination overhead [6], [8], [9], [10].
+Overall, network rebalancing in the proposed architecture means keeping critical metadata and access paths as uniformly distributed as reasonably possible, while allowing ordinary content and most traffic patterns to remain decentralized, opportunistic, and lightweight [6], [8], [10]. This choice reflects the broader philosophy of the architecture: avoid single points of failure, preserve privacy-oriented communication properties, and maintain acceptable operational continuity without imposing unnecessarily heavy coordination overhead [6], [8], [9], [10].
 
 An additional low-level mechanism may be incorporated into the DHT layer in order to reduce local overload and improve the distribution of storage responsibility across the network [1], [2], [3], [8]. Under this model, a peer that becomes responsible for an excessively large amount of key-associated state is not required to store that entire state alone indefinitely. Instead, when local load exceeds predefined thresholds, the peer may progressively distribute portions of that state to neighboring DHT peers, while still remaining the logical entry point for the original key [8].
 
@@ -2046,14 +2050,14 @@ Departure does not directly delete published content. Instead, it reduces availa
 
 The lookup workflow may begin either from application-level semantics or from a known content hash. If the requester already knows \(H(content)\), it may query the DDT directly [8], [10]. If semantic discovery is required, the requester first queries the Distributed Tag Table (DTT), which maps normalized tags or higher-level descriptors to candidate resource identifiers. These identifiers are not interpreted as providers. They are interpreted as references that must be resolved according to their type.
 
-When the DTT returns a content identifier, the requester proceeds directly to the DDT using \(H(content)\) [8], [10]. When the DTT returns a pointer identifier, the requester first queries the DPT to obtain the current signed \(target\_ref\). If this target reference identifies an immutable content object, the requester then proceeds to the DDT. This avoids introducing a separate manifest table while still allowing semantic search to reach mutable application resources through stable pointer records.
+When the DTT returns a content identifier, the requester proceeds directly to the DDT using \(H(content)\) [8], [10]. When the DTT returns a pointer identifier, the requester first queries the DPT to obtain the current signed \texttt{target\_ref}. If this target reference identifies an immutable content object, the requester then proceeds to the DDT. This avoids introducing a separate manifest table while still allowing semantic search to reach mutable application resources through stable pointer records.
 
 Once the content hash has been obtained, the first storage-level step is a query to the DDT using \(H(content)\) [8], [10]. The DDT returns a list of ephemeral virtual nodes that currently advertise possession of the requested object, together with their associated expiration information [8], [10]. These virtual nodes are not sufficient on their own to begin transfer, since the requester still needs to discover how to reach the chosen provider. For that reason, the requester next selects one of the returned virtual nodes, typically at random in order to respect load balancing, and queries the DRT to obtain route information or entry points for that specific ephemeral virtual node [5], [8], [10].
 
 The complete lookup process therefore follows a sequential logic:
 \begin{enumerate}
     \item start from a known \(H(content)\) or optionally query the DTT when semantic discovery is needed;
-    \item if the DTT returns a DPT pointer key, resolve it through the DPT and obtain the current \(target\_ref\);
+    \item if the DTT returns a DPT pointer key, resolve it through the DPT and obtain the current \texttt{target\_ref};
     \item obtain the final \(H(content)\) reference;
     \item query the DDT using that hash;
     \item receive a list of ephemeral virtual nodes that advertise the object;
@@ -2334,11 +2338,7 @@ Each virtual node is identified by the hash of its public key:
     virtual\_node\_id = SHA512(pk_{virtual})
 \end{equation}
 
-In the social PoC, the practical mapping is:
-
-\begin{equation}
-    1~virtual~node = 1~social~profile
-\end{equation}
+In the social PoC, one virtual node corresponds to one social profile.
 
 Virtual nodes are responsible for publishing route entries, establishing virtual sessions, sending virtual messages, signing DHT records, and advertising content. Virtual sessions are end-to-end sessions between virtual identities and are transported through physical routes using \codebreak{ROUTE\_\allowbreak{}DATA}.
 
@@ -2348,7 +2348,7 @@ Virtual nodes are responsible for publishing route entries, establishing virtual
 The implementation uses a generic local table named \codebreak{dht\_\allowbreak{}record}. Each distributed record has a logical namespace, a logical key, a physical DHT key, and a canonical JSON payload. The DHT key is computed as:
 
 \begin{equation}
-    key = SHA512(namespace \parallel \texttt{"|"} \parallel logical\_key)
+    \texttt{key} = SHA512(\texttt{namespace} \parallel \texttt{"|"} \parallel \texttt{logical\_key})
 \end{equation}
 
 Responsibility is based on XOR distance between the physical node identifier and the DHT key:
@@ -2378,13 +2378,13 @@ The payload types that currently carry a \codebreak{pow\_\allowbreak{}nonce} are
 For example, a DRT record may contain multiple route entries, but the proof is validated per \codebreak{Drt\_\allowbreak{}Route\_\allowbreak{}Entry\_\allowbreak{}Record}. Similarly, DDT and DTT records validate individual holders or entries. The canonical proof material is built from the namespace, the physical DHT key, the canonical payload without its nonce, and any required parent identity context. The implemented proof can be summarized as:
 
 \begin{equation}
-    proof = SHA512(canonical\_payload\_material \parallel nonce)
+    \texttt{proof} = SHA512(\texttt{canonical\_payload\_material} \parallel \texttt{nonce})
 \end{equation}
 
 The publication is accepted only when the proof hash satisfies the configured number of leading zero bits:
 
 \begin{equation}
-    leading\_zero\_bits(proof) \geq network\_pow\_difficulty\_bits
+    \operatorname{leading\_zero\_bits}(\texttt{proof}) \geq \texttt{network\_pow\_difficulty\_bits}
 \end{equation}
 
 This mechanism does not provide a complete anti-abuse system, but it introduces a measurable computational cost before records can be inserted or refreshed in the distributed tables. Responsible nodes can verify the proof cheaply before storing or merging the payload, while publishers must search for a valid nonce before starting publication.
@@ -2975,30 +2975,26 @@ The API does not replace the internal protocols. Instead, it calls the correspon
 
 A social proof of concept was implemented to validate the architecture from the perspective of an external application. The PoC is a local HTML/JavaScript interface that communicates with the core through the local API.
 
-The social model is intentionally simple:
-
-\begin{equation}
-    1~virtual~node = 1~social~profile
-\end{equation}
+The social model is intentionally simple: in the social PoC, one virtual node corresponds to one social profile.
 
 A profile state contains name, biography, profile photo, friend list, posts, and local metadata. The current profile state is stored as a local content object. The virtual node then publishes itself as a holder of that content in the DDT and updates a DPT pointer to reference the most recent state object.
 
 The DPT logical key used by the PoC is:
 
 \begin{equation}
-    logical\_key = \texttt{virtual\_node\_id|profile}
+    \texttt{logical\_key} = \texttt{virtual\_node\_id|profile}
 \end{equation}
 
 The physical DHT key is derived from this logical key:
 
 \begin{equation}
-    dpt\_key = SHA512(\texttt{dpt|virtual\_node\_id|profile})
+    \texttt{dpt\_key} = SHA512(\texttt{dpt|virtual\_node\_id|profile})
 \end{equation}
 
 The DPT record contains:
 
 \begin{equation}
-    target\_ref = content\_id
+    \texttt{target\_ref} = \texttt{content\_id}
 \end{equation}
 
 Since the DPT is signed by the owner virtual node, other peers can verify that the pointer belongs to the claimed profile. During validation, peers compute \codebreak{SHA\allowbreak{}512(pk\_\allowbreak{}virtual\_\allowbreak{}node\_\allowbreak{}owner)} and confirm that it matches the \texttt{virtual\_node\_id} used in the DPT key. To read a friend's profile, the application queries the friend's DPT, validates the pointer, resolves the referenced content in the DDT, downloads the content from a holder, and renders the posts in the feed.
@@ -3385,14 +3381,26 @@ The main contribution of the implementation is the integration of these ideas in
 
 The MVP validates the core architecture, but several components require further development before the system can be considered robust in public networks. Table~\ref{tab:limitations-future-work} summarizes the main limitations and future work.
 
-\begin{table}[H]
-\centering
+\begingroup
+\small
+\renewcommand{\arraystretch}{1.08}
+\begin{longtable}{L{0.19\textwidth} L{0.34\textwidth} L{0.35\textwidth}}
 \caption{Current limitations and future work.}
-\label{tab:limitations-future-work}
-\begin{tabularx}{\textwidth}{L{0.23\textwidth} L{0.36\textwidth} Y}
+\label{tab:limitations-future-work}\\
 \toprule
 \textbf{Area} & \textbf{Current limitation} & \textbf{Future work} \\
 \midrule
+\endfirsthead
+\caption[]{Current limitations and future work (continued).}\\
+\toprule
+\textbf{Area} & \textbf{Current limitation} & \textbf{Future work} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\footnotesize Continued on next page.}\\
+\endfoot
+\bottomrule
+\endlastfoot
 NAT traversal & The MVP includes TCP, experimental UDP transport, and relay-assisted physical forwarding, but it does not implement complete NAT traversal. & Implement UDP hole punching, STUN/TURN support, relay hardening, and later QUIC-based transport. \\
 
 DHT routing & The DHT uses XOR proximity and replication but does not yet include a complete Kademlia-style routing table. & Implement buckets, iterative lookup, routing table refresh, churn handling, and more complete proximity search. \\
@@ -3410,9 +3418,8 @@ Reliability & The MVP implements basic reliable session payloads with sequence n
 DTT and large lists & The DTT is modeled but not central to the current PoC, and large DDT/DTT lists are not sharded. & Implement sharding, pagination, tag indexing, expiration policies, and garbage collection for large distributed records. \\
 
 Application PoC & The social PoC stores profile photos as data URLs and downloads complete friend states. & Store media as separate content objects, add pagination, access control, privacy settings, moderation, and efficient feed synchronization. \\
-\bottomrule
-\end{tabularx}
-\end{table}
+\end{longtable}
+\endgroup
 
 These limitations do not invalidate the MVP. Instead, they define the boundary between an experimental prototype and a production-grade decentralized network.
 
