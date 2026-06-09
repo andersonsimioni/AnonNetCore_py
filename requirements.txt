@@ -1,3 +1,15 @@
+# Python runtime dependencies for AnonNetCore.
+#
+# System dependency:
+# - openssl CLI must be available for the MVP Kyber/Dilithium helpers.
+#   The Docker image installs it with apt; on Windows install OpenSSL and keep it
+#   available in PATH.
+
+# Local SQLite ORM and persistence models.
 SQLAlchemy>=2.0,<3.0
+
+# AES-256-GCM-SIV, hashing helpers, and crypto primitives used by the core.
 cryptography>=45.0,<46.0
+
+# Local API WebSocket event stream.
 websockets>=14.0,<16.0
