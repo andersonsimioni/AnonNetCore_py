@@ -67,6 +67,7 @@
 \node[label, left=0.8cm of phy] {Physical Connectivity};
 \end{tikzpicture}}
 \caption{Layered architecture.}
+\label{fig:layered-architecture}
 \end{figure}}
 
 \newcommand{\thesisconnectiontikz}{%
@@ -472,6 +473,7 @@
 \foreach \i/\x/\t in {1/-5.0/DRT Query,2/-2.5/Entry Points,3/0/Hop-by-Hop Routing,4/2.5/Protected Communication,5/5.0/Reply Path} {
   \node[panel] at (\x,3.55) {\textbf{\i. \t}\\\scriptsize workflow step};
 }
+
 \node[nodebox] (sender) at (-5.90,1.0) {Sender\\Virtual A};
 \node[cylinder, shape border rotate=90, draw, aspect=0.25, minimum height=1.1cm, minimum width=0.7cm, fill=gray!20] (drt) at (-3.65,1.0) {DRT};
 \node[ellipse, draw, minimum width=5.7cm, minimum height=2.95cm, fill=blue!5] (cloud) at (0.15,0.55) {};
@@ -498,4 +500,62 @@
 \node[draw, rounded corners=4pt, fill=blue!7, text width=2.9cm, minimum height=1.8cm, align=left, font=\small] at (4.8,-3.85) {\textbf{Properties}\\Obfuscated path, no global route.};
 \end{tikzpicture}}
 \caption{Message routing process.}
+\end{figure}}
+
+\newcommand{\thesisvirtualcommunicationflowtikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=7mm,
+    stage/.style={draw, rounded corners=2pt, align=center, minimum width=2.65cm,
+        minimum height=1.05cm, fill=blue!5, font=\small},
+    flow/.style={-{Latex[length=2.2mm]}, thick, draw=blue!55!black},
+    note/.style={align=center, font=\scriptsize, text width=2.65cm}
+]
+\node[stage] (source) {Virtual node A\\logical origin};
+\node[stage, right=of source] (lookup) {DPNT / DRT\\resolution};
+\node[stage, right=of lookup] (route) {Route strategy and\\hop-by-hop route};
+\node[stage, right=of route] (session) {End-to-end\\virtual session};
+\node[stage, right=of session] (target) {Virtual node B\\logical destination};
+\draw[flow] (source) -- (lookup);
+\draw[flow] (lookup) -- (route);
+\draw[flow] (route) -- (session);
+\draw[flow] (session) -- (target);
+\node[note, below=5mm of lookup] {Discovers physical entry points and published routes.};
+\node[note, below=5mm of route] {Selects hops, constructs local mappings, and carries \texttt{ROUTE\_DATA}.};
+\node[note, below=5mm of session] {Establishes keys and transports protected application messages.};
+\end{tikzpicture}}
+\caption{From distributed discovery to virtual application communication.}
+\label{fig:virtual-communication-flow}
+\end{figure}}
+
+\newcommand{\thesiscryptographicflowtikz}{%
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=8mm and 10mm,
+    stage/.style={draw, rounded corners=2pt, align=center, text width=3.15cm,
+        minimum height=1.1cm, fill=green!5, font=\small},
+    flow/.style={-{Latex[length=2.2mm]}, thick, draw=green!40!black},
+    support/.style={draw, rounded corners=2pt, align=center, text width=3.15cm,
+        minimum height=1.05cm, fill=orange!8, font=\small}
+]
+\node[stage] (identity) {Identity\\SHA-512 identifier};
+\node[stage, right=of identity] (auth) {Authentication\\ML-DSA-65 signatures};
+\node[stage, right=of auth] (kem) {Key establishment\\ML-KEM-768};
+\node[stage, right=of kem] (aead) {Protected session\\AES-256-GCM-SIV + AAD};
+\draw[flow] (identity) -- (auth);
+\draw[flow] (auth) -- (kem);
+\draw[flow] (kem) -- (aead);
+\node[support, below=9mm of auth] (records) {Signed control-plane and distributed records};
+\node[support, below=9mm of kem] (pow) {Publication proof-of-work\\canonical payload + nonce};
+\draw[flow] (auth) -- (records);
+\draw[flow] (pow) -- (records);
+\coordinate (powroute) at ($(pow.south)+(0,-5mm)$);
+\draw[flow] (identity.south) |- (powroute) -- (pow.south);
+\end{tikzpicture}}
+\caption{Security mechanisms and the stages at which they are applied.}
+\label{fig:cryptographic-flow}
 \end{figure}}

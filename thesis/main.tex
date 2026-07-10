@@ -18,6 +18,7 @@
 % ----------------------------------------------------------------
 \usepackage{amsmath}
 \usepackage{mathptmx}    % Times-like
+\usepackage[scaled]{helvet} % Helvetica-compatible captions required by SBC
 \usepackage{microtype}
 
 % ----------------------------------------------------------------
@@ -37,9 +38,11 @@
 }
 \usepackage{array}
 \usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{pifont}
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
-\usepackage[font={bf,small},labelsep=period]{caption}
+\usepackage[font={bf,sf,footnotesize},labelsep=period]{caption}
 
 
 \usepackage{tabularx}
@@ -50,6 +53,10 @@
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcommand{\codebreak}[1]{{\footnotesize\ttfamily #1}}
 \newcommand{\codemath}[1]{\mbox{\footnotesize\ttfamily #1}}
+\newcommand{\statusyes}{\textcolor{green!50!black}{\ding{51}}}
+\newcommand{\statusno}{\textcolor{red!70!black}{\ding{55}}}
+\newcommand{\statuspositive}[1]{\statusyes~#1}
+\newcommand{\statuspartial}[1]{\textcolor{orange!85!black}{\ding{108}}~#1}
 \setlength{\emergencystretch}{3em}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, fit, calc, shapes.geometric}
@@ -58,12 +65,7 @@
 % ----------------------------------------------------------------
 % Header & Footer
 % ----------------------------------------------------------------
-\usepackage{fancyhdr}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyfoot[R]{\thepage}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
+\pagestyle{empty}
 
 % ----------------------------------------------------------------
 % Títulos de seção
@@ -113,8 +115,8 @@
 }{\end{list}}
 
 % Legendas: figura abaixo, tabela acima
-\captionsetup[figure]{justification=centering,singlelinecheck=true}
-\captionsetup[table]{justification=centering,singlelinecheck=true}
+\captionsetup[figure]{justification=justified,singlelinecheck=true,margin=0.8cm}
+\captionsetup[table]{justification=justified,singlelinecheck=true,margin=0.8cm}
 
 % ----------------------------------------------------------------
 % Dados do artigo
@@ -133,6 +135,7 @@ A Modular Architecture for Decentralized Peer-to-Peer Overlay Networks Supportin
 \begin{document}
 
 \maketitle
+\thispagestyle{empty}
 \vspace{-6pt}
 
 {\centering
@@ -147,25 +150,13 @@ Florianópolis -- SC -- Brasil
 \vspace{12pt}
 
 \begin{abstracten}
-Decentralized communication systems have emerged as an alternative to traditional centralized network architectures, offering improved resilience, autonomy, privacy, and reduced dependence on central points of control. Peer-to-peer (P2P) overlay networks provide a promising foundation for secure communication, persistent data exchange, and the execution of decentralized applications. However, several challenges remain, including peer discovery, connectivity across heterogeneous network environments, data availability, and the integration of flexible security mechanisms.
-
-This work proposes a modular architecture for decentralized peer-to-peer overlay networks designed to support secure and privacy-oriented communication, data persistence, and decentralized applications. The proposed design separates the networking, persistence, and security concerns into modular components, allowing the system to support different connection strategies, storage models, and cryptographic schemes without requiring changes to the overall architecture.
-
-To validate the feasibility of the proposed approach, an experimental proof-of-concept implementation was developed. The prototype validates the main overlay flows in local and Docker-based environments using TCP, an experimental UDP transport with compact binary fragmentation, and relay-assisted physical connectivity. The broader architecture still treats complete NAT traversal mechanisms such as UDP hole punching, STUN/TURN integration, and QUIC as future transport extensions. Post-quantum cryptographic primitives are investigated for secure key establishment, digital signatures, and message protection. The validation also considers the architectural requirements needed to support persistent distributed data and application-level services on top of the proposed overlay.
-
-The results indicate that the modular architecture can support heterogeneous networking environments while preserving secure and privacy-oriented communication between peers, as well as providing a foundation for persistent decentralized services. The proposed approach contributes to the design of future decentralized systems by enabling flexible integration of emerging networking, storage, and cryptographic technologies.
+Decentralized systems reduce central dependence but face peer discovery, heterogeneous connectivity, data availability, and security challenges. This work proposes a modular P2P overlay for privacy-oriented communication, distributed persistence, and decentralized applications, separating transport, virtual identities, routing, storage, and cryptography. A Python MVP validates TCP, fragmented UDP, relays, distributed tables, post-quantum key establishment and signatures, and authenticated encryption in local and Docker clusters. Complete NAT traversal remains future work. Smoke tests and a social PoC demonstrate heterogeneous connectivity, route-based virtual sessions, persistent content references, and external application access through a local API.
 \end{abstracten}
 
 \noindent\textbf{Keywords:} peer-to-peer networks; decentralized overlay networks; anonymity; distributed hash tables; NAT traversal; post-quantum cryptography.
 
 \begin{resumopt}
-Sistemas de comunicação descentralizados têm emergido como uma alternativa às arquiteturas de rede centralizadas tradicionais, oferecendo maior resiliência, autonomia, privacidade e menor dependência de pontos centrais de controle. Redes overlay baseadas em comunicação peer-to-peer (P2P) fornecem uma base promissora para comunicação segura, troca persistente de dados e execução de aplicações descentralizadas. No entanto, diversos desafios permanecem, incluindo descoberta de pares, conectividade em ambientes de rede heterogêneos, disponibilidade de dados e integração de mecanismos de segurança flexíveis.
-
-Este trabalho propõe uma arquitetura modular para redes overlay peer-to-peer descentralizadas projetada para suportar comunicação segura e orientada à privacidade, persistência de dados e aplicações descentralizadas. O projeto proposto separa os componentes de rede, persistência e segurança em módulos independentes, permitindo que o sistema suporte diferentes estratégias de conexão, modelos de armazenamento e esquemas criptográficos sem necessidade de modificar a arquitetura geral.
-
-Para validar a viabilidade da abordagem proposta, foi desenvolvida uma implementação experimental de prova de conceito. O protótipo valida os principais fluxos da rede overlay em ambientes locais e baseados em Docker usando TCP, transporte UDP experimental com fragmentação binária compacta e conectividade física assistida por relays. A arquitetura mais ampla ainda trata mecanismos completos de travessia de NAT, como UDP hole punching, integração STUN/TURN e QUIC, como extensões futuras de transporte. Primitivas criptográficas pós-quânticas são investigadas para estabelecimento seguro de chaves, assinaturas digitais e proteção das mensagens. A validação também considera os requisitos arquiteturais necessários para suportar dados persistentes distribuídos e serviços de aplicação sobre a rede overlay proposta.
-
-Os resultados indicam que a arquitetura modular pode suportar ambientes de rede heterogêneos mantendo comunicação segura e orientada à privacidade entre pares, além de fornecer uma base para serviços descentralizados com persistência de dados. A abordagem proposta contribui para o desenvolvimento de futuros sistemas descentralizados ao permitir a integração flexível de novas tecnologias de rede, armazenamento e criptografia.
+Sistemas descentralizados reduzem a dependência central, mas enfrentam desafios de descoberta, conectividade heterogênea, disponibilidade de dados e segurança. Este trabalho propõe uma rede overlay P2P modular para comunicação orientada à privacidade, persistência distribuída e aplicações descentralizadas, separando transporte, identidades virtuais, roteamento, armazenamento e criptografia. Um MVP em Python valida TCP, UDP fragmentado, relays, tabelas distribuídas, estabelecimento de chaves e assinaturas pós-quânticas e criptografia autenticada em clusters locais e Docker. A travessia completa de NAT permanece como trabalho futuro. Testes integrados e uma PoC social demonstram conectividade heterogênea, sessões virtuais baseadas em rotas, referências persistentes de conteúdo e acesso de aplicações externas por uma API local.
 \end{resumopt}
 
 \noindent\textbf{Palavras-chave:} redes peer-to-peer; redes overlay descentralizadas; anonimato; tabelas hash distribuídas; travessia de NAT; criptografia pós-quântica.
@@ -199,6 +190,7 @@ The main contributions of this work include the design of a modular decentralize
 
 
 
+\clearpage
 \section{Theoretical Background}
 
 \subsection{Peer-to-Peer Networks}
@@ -359,6 +351,7 @@ Distributed Data Table, and Distributed Pointer Table.
 
 
 
+\clearpage
 \section{Systematic Literature Review Methodology}
 
 This work adopts a Systematic Literature Review (SLR) methodology in order to identify, analyze, and synthesize relevant studies related to decentralized peer-to-peer network architectures, anonymity mechanisms, and secure communication techniques.
@@ -432,6 +425,7 @@ Publications were excluded if they met any of the following conditions:
 
 Classical foundational works published before 2015 were not treated as primary studies in the systematic review. They were used as background references when necessary to explain established concepts such as DHTs, structured overlays, anonymous routing, and NAT traversal. This distinction preserves the temporal scope of the SLR while still allowing the theoretical background to cite foundational protocols and systems.
 
+\clearpage
 \section{Selection Process (PRISMA)}
 
 \thesisprismatikz
@@ -451,6 +445,7 @@ The process can be summarized as follows:
 
 
 
+\clearpage
 \section{Data Extraction and Analysis}
 
 After the selection phase, a total of six primary studies were included for in-depth analysis. In this stage, a structured data extraction process was conducted to systematically identify and compare the main characteristics, contributions, and limitations of each work.
@@ -482,83 +477,77 @@ Table~\ref{tab:comparison} summarizes the main characteristics of the selected w
 \label{tab:comparison}
 
 \resizebox{\textwidth}{!}{
-\begin{tabular}{|p{3cm}|p{3cm}|p{2.5cm}|p{2.5cm}|p{2cm}|p{2cm}|p{2cm}|p{2cm}|p{2cm}|}
-\hline
+\begin{tabular}{L{3cm}L{3cm}L{2.5cm}L{2.5cm}L{2cm}L{2cm}L{2cm}L{2cm}L{2cm}}
+\toprule
 \textbf{Work} & \textbf{Problem Addressed} & \textbf{Overlay Type} & \textbf{Routing Strategy} & \textbf{NAT Traversal} & \textbf{Anonymity} & \textbf{Persistence} & \textbf{Scalability} & \textbf{Post-Quantum Crypto} \\
-\hline
+\midrule
 
-Spatial Path Selection & 
+Spatial Path Selection~[6] & 
 High latency and poor topology distribution in anonymous networks & 
 Unstructured / Onion-based overlay & 
 Geo-based path selection (geohash, hierarchical routing) & 
-No explicit solution & 
-Strong & 
-No & 
-Moderate & 
-No \\
+\statusno & 
+\statuspositive{Strong} & 
+\statusno & 
+\statuspartial{Moderate} & 
+\statusno \\
+\addlinespace
 
-\hline
-
-A Fully-Distributed Scalable Peer-to-Peer Protocol for Byzantine-Resilient DHTs & 
+A Fully-Distributed Scalable Peer-to-Peer Protocol for Byzantine-Resilient DHTs~[8] & 
 Byzantine-resilient scalable DHT construction in sparse P2P networks & 
 Structured P2P overlay & 
 Random walks and verified bit-fixing routing & 
-No & 
-No & 
-Yes & 
-High & 
-No \\
+\statusno & 
+\statusno & 
+\statusyes & 
+\statuspositive{High} & 
+\statusno \\
+\addlinespace
 
-\hline
-
-Comparative Analysis of Unstructured P2P Networks & 
+Comparative Analysis of Unstructured P2P Networks~[7] & 
 Performance limitations and inefficient search in unstructured networks & 
 Unstructured & 
 Flooding / heuristic search & 
-No & 
-Medium (varies by system) & 
-Limited & 
-Low to moderate & 
-No \\
+\statusno & 
+\statuspartial{Medium (varies by system)} & 
+\statuspartial{Limited} & 
+\statuspartial{Low to moderate} & 
+\statusno \\
+\addlinespace
 
-\hline
-
-Unreachable Peers Communication Scheme & 
+Unreachable Peers Communication Scheme~[5] & 
 Communication between peers behind NAT/firewalls & 
 Structured P2P overlay & 
 Node ID-based routing & 
-Yes (relay + direct communication) & 
-Limited & 
-No & 
-Moderate & 
-No \\
+\statusyes~(relay + direct communication) & 
+\statuspartial{Limited} & 
+\statusno & 
+\statuspartial{Moderate} & 
+\statusno \\
+\addlinespace
 
-\hline
-
-Garlic Cast & 
+Garlic Cast~[10] & 
 Anonymous content sharing with low relay overhead and better resilience to churn & 
 Overlay-based anonymous content-sharing network (random-walk / proxy-based) & 
 Random-walk proxy discovery with multi-path clove delivery & 
-No & 
-Strong (mutual anonymity) & 
-No & 
-Moderate & 
-No \\
+\statusno & 
+\statuspositive{Strong (mutual anonymity)} & 
+\statusno & 
+\statuspartial{Moderate} & 
+\statusno \\
+\addlinespace
 
-\hline
-
-PK-Routing & 
+PK-Routing~[9] & 
 Anonymous data communication without exposing real network identity, with flexible anonymity-efficiency trade-offs & 
 Structured tree-based virtual P2P overlay (public-key addressing) & 
 Public-key / virtual-ID tree routing with optional relay, multicast, and hybrid schemes & 
-No & 
-Strong / configurable & 
-No & 
-Moderate & 
-No \\
+\statusno & 
+\statuspositive{Strong / configurable} & 
+\statusno & 
+\statuspartial{Moderate} & 
+\statusno \\
 
-\hline
-
+\bottomrule
 \end{tabular}
 }
 
@@ -587,6 +576,7 @@ This fragmentation reinforces the need for a unified architecture capable of com
 
 
 
+\clearpage
 \section{Proposed Architecture}
 
 
@@ -1017,6 +1007,8 @@ where \(H(pk_{physical\_node})\) identifies the physical node, \texttt{endpoints
 
 \subsection{Layered Architecture}
 
+Figure~\ref{fig:layered-architecture} summarizes how the proposed modules are organized across the physical, overlay, service, and application levels. The figure is presented after this brief introduction so that the layered view can be interpreted in relation to the modular design rationale described above.
+
 \thesislayerstikz
 
 Although the proposed system is defined as a modular architecture, its internal organization is described through a layered structure. Modularity refers to the separation of the system into distinct components that may evolve or be replaced independently, while layering provides a clearer structural view of how these components interact across different levels of abstraction. In this work, the layered organization is adopted to separate physical connectivity concerns, overlay coordination mechanisms, reusable service abstractions, and application-level functionalities.
@@ -1110,6 +1102,8 @@ metadata [8].
 Overall, the Peer Management component provides the architectural basis for representing participants in a privacy-preserving overlay [5], [9], [10]. By separating execution hosts from logical identities, limiting the exposure of physical node information, and supporting both persistent and ephemeral virtual nodes, the architecture strengthens anonymity while preserving the flexibility required for routing, discovery, and distributed operation [5], [8], [9], [10].
 
 \subsubsection{Connection Management}
+
+Connection management begins only after a physical peer has been discovered and a reachable transport endpoint has been selected. It then establishes the authenticated communication context used by higher-level protocols, while transport selection and cryptographic session establishment remain separate responsibilities.
 
 \thesisconnectiontikz
 
@@ -1392,6 +1386,10 @@ For session establishment, the module adopts an authenticated key exchange proce
 The cryptographic handshake is defined independently of the underlying transport mechanism [5], [9], [13], [14]. As a result, the same logical procedure can be executed over direct UDP, direct TCP, direct IPv6, hole punching, or relay-assisted communication [5]. This transport-agnostic design ensures that changes in connectivity method do not alter the cryptographic semantics of session establishment, authentication, or key renewal [5], [9]. Relay nodes may forward encrypted traffic when direct connectivity is unavailable, but they must not obtain access to plaintext content or to the hidden association between physical and virtual identities [5], [9], [10].
 
 In the current validation scenario, the module is instantiated with ML-DSA, derived from the CRYSTALS-Dilithium signature scheme, for digital signatures; ML-KEM, standardized from CRYSTALS-Kyber, for dynamic key exchange; AES-256-GCM-SIV for authenticated symmetric session encryption; and SHA-512 for hashing [13], [14], [26], [27]. These primitives are adopted as a concrete proof-of-concept configuration rather than as immutable architectural constraints. The design remains intentionally open to future substitution of algorithms, although the present architecture assumes a fixed cryptographic suite shared by all participants [13], [14], [26], [27].
+
+Figure~\ref{fig:cryptographic-flow} connects these mechanisms to their operational roles. SHA-512 derives compact physical- and virtual-node identifiers; long-term ML-DSA keys authenticate identities, handshake material, and signed records; ephemeral ML-KEM material establishes a fresh shared secret when a physical or virtual session is created; and AES-256-GCM-SIV protects subsequent session payloads while AAD authenticates selected public envelope fields. Publication proof-of-work is applied before DHT writes and complements signatures by imposing a generation cost without replacing authenticity checks.
+
+\thesiscryptographicflowtikz
 
 Hashing functions are used to derive stable identifiers for overlay structures and published objects, including lookups such as \(H(pk\_virtual\_node)\) and content-based references in the distributed storage layer [1], [2], [3], [8], [9]. Digital signatures are required not only during session establishment, but also for the authenticity of control-plane records [9], [13], [14]. In particular, DRT entries must be signed by authorized entry points using the physical node key, while DDT records must also include cryptographic authentication [9]. In the case of stored content, confidentiality is preserved through end-to-end encryption, ensuring that the distributed storage substrate does not expose application data in plaintext [10], [13], [14].
 
@@ -1906,6 +1904,8 @@ Cache management may also follow local expiration policies when enabled by the n
 
 \subsubsection{Content Discovery and Resolution Model}
 
+Content discovery separates the identity of an object from the virtual nodes that currently provide it. The following figure introduces this resolution chain before the individual lookup and transfer steps are discussed.
+
 \thesisdtttikz
 
 In the proposed architecture, content and application-state discovery are performed through a lightweight resolution process that connects semantic discovery to the appropriate lower-level table [8], [10]. Rather than depending on a single distributed structure for search, mutability, and storage availability, the system separates these responsibilities among the Distributed Tag Table (DTT), the Distributed Pointer Table (DPT), and the Distributed Data Table (DDT) [8].
@@ -2077,6 +2077,8 @@ After a successful download, the requester becomes a new potential provider of t
 
 \subsubsection{Message Routing Process}
 
+Once discovery, route creation, and session establishment have completed, application data follows the layered forwarding process summarized below. This overview links the application-visible message to the virtual and physical envelopes that carry it through the network.
+
 \thesisdeliverytikz
 
 Message routing is the most central operational workflow of the proposed architecture, since it concentrates the main mechanisms used to preserve destination obfuscation and decentralized communication [9], [10]. Messages and data transfers follow the same general discovery principle, in the sense that both rely on DRT-published routes toward virtual nodes [5], [8], [9]. The key difference is that ordinary message exchange typically involves long-lived virtual nodes, whereas content access usually targets ephemeral virtual nodes created specifically for content serving [8], [10].
@@ -2106,6 +2108,7 @@ Finally, reply traffic should not be forced to reuse the same path in reverse. I
 % ============================================================
 % Chapter: Implementation
 % ============================================================
+\clearpage
 \section{Implementation}
 
 This chapter presents the implementation of the proposed architecture as an experimental Minimum Viable Product (MVP). The implementation, named \textit{AnonNetCore Python MVP}, was developed to validate the main architectural decisions proposed in this work: the separation between physical and virtual identities, distributed discovery through DHT namespaces, route construction for virtual nodes, end-to-end virtual sessions, content publication and retrieval, and integration with an external decentralized application.
@@ -2128,6 +2131,8 @@ The prototype should not be interpreted as a production-ready network. Its purpo
 \label{sec:implementation-methodology}
 
 The implementation followed an applied and exploratory methodology. Instead of directly targeting a hardened production system, the project was developed as an experimental MVP capable of exercising the complete protocol flow in a controlled environment. This decision reduced implementation risk and allowed the architecture to be validated incrementally through observable execution traces, smoke tests, and a working social proof of concept.
+
+The implementation was developed specifically for this work rather than adapted from an existing peer-to-peer core. The author designed and implemented the physical and virtual node models, transport-adapter integration, bootstrap and peer-validation flows, distributed-table protocols, route construction and execution, physical and virtual sessions, relay forwarding, reliability mechanisms, local API, observability tools, integration smokes, and social PoC. External software was used only as supporting infrastructure: Python and its standard library provide the runtime, SQLAlchemy and SQLite provide persistence, \texttt{cryptography} provides authenticated symmetric encryption, OpenSSL exposes the selected post-quantum primitives, \texttt{websockets} provides the local event channel, and Docker supplies reproducible test clusters. These libraries implement general-purpose primitives; the network architecture, protocol composition, record models, route lifecycle, and application integration are contributions of this project.
 
 The methodology adopted in the implementation can be summarized as follows:
 
@@ -2204,6 +2209,10 @@ Application PoC & Local HTML/JavaScript social interface using the local API. \\
 \label{sec:implemented-architecture}
 
 The implemented system follows the layered model proposed in this work. The physical layer represents real processes and network connections. The virtual layer represents logical identities hosted by physical nodes. Distributed tables provide discovery, routing, and content location. A local API exposes the core functionality to external applications. Finally, the social PoC validates that an application can use the network layer without depending on internal modules.
+
+Figure~\ref{fig:virtual-communication-flow}, adapted from the execution flow used in the project presentation, connects these layers from the perspective of an application request. A virtual node first resolves distributed physical and route information, the route protocol and active strategy establish hop-by-hop forwarding state, and a virtual session then carries protected application messages to the destination virtual node.
+
+\thesisvirtualcommunicationflowtikz
 
 Figure~\ref{fig:implementation-architecture} shows the implemented architecture.
 
@@ -2761,6 +2770,15 @@ The route execution handler resolves the local \texttt{path\_id}, decides whethe
 
 Virtual sessions are end-to-end sessions between virtual nodes. They are established over routes previously published in the DRT. The initiator first resolves the remote virtual node in the DRT, obtains a physical entry point, resolves that physical node in the DPNT, and then sends a virtual session initialization envelope through \codebreak{ROUTE\_\allowbreak{}DATA}.
 
+Figure~\ref{fig:cryptography-key-establishment-flow} summarizes when the implemented cryptographic mechanisms are applied. Every adjacent pair of physical peers establishes an independent hop-by-hop session key, while the communicating virtual nodes establish a separate end-to-end session key. Signed ephemeral ML-KEM material is used during each establishment flow, ML-DSA authenticates the exchanged identity and key material, and AES-256-GCM-SIV subsequently protects the corresponding physical or virtual session payloads.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{img/cryptography-key-establishment-flow.png}
+\caption{Cryptographic identity, independent physical and virtual key establishment, and two-layer message protection in the implemented Core.}
+\label{fig:cryptography-key-establishment-flow}
+\end{figure}
+
 The implemented virtual session message types are:
 
 \begin{itemize}
@@ -2969,6 +2987,17 @@ WebSocket events & Emits events such as received virtual messages and content pu
 \end{table}
 
 The API does not replace the internal protocols. Instead, it calls the corresponding services and protocol clients inside the core. This design allows external applications to use the network without depending on internal Python modules.
+
+From the application's perspective, this boundary turns distributed networking operations into a small local service interface. Profile publication invokes content storage followed by DDT and DPT publication; feed reconstruction invokes DPT resolution, DDT holder discovery, and content download; direct messaging invokes DRT resolution and virtual-session establishment; and WebSocket events deliver incoming messages without requiring the browser to poll protocol state. The application therefore benefits from peer discovery, route construction, persistence, cryptographic sessions, and transport heterogeneity while remaining independent of their internal implementations.
+
+Figure~\ref{fig:poc-core-overlay-integration} provides a didactic view of this boundary. An external application submits a request through the local HTTP API, receives asynchronous events through WebSocket, and delegates identity protection, route resolution, session establishment, persistence, and forwarding to the Core. The destination Core reverses the layered processing and delivers the resulting application event locally, while intermediate physical peers process only the forwarding and hop-protection information required at their respective positions.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{img/poc-core-overlay-integration.png}
+\caption{Integration flow between the social PoC, the local Core, the physical overlay route, and the destination application.}
+\label{fig:poc-core-overlay-integration}
+\end{figure}
 
 \subsection{Social Proof of Concept}
 \label{sec:social-poc-implementation}
@@ -3448,6 +3477,7 @@ At the same time, the implementation remains intentionally limited. It is a rese
 
 
 
+\clearpage
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -3506,8 +3536,8 @@ remains the full responsibility of the author.
 \section*{References}
 \addcontentsline{toc}{section}{References}
 \begingroup
-\setlength{\parindent}{0pt}
-\setlength{\leftskip}{0cm}
+\setlength{\leftskip}{0.5cm}
+\setlength{\parindent}{-0.5cm}
 \setlength{\parskip}{6pt}
 
 [1] STOICA, Ion; MORRIS, Robert; KARGER, David; KAASHOEK, M. Frans; BALAKRISHNAN, Hari (2001). 
