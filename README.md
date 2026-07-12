@@ -138,7 +138,7 @@ thesis/           Thesis source and generated PDF assets
 - [Social PoC](documentation/poc.md)
 - [Faults and limits](documentation/faults.md)
 - [Tests](documentation/tests/README.md)
-- [Thesis source](thesis/main.tex)
+- [Thesis source](thesis/main_bu_ufsc.tex)
 
 ## Current Status
 

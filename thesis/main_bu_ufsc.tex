@@ -1,41 +1,55 @@
-% Artigo formatado diretamente com o template oficial da SBC.
+\documentclass[
+  12pt,
+  oneside,
+  a4paper,
+  chapter=TITLE,
+  section=TITLE,
+  english,
+  brazil
+]{abntex2}
 
-\documentclass[12pt]{article}
-\usepackage{sbc-template}
-
-% ----------------------------------------------------------------
-% Idioma e codificação
-% ----------------------------------------------------------------
+\usepackage[top=3cm,bottom=2cm,left=3cm,right=2cm]{geometry}
+\usepackage{helvet}
+\usepackage{inconsolata}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage[brazil,english]{babel}
-
-% ----------------------------------------------------------------
-% Matemática e microtipografia
-% ----------------------------------------------------------------
-\usepackage{amsmath}
-\usepackage{microtype}
-
-% ----------------------------------------------------------------
-% Figuras, tabelas, links e legendas
-% ----------------------------------------------------------------
+\usepackage{indentfirst}
 \usepackage{graphicx}
 \graphicspath{{assets/}}
-\newcommand{\thesisfiguregraphic}[1]{%
-    \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{#1}%
-}
-\usepackage{array}
-\usepackage{booktabs}
-\usepackage{xcolor}
-\usepackage{pifont}
-\usepackage{url}
-\usepackage[hidelinks]{hyperref}
-
-
+\usepackage{microtype}
+\usepackage{amsmath,amsfonts,amssymb}
 \usepackage{tabularx}
 \usepackage{longtable}
 \usepackage{array}
 \usepackage{float}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage[table]{xcolor}
+\usepackage{pifont}
+\usepackage{afterpage}
+\usepackage{url}
+\usepackage{pdfpages}
+\usepackage[brazilian,hyperpageref]{backref}
+\usepackage[alf]{abntex2cite}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric}
+\input{tikz_figures}
+
+\newcommand\blankpage{%
+  \null
+  \thispagestyle{empty}%
+  \addtocounter{page}{-1}%
+  \newpage}
+
+\makeatletter
+\renewcommand\small{\@setfontsize\small{11pt}{13.2pt}}
+\renewcommand\footnotesize{\@setfontsize\footnotesize{10pt}{12pt}}
+\makeatother
+\captionsetup{font=small}
+\renewcommand{\familydefault}{\sfdefault}
+
+\newcommand{\thesisfiguregraphic}[1]{%
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{#1}}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
@@ -49,41 +63,194 @@
 \newcommand{\statusexperimental}{\textcolor{orange!85!black}{\ding{108}}}
 \newcommand{\statusproposed}{\textcolor{blue!70!black}{\ding{117}}}
 \setlength{\emergencystretch}{3em}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, fit, calc, shapes.geometric}
-\input{tikz_figures}
 
-% ----------------------------------------------------------------
-% Dados do artigo
-% ----------------------------------------------------------------
-\title{A Modular Architecture for Decentralized Peer-to-Peer Overlay Networks Supporting Secure Communication, Data Persistence, and Decentralized Applications}
+\titulo{Uma Arquitetura Modular para Redes Overlay Peer-to-Peer Descentralizadas com Suporte a Comunicação Segura, Persistência de Dados e Aplicações Descentralizadas}
+\autor{Anderson Simioni Assunção}
+\local{Florianópolis}
+\data{2026}
+\orientador{Prof. Carlos Becker Westphall, Dr.}
+\instituicao{%
+  Universidade Federal de Santa Catarina\par
+  Campus Florianópolis\par
+  Curso de Graduação em Ciência da Computação\par}
+\tipotrabalho{Trabalho de Conclusão de Curso}
+\preambulo{Trabalho de Conclusão de Curso submetido ao Curso de Graduação em Ciência da Computação do Centro Tecnológico da Universidade Federal de Santa Catarina para obtenção do título de Bacharel em Ciência da Computação.}
 
-\author{Anderson Simioni Assunção\inst{1}, Carlos Becker Westphall\inst{1}}
+\renewcommand{\ABNTEXchapterfontsize}{\bfseries\normalsize}
+\renewcommand{\ABNTEXsectionfontsize}{\normalsize}
+\renewcommand{\ABNTEXsubsectionfontsize}{\bfseries\normalsize}
+\renewcommand{\ABNTEXsubsubsectionfontsize}{\normalsize}
 
-\address{Curso de Ciência da Computação -- Universidade Federal de Santa Catarina (UFSC)\\
-Florianópolis -- SC -- Brasil
-\email{anderson.simioni22@gmail.com, carlosbwestphall@gmail.com}}
+\renewcommand{\imprimircapa}{%
+  \begin{capa}
+    \center
+    \fontsize{12}{1.5}
+    \includegraphics[width=1.84cm]{brasao_UFSC_vertical_sigla.pdf}\par
+    {\ABNTEXchapterfont\MakeUppercase{\imprimirinstituicao}}
+    \vfill
+    {\ABNTEXchapterfont\imprimirautor}
+    \vfill
+    \begin{center}
+      {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \end{center}
+    \vfill
+    {\ABNTEXchapterfont\imprimirlocal}\\
+    {\ABNTEXchapterfont\imprimirdata}
+  \end{capa}}
 
-\date{}
+\makeatletter
+\renewcommand{\folhaderostocontent}{%
+  \begin{center}
+    \fontsize{12}{1.5}
+    {\ABNTEXchapterfont{\imprimirautor}}
+    \vfill\vfill
+    \begin{center}
+      {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \end{center}
+    \vfill
+    \abntex@ifnotempty{\imprimirpreambulo}{%
+      \hspace{.45\textwidth}
+      \begin{minipage}{.5\textwidth}
+        \ABNTEXchapterfont
+        \SingleSpacing
+        \imprimirpreambulo
+        \newline
+        {\ABNTEXchapterfont\imprimirorientadorRotulo~\imprimirorientador\par}
+      \end{minipage}}
+    \vfill
+    {\ABNTEXchapterfont\imprimirlocal}\\
+    {\ABNTEXchapterfont\imprimirdata}
+    \afterpage{\blankpage}
+  \end{center}}
+\makeatother
 
-% ----------------------------------------------------------------
-% Documento
-% ----------------------------------------------------------------
+\definecolor{blue}{RGB}{41,5,195}
+\makeatletter
+\hypersetup{
+  pdftitle={\@title},
+  pdfauthor={\@author},
+  pdfsubject={\imprimirpreambulo},
+  pdfcreator={LaTeX with abnTeX2},
+  pdfkeywords={redes descentralizadas}{peer-to-peer}{overlay}{privacidade},
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  filecolor=black,
+  urlcolor=black,
+  bookmarksdepth=4}
+\makeatother
+
+\setlength{\parindent}{1.3cm}
+\setlength{\parskip}{0.2cm}
+\makeindex
+
 \begin{document}
+\selectlanguage{brazil}
+\frenchspacing
 
-\maketitle
+\imprimircapa
+\imprimirfolhaderosto*
 
-\begin{abstract}
-Decentralized systems reduce central dependence but face peer discovery, heterogeneous connectivity, data availability, and security challenges. This work proposes a modular P2P overlay for privacy-oriented communication, distributed persistence, and decentralized applications, separating transport, virtual identities, routing, storage, and cryptography. A Python MVP validates TCP, fragmented UDP, relays, distributed tables, post-quantum key establishment and signatures, and authenticated encryption in local and Docker clusters. Complete NAT traversal remains future work. Smoke tests and a social PoC demonstrate heterogeneous connectivity, route-based virtual sessions, persistent content references, and external application access through a local API.
-\keywords{peer-to-peer networks, decentralized overlay networks, anonymity, distributed hash tables, NAT traversal, post-quantum cryptography}
-\end{abstract}
+\begin{fichacatalografica}
+  \includepdf{Ficha_Catalografica.pdf}
+  \afterpage{\blankpage}
+\end{fichacatalografica}
+
+\begin{folhadeaprovacao}
+  \fontsize{12}{1.5}
+  \begin{center}
+    {\ABNTEXchapterfont\imprimirautor}
+    \vfill
+    {\ABNTEXchapterfont\bfseries\MakeUppercase{\imprimirtitulo}}
+    \vfill
+    Este Trabalho de Conclusão de Curso foi julgado adequado para obtenção do título de Bacharel em Ciência da Computação e aprovado em sua forma final pelo Curso de Graduação em Ciência da Computação.
+    \vspace{1.5\onelineskip}
+
+    Florianópolis, 10 de julho de 2026.
+    \vfill
+    \rule{6cm}{1pt}\par
+    Profa. Lúcia Helena Martins Pacheco, Dra.\\
+    Coordenadora do Curso
+    \vfill
+    \textbf{Banca Examinadora:}
+    \vfill
+    \rule{6cm}{1pt}\par
+    \imprimirorientador\\Orientador\\
+    Universidade Federal de Santa Catarina\par
+    \vspace{1.5\onelineskip}
+    \rule{6cm}{1pt}\par
+    Profa. Carla Merkle Westphall, Dra.\\
+    Avaliadora\\
+    Universidade Federal de Santa Catarina\par
+    \vspace{1.5\onelineskip}
+    \rule{6cm}{1pt}\par
+    Prof. Wesley dos Reis Bezerra, Dr.\\
+    Avaliador\\
+    Instituto Federal Catarinense
+  \end{center}
+\end{folhadeaprovacao}
 
 \begin{resumo}
-Sistemas descentralizados reduzem a dependência central, mas enfrentam desafios de descoberta, conectividade, disponibilidade e segurança. Este trabalho propõe uma overlay P2P modular para comunicação orientada à privacidade, persistência distribuída e aplicações descentralizadas. Um MVP em Python valida TCP, UDP fragmentado, relays, tabelas distribuídas, criptografia pós-quântica e proteção autenticada em clusters locais e Docker. Testes integrados e uma PoC social demonstram sessões virtuais baseadas em rotas, persistência e acesso externo por uma API local. A travessia completa de NAT permanece como trabalho futuro.
-\palavraschave{redes peer-to-peer, redes overlay descentralizadas, anonimato, tabelas hash distribuídas, travessia de NAT, criptografia pós-quântica}
+Este trabalho apresenta o projeto, a implementação e a validação experimental de uma arquitetura modular para redes overlay peer-to-peer descentralizadas. A proposta separa nós físicos, responsáveis pela conectividade e pelo transporte, de nós virtuais, responsáveis pelas identidades e interações lógicas das aplicações. O protótipo AnonNetCore implementa descoberta de pares, tabelas distribuídas, construção e execução de rotas, sessões físicas e virtuais, encaminhamento por relay, transporte TCP e UDP experimental, entrega confiável e transferência de conteúdo por faixas de bytes. A segurança combina identificadores SHA-512, assinaturas ML-DSA, estabelecimento de chaves ML-KEM e criptografia autenticada AES-256-GCM-SIV. A validação utiliza clusters Docker, testes integrados, uma API HTTP/WebSocket, ferramentas de observabilidade e uma prova de conceito de rede social. Os resultados demonstram a integração funcional entre descoberta, roteamento, persistência distribuída, comunicação virtual e aplicações externas. O trabalho permanece um MVP experimental: travessia completa de NAT, endurecimento contra ataques, escalabilidade em redes públicas e auditoria formal de segurança são trabalhos futuros.
+
+\vspace{\onelineskip}
+\noindent\textbf{Palavras-chave}: redes peer-to-peer; redes overlay; sistemas descentralizados; privacidade; tabelas hash distribuídas; criptografia pós-quântica.
 \end{resumo}
 
-\section{Introduction}
+\begin{resumo}[Abstract]
+\begin{otherlanguage*}{english}
+This work presents the design, implementation, and experimental validation of a modular architecture for decentralized peer-to-peer overlay networks. The proposal separates physical nodes, responsible for connectivity and transport, from virtual nodes, responsible for application identities and logical interactions. The AnonNetCore prototype implements peer discovery, distributed tables, route construction and execution, physical and virtual sessions, relay forwarding, TCP and experimental UDP transport, reliable delivery, and byte-range content transfer. Security combines SHA-512 identifiers, ML-DSA signatures, ML-KEM key establishment, and AES-256-GCM-SIV authenticated encryption. Validation uses Docker clusters, integrated smoke tests, an HTTP/WebSocket API, observability tools, and a social-network proof of concept. Results demonstrate functional integration among discovery, routing, distributed persistence, virtual communication, and external applications. The work remains an experimental MVP: complete NAT traversal, attack resistance, public-network scalability, and formal security auditing remain future work.
+
+\vspace{\onelineskip}
+\noindent\textbf{Keywords}: peer-to-peer networks; overlay networks; decentralized systems; privacy; distributed hash tables; post-quantum cryptography.
+\end{otherlanguage*}
+\end{resumo}
+
+\selectlanguage{brazil}
+\pdfbookmark[0]{\listfigurename}{lof}
+\listoffigures*
+\cleardoublepage
+\pdfbookmark[0]{\listtablename}{lot}
+\listoftables*
+\cleardoublepage
+
+\begin{siglas}
+  \item[AAD] Associated Authenticated Data
+  \item[AES] Advanced Encryption Standard
+  \item[API] Application Programming Interface
+  \item[DDT] Distributed Data Table
+  \item[DHT] Distributed Hash Table
+  \item[DPNT] Distributed Physical Nodes Table
+  \item[DPT] Distributed Pointer Table
+  \item[DRT] Distributed Route Table
+  \item[DTT] Distributed Tag Table
+  \item[KEM] Key Encapsulation Mechanism
+  \item[MVP] Minimum Viable Product
+  \item[NAT] Network Address Translation
+  \item[P2P] Peer-to-Peer
+  \item[PN] Physical Node
+  \item[PoC] Proof of Concept
+  \item[PoW] Proof of Work
+  \item[PQC] Post-Quantum Cryptography
+  \item[RTT] Round-Trip Time
+  \item[SHA] Secure Hash Algorithm
+  \item[TCP] Transmission Control Protocol
+  \item[TTL] Time to Live
+  \item[UDP] User Datagram Protocol
+  \item[UFSC] Universidade Federal de Santa Catarina
+  \item[VN] Virtual Node
+\end{siglas}
+\cleardoublepage
+
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+
+\textual
+\selectlanguage{english}
+
+
+\chapter{Introduction}
 The increasing centralization of modern internet services has raised significant concerns regarding privacy, surveillance, and control over digital communication infrastructures. Most contemporary online platforms rely on centralized architectures, where user data, communication flows, and identity management are controlled by a limited number of service providers. This model creates single points of failure and exposes users to risks such as large-scale data breaches, censorship, and pervasive monitoring.
 
 At the same time, the rapid progress in quantum computing introduces new challenges for digital security. Several widely used cryptographic algorithms, particularly those based on integer factorization or discrete logarithms, may become vulnerable once sufficiently powerful quantum computers become available. As a result, the design of communication systems that incorporate post-quantum cryptographic primitives has become an important research topic in modern network security.
@@ -106,85 +273,85 @@ The main contributions of this work include the design of a modular decentralize
 
 
 
-\section{Theoretical Background}
+\chapter{Theoretical Background}
 
-\subsection{Peer-to-Peer Networks}
+\section{Peer-to-Peer Networks}
 
-Peer-to-peer (P2P) networks are distributed systems in which nodes, referred to as peers, communicate directly with each other without relying on centralized coordination [8]. Unlike traditional client-server architectures, P2P systems decentralize control, enabling each node to act both as a client and as a server [8]. This paradigm enhances system robustness, scalability, and fault tolerance [8].
+Peer-to-peer (P2P) networks are distributed systems in which nodes, referred to as peers, communicate directly with each other without relying on centralized coordination \cite{augustine2022byzantine}. Unlike traditional client-server architectures, P2P systems decentralize control, enabling each node to act both as a client and as a server \cite{augustine2022byzantine}. This paradigm enhances system robustness, scalability, and fault tolerance \cite{augustine2022byzantine}.
 
-A fundamental characteristic of P2P networks is their ability to self-organize. Nodes dynamically join and leave the network, a phenomenon known as \textit{churn}, requiring the system to continuously adapt its topology and routing structures [8]. Efficient handling of churn is essential to maintain connectivity and ensure reliable data dissemination in large-scale environments [8].
+A fundamental characteristic of P2P networks is their ability to self-organize. Nodes dynamically join and leave the network, a phenomenon known as \textit{churn}, requiring the system to continuously adapt its topology and routing structures \cite{augustine2022byzantine}. Efficient handling of churn is essential to maintain connectivity and ensure reliable data dissemination in large-scale environments \cite{augustine2022byzantine}.
 
-P2P networks can be broadly classified into structured and unstructured overlays [7], [8]. Unstructured P2P networks, such as early file-sharing systems, rely on flooding or random walks for resource discovery, which may lead to high communication overhead and limited scalability [7]. In contrast, structured P2P networks employ well-defined topologies and deterministic routing mechanisms, typically based on Distributed Hash Tables (DHTs) [8].
+P2P networks can be broadly classified into structured and unstructured overlays \cite{mehr2019unstructured}, \cite{augustine2022byzantine}. Unstructured P2P networks, such as early file-sharing systems, rely on flooding or random walks for resource discovery, which may lead to high communication overhead and limited scalability \cite{mehr2019unstructured}. In contrast, structured P2P networks employ well-defined topologies and deterministic routing mechanisms, typically based on Distributed Hash Tables (DHTs) \cite{augustine2022byzantine}.
 
-Distributed Hash Tables provide a scalable and efficient method for resource lookup by mapping keys to nodes in a deterministic manner [8]. Classical DHT-based systems, such as Chord [1], organize nodes in a logical ring structure and guarantee lookup operations in logarithmic time relative to the number of nodes. Similarly, Kademlia [2] introduces a distance metric based on the XOR operation, enabling efficient routing and parallel query mechanisms. Other relevant systems include Pastry [3] and Tapestry [4], which explore alternative routing strategies and proximity-aware optimizations.
+Distributed Hash Tables provide a scalable and efficient method for resource lookup by mapping keys to nodes in a deterministic manner \cite{augustine2022byzantine}. Classical DHT-based systems, such as Chord \cite{stoica2001chord}, organize nodes in a logical ring structure and guarantee lookup operations in logarithmic time relative to the number of nodes. Similarly, Kademlia \cite{maymounkov2002kademlia} introduces a distance metric based on the XOR operation, enabling efficient routing and parallel query mechanisms. Other relevant systems include Pastry \cite{rowstron2001pastry} and Tapestry \cite{zhao2001tapestry}, which explore alternative routing strategies and proximity-aware optimizations.
 
-These structured overlays significantly improve scalability and lookup efficiency; however, they also introduce challenges related to network dynamics, heterogeneity, and real-world deployment constraints [8]. In particular, issues such as node churn, network latency, and the presence of nodes behind Network Address Translation (NAT) devices complicate direct peer-to-peer communication [5], [8].
+These structured overlays significantly improve scalability and lookup efficiency; however, they also introduce challenges related to network dynamics, heterogeneity, and real-world deployment constraints \cite{augustine2022byzantine}. In particular, issues such as node churn, network latency, and the presence of nodes behind Network Address Translation (NAT) devices complicate direct peer-to-peer communication \cite{li2022unreachable}, \cite{augustine2022byzantine}.
 
-Despite these limitations, P2P networks remain a fundamental building block for decentralized systems, enabling applications such as distributed storage, content distribution, and resilient communication infrastructures [8]. Their inherent decentralization and scalability make them particularly suitable for scenarios requiring fault tolerance and autonomy, motivating their continued evolution and integration with modern networking and cryptographic techniques [8].
+Despite these limitations, P2P networks remain a fundamental building block for decentralized systems, enabling applications such as distributed storage, content distribution, and resilient communication infrastructures \cite{augustine2022byzantine}. Their inherent decentralization and scalability make them particularly suitable for scenarios requiring fault tolerance and autonomy, motivating their continued evolution and integration with modern networking and cryptographic techniques \cite{augustine2022byzantine}.
 
-\subsection{NAT Traversal}
+\section{NAT Traversal}
 
-Network Address Translation (NAT) is widely used in modern networks to allow multiple devices to share a single public IP address. While NAT improves address utilization and provides a basic level of security by isolating internal networks, it introduces significant challenges for peer-to-peer (P2P) communication [5]. In particular, nodes behind NATs are typically not directly reachable from external networks, which hinders the establishment of direct end-to-end connections [5].
+Network Address Translation (NAT) is widely used in modern networks to allow multiple devices to share a single public IP address. While NAT improves address utilization and provides a basic level of security by isolating internal networks, it introduces significant challenges for peer-to-peer (P2P) communication \cite{li2022unreachable}. In particular, nodes behind NATs are typically not directly reachable from external networks, which hinders the establishment of direct end-to-end connections \cite{li2022unreachable}.
 
-Several techniques have been proposed to overcome NAT-related limitations. One of the most widely adopted approaches is the use of Session Traversal Utilities for NAT (STUN), which allows a node to discover its public-facing IP address and port as seen by external servers [15]. However, STUN alone is insufficient in more restrictive NAT scenarios, since address discovery does not guarantee that an inbound path can be created for all NAT behaviors [15].
+Several techniques have been proposed to overcome NAT-related limitations. One of the most widely adopted approaches is the use of Session Traversal Utilities for NAT (STUN), which allows a node to discover its public-facing IP address and port as seen by external servers \cite{rfc8489}. However, STUN alone is insufficient in more restrictive NAT scenarios, since address discovery does not guarantee that an inbound path can be created for all NAT behaviors \cite{rfc8489}.
 
-Traversal Using Relays around NAT (TURN) addresses this limitation by relaying traffic through an intermediate server when direct communication cannot be established [16]. Although effective, TURN introduces additional latency and creates a degree of centralization, which may be undesirable in fully decentralized systems [16].
+Traversal Using Relays around NAT (TURN) addresses this limitation by relaying traffic through an intermediate server when direct communication cannot be established \cite{rfc8656}. Although effective, TURN introduces additional latency and creates a degree of centralization, which may be undesirable in fully decentralized systems \cite{rfc8656}.
 
-Interactive Connectivity Establishment (ICE) combines multiple techniques, including STUN and TURN, to systematically discover the best possible communication path between peers [17]. ICE attempts direct connectivity first and falls back to relay-based communication when necessary, improving reliability in heterogeneous network environments [17].
+Interactive Connectivity Establishment (ICE) combines multiple techniques, including STUN and TURN, to systematically discover the best possible communication path between peers \cite{rfc8445}. ICE attempts direct connectivity first and falls back to relay-based communication when necessary, improving reliability in heterogeneous network environments \cite{rfc8445}.
 
-Another widely used technique in P2P systems is UDP hole punching, which enables two peers behind NATs to establish direct communication by coordinating simultaneous outbound packets [5], [15], [17]. This approach is particularly effective in NAT types that preserve endpoint mappings and is commonly used in decentralized applications due to its low latency and reduced reliance on centralized infrastructure [5], [15].
+Another widely used technique in P2P systems is UDP hole punching, which enables two peers behind NATs to establish direct communication by coordinating simultaneous outbound packets \cite{li2022unreachable}, \cite{rfc8489}, \cite{rfc8445}. This approach is particularly effective in NAT types that preserve endpoint mappings and is commonly used in decentralized applications due to its low latency and reduced reliance on centralized infrastructure \cite{li2022unreachable}, \cite{rfc8489}.
 
-Recent advancements have also explored the use of modern transport protocols such as QUIC, which operates over UDP and integrates features such as connection migration and improved congestion control [18]. These properties make QUIC a promising candidate for NAT traversal in dynamic network conditions, especially when combined with P2P overlay mechanisms [18].
+Recent advancements have also explored the use of modern transport protocols such as QUIC, which operates over UDP and integrates features such as connection migration and improved congestion control \cite{rfc9000}. These properties make QUIC a promising candidate for NAT traversal in dynamic network conditions, especially when combined with P2P overlay mechanisms \cite{rfc9000}.
 
-Despite these techniques, NAT traversal remains a non-trivial challenge, particularly in large-scale decentralized networks with heterogeneous NAT behaviors [15], [16], [17]. In such scenarios, hybrid approaches combining direct communication, relay mechanisms, and overlay routing are often required to ensure connectivity among all peers [15], [16], [17]. These challenges directly motivate the development of more robust communication schemes in decentralized P2P systems [5], [8].
+Despite these techniques, NAT traversal remains a non-trivial challenge, particularly in large-scale decentralized networks with heterogeneous NAT behaviors \cite{rfc8489}, \cite{rfc8656}, \cite{rfc8445}. In such scenarios, hybrid approaches combining direct communication, relay mechanisms, and overlay routing are often required to ensure connectivity among all peers \cite{rfc8489}, \cite{rfc8656}, \cite{rfc8445}. These challenges directly motivate the development of more robust communication schemes in decentralized P2P systems \cite{li2022unreachable}, \cite{augustine2022byzantine}.
 
-\subsection{Post-Quantum Cryptography}
+\section{Post-Quantum Cryptography}
 
-The advancement of quantum computing poses a significant threat to widely used classical cryptographic systems. Algorithms such as RSA and Elliptic Curve Cryptography (ECC), which rely on the computational hardness of problems like integer factorization and discrete logarithms, can be efficiently broken using quantum algorithms such as Shor's algorithm [11]. This scenario has motivated the development of post-quantum cryptography (PQC), which aims to design cryptographic schemes secure against both classical and quantum adversaries [11].
+The advancement of quantum computing poses a significant threat to widely used classical cryptographic systems. Algorithms such as RSA and Elliptic Curve Cryptography (ECC), which rely on the computational hardness of problems like integer factorization and discrete logarithms, can be efficiently broken using quantum algorithms such as Shor's algorithm \cite{shor1997quantum}. This scenario has motivated the development of post-quantum cryptography (PQC), which aims to design cryptographic schemes secure against both classical and quantum adversaries \cite{shor1997quantum}.
 
-Among the various approaches to PQC, lattice-based cryptography has emerged as one of the most promising candidates due to its strong security guarantees and practical efficiency [12], [13]. These schemes are based on hard mathematical problems such as the Learning With Errors (LWE) and Module-LWE problems, which remain computationally intractable even for quantum computers [12], [13].
+Among the various approaches to PQC, lattice-based cryptography has emerged as one of the most promising candidates due to its strong security guarantees and practical efficiency \cite{regev2009lwe}, \cite{bos2017kyber}. These schemes are based on hard mathematical problems such as the Learning With Errors (LWE) and Module-LWE problems, which remain computationally intractable even for quantum computers \cite{regev2009lwe}, \cite{bos2017kyber}.
 
-A prominent example of a lattice-based cryptographic scheme is CRYSTALS-Kyber, which has been selected by the National Institute of Standards and Technology (NIST) as a standard for post-quantum key encapsulation mechanisms (KEMs) [13], [14]. Kyber enables two parties to securely establish a shared symmetric key over an insecure channel, without requiring prior secret exchange [13], [14].
+A prominent example of a lattice-based cryptographic scheme is CRYSTALS-Kyber, which has been selected by the National Institute of Standards and Technology (NIST) as a standard for post-quantum key encapsulation mechanisms (KEMs) \cite{bos2017kyber}, \cite{nist2024fips203}. Kyber enables two parties to securely establish a shared symmetric key over an insecure channel, without requiring prior secret exchange \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-The operation of Kyber is divided into three main phases: key generation, encapsulation, and decapsulation [13], [14]. In the key generation phase, a public and private key pair is created based on structured lattice operations. During encapsulation, a sender uses the recipient's public key to generate a ciphertext and derive a shared secret. In the decapsulation phase, the recipient uses their private key to recover the shared secret from the ciphertext [13], [14].
+The operation of Kyber is divided into three main phases: key generation, encapsulation, and decapsulation \cite{bos2017kyber}, \cite{nist2024fips203}. In the key generation phase, a public and private key pair is created based on structured lattice operations. During encapsulation, a sender uses the recipient's public key to generate a ciphertext and derive a shared secret. In the decapsulation phase, the recipient uses their private key to recover the shared secret from the ciphertext \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-In practical systems, Kyber is often combined with symmetric cryptographic algorithms such as AES-256 to provide efficient and secure data encryption [13]. In this hybrid approach, Kyber is used to securely exchange a symmetric key, which is then used to encrypt the actual data payload. In modern protocol designs, this symmetric protection should preferably use authenticated encryption modes, so that confidentiality and integrity are provided together rather than relying on encryption alone [13], [27]. This design leverages the efficiency of symmetric cryptography while ensuring quantum-resistant key exchange [13].
+In practical systems, Kyber is often combined with symmetric cryptographic algorithms such as AES-256 to provide efficient and secure data encryption \cite{bos2017kyber}. In this hybrid approach, Kyber is used to securely exchange a symmetric key, which is then used to encrypt the actual data payload. In modern protocol designs, this symmetric protection should preferably use authenticated encryption modes, so that confidentiality and integrity are provided together rather than relying on encryption alone \cite{bos2017kyber}, \cite{rfc8452}. This design leverages the efficiency of symmetric cryptography while ensuring quantum-resistant key exchange \cite{bos2017kyber}.
 
-The adoption of post-quantum cryptography is particularly relevant in decentralized and privacy-oriented systems, where long-term data confidentiality and resistance to future attacks are critical [13], [14]. As a result, integrating PQC mechanisms into P2P architectures represents an important step toward building secure communication infrastructures resilient to emerging computational paradigms [13], [14].
+The adoption of post-quantum cryptography is particularly relevant in decentralized and privacy-oriented systems, where long-term data confidentiality and resistance to future attacks are critical \cite{bos2017kyber}, \cite{nist2024fips203}. As a result, integrating PQC mechanisms into P2P architectures represents an important step toward building secure communication infrastructures resilient to emerging computational paradigms \cite{bos2017kyber}, \cite{nist2024fips203}.
 
 
-\subsection{Cryptographic Hash Functions}
+\section{Cryptographic Hash Functions}
 
 Cryptographic hash functions are fundamental components in modern distributed and secure systems. A hash function maps input data of arbitrary size to a fixed-size output, known as a hash or digest, in a deterministic and efficient manner.
 
 For a hash function to be considered cryptographically secure, it must satisfy several key properties. First, it must be computationally infeasible to find two distinct inputs that produce the same output (collision resistance). Second, given a hash output, it should be infeasible to reconstruct the original input (preimage resistance). Third, small changes in the input should produce significantly different outputs, a property known as the avalanche effect.
 
-In decentralized and peer-to-peer (P2P) systems, hash functions play a critical role beyond data integrity [8]. They are commonly used for content addressing, message identification, and efficient data verification [8]. In particular, hashing enables nodes to detect duplicate messages, avoid redundant transmissions, and mitigate network flooding [7], [8].
+In decentralized and peer-to-peer (P2P) systems, hash functions play a critical role beyond data integrity \cite{augustine2022byzantine}. They are commonly used for content addressing, message identification, and efficient data verification \cite{augustine2022byzantine}. In particular, hashing enables nodes to detect duplicate messages, avoid redundant transmissions, and mitigate network flooding \cite{mehr2019unstructured}, \cite{augustine2022byzantine}.
 
-This property is especially relevant in gossip-based or broadcast-based communication models, where messages may propagate through multiple paths in the network [8]. By maintaining a record of previously seen message hashes, nodes can prevent infinite propagation loops and significantly reduce unnecessary bandwidth consumption [8].
+This property is especially relevant in gossip-based or broadcast-based communication models, where messages may propagate through multiple paths in the network \cite{augustine2022byzantine}. By maintaining a record of previously seen message hashes, nodes can prevent infinite propagation loops and significantly reduce unnecessary bandwidth consumption \cite{augustine2022byzantine}.
 
-Additionally, cryptographic hash functions are often used in Distributed Hash Tables (DHTs), where keys are mapped to nodes in a deterministic manner [1], [2], [3], [4], [8]. This enables efficient lookup and routing in large-scale decentralized systems [1], [2], [3], [4], [8].
+Additionally, cryptographic hash functions are often used in Distributed Hash Tables (DHTs), where keys are mapped to nodes in a deterministic manner \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{zhao2001tapestry}, \cite{augustine2022byzantine}. This enables efficient lookup and routing in large-scale decentralized systems \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{zhao2001tapestry}, \cite{augustine2022byzantine}.
 
 In this work, SHA-512 is used in the prototype to derive compact identifiers for public keys, DHT records, and content references. The use of strong cryptographic hashing ensures both integrity and efficiency, contributing to the scalability and robustness of the proposed architecture.
 
-\subsection{Distributed Hash Tables (DHTs)}
+\section{Distributed Hash Tables (DHTs)}
 
 In the context of this work, Distributed Hash Tables (DHTs) are relevant not as a
 universal solution for every network function, but as an important theoretical
-foundation for scalable distributed resolution mechanisms [1], [2], [3], [8].
+foundation for scalable distributed resolution mechanisms \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}.
 Classical DHT models demonstrate how structured overlay organization can support
 efficient lookup operations without requiring centralized coordination. Chord, for
 example, organizes the identifier space as a logical ring and maps keys to successor
-nodes [1]. Kademlia, on the other hand, introduces an XOR-based distance metric to
-organize node identifiers and guide lookup operations [2].
+nodes \cite{stoica2001chord}. Kademlia, on the other hand, introduces an XOR-based distance metric to
+organize node identifiers and guide lookup operations \cite{maymounkov2002kademlia}.
 
 From a theoretical perspective, the importance of DHTs lies in their ability to
 provide structured and predictable resolution over large and dynamic peer sets
-[1], [2], [3]. Rather than depending exclusively on flooding or unstructured
+\cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}. Rather than depending exclusively on flooding or unstructured
 dissemination, DHT-based approaches make it possible to associate identifiers with
 values through deterministic or semi-deterministic placement and retrieval rules.
 As a result, these models are often used as the foundation for scalable lookup
-services in decentralized environments [1], [2], [8].
+services in decentralized environments \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{augustine2022byzantine}.
 
 In architectures that distinguish between physical communication endpoints and
 overlay-level logical identities, DHT principles may be applied in different ways
@@ -200,7 +367,7 @@ monolithic mechanism responsible for all discovery and communication functions.
 This view is consistent with the broader literature, in which DHT-inspired designs
 are frequently adapted to the requirements of specific overlay systems while
 preserving the core benefits of structured lookup, scalability, and decentralization
-[1], [2], [3], [8].
+\cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}.
 
 The proposed architecture adopts a Kademlia-inspired responsibility model because
 its XOR-distance principle is naturally compatible with cryptographic identifiers.
@@ -218,12 +385,12 @@ Pointer Table (DPT). Therefore, the DHT layer acts as a common low-level substra
 for distributed routing, content discovery, content availability indexing, and
 stable pointer resolution.
 
-\subsection{Kademlia and XOR-Based Routing}
+\section{Kademlia and XOR-Based Routing}
 
 Kademlia is a structured peer-to-peer DHT originally proposed by Maymounkov and
 Mazi\`eres. Its main contribution is the use of an XOR-based distance metric to
 organize the overlay identifier space and guide lookup operations
-[2]. In this model, each node has a unique identifier,
+\cite{maymounkov2002kademlia}. In this model, each node has a unique identifier,
 and the distance between two identifiers is computed by applying the bitwise XOR
 operation.
 
@@ -254,6 +421,7 @@ because implementation details such as bucket maintenance, lookup parallelism,
 refresh policies, and churn handling may be adapted according to the specific needs
 of the system.
 
+\enlargethispage{3\baselineskip}
 The resulting model is compatible with the hash-based identifiers used throughout
 this architecture, including physical node identifiers, virtual node identifiers,
 content hashes, tag hashes, and pointer records. As a result, the same placement
@@ -266,11 +434,11 @@ Distributed Data Table, and Distributed Pointer Table.
 
 
 
-\section{Systematic Literature Review Methodology}
+\chapter{Systematic Literature Review Methodology}
 
 This work adopts a Systematic Literature Review (SLR) methodology in order to identify, analyze, and synthesize relevant studies related to decentralized peer-to-peer network architectures, anonymity mechanisms, and secure communication techniques.
 
-\subsection{Research Question}
+\section{Research Question}
 
 The review is guided by the following research question:
 
@@ -278,7 +446,7 @@ The review is guided by the following research question:
 What decentralized peer-to-peer network architectures provide mechanisms for anonymous and secure communication?
 \end{quote}
 
-\subsection{Databases}
+\section{Databases}
 
 The literature search was conducted using the following scientific databases:
 
@@ -291,7 +459,7 @@ The literature search was conducted using the following scientific databases:
 
 These platforms were selected due to their broad coverage of peer-reviewed publications in computer science and network research.
 
-\subsection{Search String}
+\section{Search String}
 
 The following search query was used to retrieve relevant publications:
 
@@ -308,7 +476,7 @@ AND ("routing" OR "peer discovery"
 
 The query was applied to the selected databases to identify studies related to decentralized communication architectures and privacy-preserving network systems.
 
-\subsection{Types of Publications}
+\section{Types of Publications}
 
 The review considered the following types of scientific publications:
 
@@ -317,7 +485,7 @@ The review considered the following types of scientific publications:
     \item Conference papers
 \end{itemize}
 
-\subsection{Inclusion Criteria}
+\section{Inclusion Criteria}
 
 Publications were included in the review if they satisfied the following criteria:
 
@@ -327,7 +495,7 @@ Publications were included in the review if they satisfied the following criteri
     \item Discuss privacy, anonymity, or secure communication mechanisms
 \end{itemize}
 
-\subsection{Exclusion Criteria}
+\section{Exclusion Criteria}
 
 Publications were excluded if they met any of the following conditions:
 
@@ -339,7 +507,7 @@ Publications were excluded if they met any of the following conditions:
 
 Classical foundational works published before 2015 were not treated as primary studies in the systematic review. They were used as background references when necessary to explain established concepts such as DHTs, structured overlays, anonymous routing, and NAT traversal. This distinction preserves the temporal scope of the SLR while still allowing the theoretical background to cite foundational protocols and systems.
 
-\section{Selection Process (PRISMA)}
+\chapter{Selection Process (PRISMA)}
 
 \thesisprismatikz
 
@@ -358,11 +526,11 @@ The process can be summarized as follows:
 
 
 
-\section{Data Extraction and Analysis}
+\chapter{Data Extraction and Analysis}
 
 After the selection phase, a total of six primary studies were included for in-depth analysis. In this stage, a structured data extraction process was conducted to systematically identify and compare the main characteristics, contributions, and limitations of each work.
 
-\subsection{Data Extraction Process}
+\section{Data Extraction Process}
 
 For each selected study, relevant information was extracted according to predefined criteria aligned with the objectives of this research. The extraction focused on identifying architectural, networking, and security aspects of each proposal, including:
 
@@ -379,7 +547,7 @@ For each selected study, relevant information was extracted according to predefi
 
 This structured approach enabled a consistent comparison across the selected studies and facilitated the identification of common patterns and research gaps.
 
-\subsection{Comparative Analysis}
+\section{Comparative Analysis}
 
 Table~\ref{tab:comparison} summarizes the main characteristics of the selected works based on the defined criteria.
 
@@ -391,10 +559,10 @@ Table~\ref{tab:comparison} summarizes the main characteristics of the selected w
 \resizebox{\textwidth}{!}{
 \begin{tabular}{L{3cm}L{3cm}L{2.5cm}L{2.5cm}L{2cm}L{2cm}L{2cm}L{2cm}L{2cm}}
 \toprule
-\textbf{Work} & \textbf{Problem Addressed} & \textbf{Overlay Type} & \textbf{Routing Strategy} & \textbf{NAT Traversal} & \textbf{Anonymity} & \textbf{Persistence} & \textbf{Scalability} & \textbf{Post-Quantum Crypto} \\
+\textbf{Work} & \textbf{Problem Addressed} & \textbf{Overlay Type} & \textbf{Routing Strategy} & \textbf{NAT Traversal} & {\footnotesize\textbf{Anonymity}} & {\footnotesize\textbf{Persistence}} & {\footnotesize\textbf{Scalability}} & \textbf{Post-Quantum Crypto} \\
 \midrule
 
-Spatial Path Selection~[6] & 
+Spatial Path Selection~\cite{tosic2022spatial} &
 High latency and poor topology distribution in anonymous networks & 
 Unstructured / Onion-based overlay & 
 Geo-based path selection (geohash, hierarchical routing) & 
@@ -405,7 +573,7 @@ Geo-based path selection (geohash, hierarchical routing) &
 \statusno \\
 \addlinespace
 
-A Fully-Distributed Scalable Peer-to-Peer Protocol for Byzantine-Resilient DHTs~[8] & 
+A Fully-Distributed Scalable Peer-to-Peer Protocol for Byzantine-Resilient DHTs~\cite{augustine2022byzantine} &
 Byzantine-resilient scalable DHT construction in sparse P2P networks & 
 Structured P2P overlay & 
 Random walks and verified bit-fixing routing & 
@@ -416,7 +584,7 @@ Random walks and verified bit-fixing routing &
 \statusno \\
 \addlinespace
 
-Comparative Analysis of Unstructured P2P Networks~[7] & 
+Comparative Analysis of Unstructured P2P Networks~\cite{mehr2019unstructured} &
 Performance limitations and inefficient search in unstructured networks & 
 Unstructured & 
 Flooding / heuristic search & 
@@ -427,7 +595,7 @@ Flooding / heuristic search &
 \statusno \\
 \addlinespace
 
-Unreachable Peers Communication Scheme~[5] & 
+Unreachable Peers Communication Scheme~\cite{li2022unreachable} &
 Communication between peers behind NAT/firewalls & 
 Structured P2P overlay & 
 Node ID-based routing & 
@@ -438,7 +606,7 @@ Node ID-based routing &
 \statusno \\
 \addlinespace
 
-Garlic Cast~[10] & 
+Garlic Cast~\cite{qian2016garlic} &
 Anonymous content sharing with low relay overhead and better resilience to churn & 
 Overlay-based anonymous content-sharing network (random-walk / proxy-based) & 
 Random-walk proxy discovery with multi-path clove delivery & 
@@ -449,7 +617,7 @@ Random-walk proxy discovery with multi-path clove delivery &
 \statusno \\
 \addlinespace
 
-PK-Routing~[9] & 
+PK-Routing\\\cite{mirzaei2018pk} &
 Anonymous data communication without exposing real network identity, with flexible anonymity-efficiency trade-offs & 
 Structured tree-based virtual P2P overlay (public-key addressing) & 
 Public-key / virtual-ID tree routing with optional relay, multicast, and hybrid schemes & 
@@ -465,7 +633,7 @@ Public-key / virtual-ID tree routing with optional relay, multicast, and hybrid 
 
 \end{table}
 
-\subsection{Discussion of Findings}
+\section{Discussion of Findings}
 
 The comparative analysis highlights that the selected works address different aspects of decentralized network design, but none of them provide a comprehensive solution that integrates all critical requirements simultaneously.
 
@@ -488,23 +656,23 @@ This fragmentation reinforces the need for a unified architecture capable of com
 
 
 
-\section{Proposed Architecture}
+\chapter{Proposed Architecture}
 
 
-\subsection{Design Rationale}
+\section{Design Rationale}
 
-The proposed decentralized network layer was not directly derived from a single existing system. Instead, it was conceived as a hybrid architecture that integrates concepts and mechanisms inspired by multiple well-established paradigms in distributed systems and peer-to-peer networks [5], [8], [9], [10].
+The proposed decentralized network layer was not directly derived from a single existing system. Instead, it was conceived as a hybrid architecture that integrates concepts and mechanisms inspired by multiple well-established paradigms in distributed systems and peer-to-peer networks \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-The design draws from onion routing approaches to provide layered communication and enhanced anonymity [6], [9], [10], from unstructured peer-to-peer systems such as Gnutella to support flexible and resilient message propagation [7], [8], and from BitTorrent-like mechanisms to enable efficient data distribution and replication [7]. Additionally, concepts related to depth-oriented search strategies and decentralized resource discovery were considered to improve routing adaptability and network exploration [7], [8], [10].
+The design draws from onion routing approaches to provide layered communication and enhanced anonymity \cite{tosic2022spatial}, \cite{mirzaei2018pk}, \cite{qian2016garlic}, from unstructured peer-to-peer systems such as Gnutella to support flexible and resilient message propagation \cite{mehr2019unstructured}, \cite{augustine2022byzantine}, and from BitTorrent-like mechanisms to enable efficient data distribution and replication \cite{mehr2019unstructured}. Additionally, concepts related to depth-oriented search strategies and decentralized resource discovery were considered to improve routing adaptability and network exploration \cite{mehr2019unstructured}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-These elements were combined into a unified model based on a fully decentralized peer-to-peer architecture, structured in logical layers and supported by distributed hash tables (DHTs) for indexing, routing, and data organization [1], [2], [3], [4], [8].
+These elements were combined into a unified model based on a fully decentralized peer-to-peer architecture, structured in logical layers and supported by distributed hash tables (DHTs) for indexing, routing, and data organization \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{zhao2001tapestry}, \cite{augustine2022byzantine}.
 
-Rather than replicating any specific existing system, the proposed approach aims to synthesize the strengths of different paradigms while mitigating their individual limitations [5], [6], [8], [9], [10]. In particular, the architecture seeks to balance anonymity, scalability, data persistence, and connectivity in heterogeneous network environments, including scenarios involving NAT traversal [5], [6], [8], [9], [10].
+Rather than replicating any specific existing system, the proposed approach aims to synthesize the strengths of different paradigms while mitigating their individual limitations \cite{li2022unreachable}, \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. In particular, the architecture seeks to balance anonymity, scalability, data persistence, and connectivity in heterogeneous network environments, including scenarios involving NAT traversal \cite{li2022unreachable}, \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-This hybrid design reflects an intentional effort to move beyond isolated solutions and towards a more comprehensive and adaptable decentralized communication framework [5], [8], [9], [10].
+This hybrid design reflects an intentional effort to move beyond isolated solutions and towards a more comprehensive and adaptable decentralized communication framework \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsection{System Requirements}
-\subsubsection{Functional Requirements}
+\section{System Requirements}
+\subsection{Functional Requirements}
 
 The functional requirements define the externally observable capabilities of the network.
 
@@ -516,17 +684,17 @@ The functional requirements define the externally observable capabilities of the
 \toprule
 \textbf{Requirement} & \textbf{Expected capability} \\
 \midrule
-P2P communication and discovery & Peers communicate without application servers and dynamically learn reachable participants despite churn [8], [10]. \\
-Heterogeneous connectivity & Direct transports, NAT traversal extensions, and relay-assisted communication support peers under different reachability conditions [5]. \\
-Decentralized routing & DHT-based resolution and hop-by-hop forwarding locate peers and deliver messages without a global network map [1], [2], [3], [8]. \\
-Secure exchange and identity & Cryptographic identities remain separate from physical addresses, and only authorized endpoints access protected content [9], [10], [13], [14]. \\
-Distributed persistence & Data and metadata are stored, retrieved, and replicated across peers for availability and fault tolerance [7], [8], [10]. \\
-Application support & Stable service abstractions expose messaging, lookup, storage, and retrieval to decentralized applications [8]. \\
+P2P communication and discovery & Peers communicate without application servers and dynamically learn reachable participants despite churn \cite{augustine2022byzantine}, \cite{qian2016garlic}. \\
+Heterogeneous connectivity & Direct transports, NAT traversal extensions, and relay-assisted communication support peers under different reachability conditions \cite{li2022unreachable}. \\
+Decentralized routing & DHT-based resolution and hop-by-hop forwarding locate peers and deliver messages without a global network map \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}. \\
+Secure exchange and identity & Cryptographic identities remain separate from physical addresses, and only authorized endpoints access protected content \cite{mirzaei2018pk}, \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}. \\
+Distributed persistence & Data and metadata are stored, retrieved, and replicated across peers for availability and fault tolerance \cite{mehr2019unstructured}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. \\
+Application support & Stable service abstractions expose messaging, lookup, storage, and retrieval to decentralized applications \cite{augustine2022byzantine}. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\subsubsection{Non-Functional Requirements}
+\subsection{Non-Functional Requirements}
 
 The quality requirements constrain how these capabilities should behave.
 
@@ -538,19 +706,19 @@ The quality requirements constrain how these capabilities should behave.
 \toprule
 \textbf{Requirement} & \textbf{Architectural expectation} \\
 \midrule
-Scalability and efficiency & Growth should not require global state or flooding, and routing overhead and latency should remain bounded [1], [2], [3], [6], [7], [8]. \\
-Churn and fault tolerance & Joins, departures, and failures should degrade local availability rather than invalidate the entire network [6], [8], [10]. \\
-Low centralization & Bootstrap and relays may assist connectivity, but no component should control identities, routes, or application state [5], [9], [10]. \\
-Security and post-quantum readiness & Communication requires confidentiality, integrity, authenticity, and replaceable lattice-based primitives [9], [11], [12], [13], [14]. \\
-Privacy orientation & Logical identities and indirect routes should reduce direct association with physical endpoints without claiming formal global anonymity [6], [9], [10]. \\
-Extensibility and interoperability & Transport, routing, storage, and cryptographic modules should evolve independently while heterogeneous peers retain protocol compatibility [5], [8]. \\
+Scalability and efficiency & Growth should not require global state or flooding, and routing overhead and latency should remain bounded \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{tosic2022spatial}, \cite{mehr2019unstructured}, \cite{augustine2022byzantine}. \\
+Churn and fault tolerance & Joins, departures, and failures should degrade local availability rather than invalidate the entire network \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. \\
+Low centralization & Bootstrap and relays may assist connectivity, but no component should control identities, routes, or application state \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. \\
+Security and post-quantum readiness & Communication requires confidentiality, integrity, authenticity, and replaceable lattice-based primitives \cite{mirzaei2018pk}, \cite{shor1997quantum}, \cite{regev2009lwe}, \cite{bos2017kyber}, \cite{nist2024fips203}. \\
+Privacy orientation & Logical identities and indirect routes should reduce direct association with physical endpoints without claiming formal global anonymity \cite{tosic2022spatial}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. \\
+Extensibility and interoperability & Transport, routing, storage, and cryptographic modules should evolve independently while heterogeneous peers retain protocol compatibility \cite{li2022unreachable}, \cite{augustine2022byzantine}. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\subsection{Conceptual Model}
+\section{Conceptual Model}
 
-\subsubsection{Network Entities}
+\subsection{Network Entities}
 
 The model separates execution, logical identity, distributed coordination, control traffic, and application content.
 
@@ -562,32 +730,32 @@ The model separates execution, logical identity, distributed coordination, contr
 \toprule
 \textbf{Entity} & \textbf{Role} \\
 \midrule
-Physical Node (PN) & Real process or device responsible for transports, physical sessions, discovery, NAT-related procedures, and relay forwarding [5], [8]. \\
-Virtual Node (VN) & Logical cryptographic identity hosted by a PN; one PN may host multiple VNs without publishing their local association [9], [10]. \\
-DHT and DHT Entry & Distributed coordination substrate and its signed records for physical discovery, routes, content holders, pointers, and tags [1], [2], [3], [8]. \\
-Protocol Message & Control-plane envelope used for discovery, lookup, session establishment, forwarding, storage, and maintenance [5], [8], [10]. \\
-Data Object & Application bytes or metadata exchanged, referenced, replicated, or retrieved through the overlay [8], [9], [10]. \\
+Physical Node (PN) & Real process or device responsible for transports, physical sessions, discovery, NAT-related procedures, and relay forwarding \cite{li2022unreachable}, \cite{augustine2022byzantine}. \\
+Virtual Node (VN) & Logical cryptographic identity hosted by a PN; one PN may host multiple VNs without publishing their local association \cite{mirzaei2018pk}, \cite{qian2016garlic}. \\
+DHT and DHT Entry & Distributed coordination substrate and its signed records for physical discovery, routes, content holders, pointers, and tags \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}. \\
+Protocol Message & Control-plane envelope used for discovery, lookup, session establishment, forwarding, storage, and maintenance \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. \\
+Data Object & Application bytes or metadata exchanged, referenced, replicated, or retrieved through the overlay \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Privacy orientation follows from this separation and hop-by-hop forwarding: physical information is exposed only where connectivity requires it, virtual identities represent application participation, and intermediate nodes require local forwarding state rather than a complete end-to-end route [9], [10].
+Privacy orientation follows from this separation and hop-by-hop forwarding: physical information is exposed only where connectivity requires it, virtual identities represent application participation, and intermediate nodes require local forwarding state rather than a complete end-to-end route \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
 
-\subsubsection{Resource Representation}
+\subsection{Resource Representation}
 
-The overlay treats application resources as byte-oriented objects and assigns their semantics at the application layer [8]. Immutable objects use content hashes, enabling content-addressed lookup and integrity verification; communication destinations use hashed VN identifiers [5], [8], [9], [10]. This uniform representation lets routing, discovery, and persistence operate without interpreting application data or exposing unnecessary physical context.
+The overlay treats application resources as byte-oriented objects and assigns their semantics at the application layer \cite{augustine2022byzantine}. Immutable objects use content hashes, enabling content-addressed lookup and integrity verification; communication destinations use hashed VN identifiers \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. This uniform representation lets routing, discovery, and persistence operate without interpreting application data or exposing unnecessary physical context.
 
-\subsubsection{Identity Model}
+\subsection{Identity Model}
 
-The dual-identity model decouples connectivity from logical participation [5], [9]. A PN key pair authenticates transport-level actions, physical sessions, endpoints, and relay coordination; a separate VN key pair authenticates overlay identity, route authorization, and application communication [9], [10]. DHTs use SHA-512 identifiers derived from public keys for compact lookup, while complete keys remain available when signature verification requires them [1], [2], [3], [8], [9]. Encryption keys are session-specific: signed ephemeral KEM material establishes fresh symmetric secrets instead of statically reusing identity keys [9], [13], [14].
+The dual-identity model decouples connectivity from logical participation \cite{li2022unreachable}, \cite{mirzaei2018pk}. A PN key pair authenticates transport-level actions, physical sessions, endpoints, and relay coordination; a separate VN key pair authenticates overlay identity, route authorization, and application communication \cite{mirzaei2018pk}, \cite{qian2016garlic}. DHTs use SHA-512 identifiers derived from public keys for compact lookup, while complete keys remain available when signature verification requires them \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. Encryption keys are session-specific: signed ephemeral KEM material establishes fresh symmetric secrets instead of statically reusing identity keys \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-\subsubsection{Overlay Abstraction}
+\subsection{Overlay Abstraction}
 
-The overlay exposes logical identifiers, distributed resolution, and hop-by-hop forwarding over any available physical transport [1], [2], [3], [5], [8], [9]. Applications therefore use stable messaging and persistence abstractions without managing addresses, relay selection, or transport-specific behavior; each forwarding node processes only the local routing information required for its next action [9], [10].
+The overlay exposes logical identifiers, distributed resolution, and hop-by-hop forwarding over any available physical transport \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. Applications therefore use stable messaging and persistence abstractions without managing addresses, relay selection, or transport-specific behavior; each forwarding node processes only the local routing information required for its next action \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
 
-\subsubsection{Kademlia-Inspired DHT Responsibility Model}
+\subsection{Kademlia-Inspired DHT Responsibility Model}
 
 The DHT uses Kademlia-inspired XOR responsibility because both node and resource identifiers are cryptographic hashes; it does not implement the complete Kademlia routing protocol.
 
@@ -624,34 +792,34 @@ Each shard stores only a bounded portion of the full item list:
 Each shard is independently assigned by XOR distance. The root carries namespace, logical key, shard count, and update metadata; each shard carries its index and bounded item list. Sharding is an architectural extension for large collections rather than a claim of complete Kademlia behavior.
 
 
-\subsubsection{Core Distributed Structures}
+\subsection{Core Distributed Structures}
 
-\paragraph{Distributed Pointer Table (DPT)}
+\subsubsection{Distributed Pointer Table (DPT)}
 
 In addition to the semantic discovery provided by the DTT, the architecture may also employ a lightweight indirection structure called the \textit{Distributed Pointer Table} (DPT). Its purpose is not to store complete version history or detailed mutable metadata directly, but rather to provide a stable distributed resolution point through which peers may locate the most recent known state of a logical resource.
 
 The DPT maps $H(pk_{vn\_owner} \parallel title)$ to a signed record containing the owner key, stable title, resource type, modification time, and \texttt{target\_ref}. The title is immutable because changing it creates another key; the target points to the latest state, commonly a DDT-resolvable content object. Owner signatures authorize updates, providing a stable rendezvous point without storing version history in the pointer record.
 
 
-\paragraph{Distributed Tag Table (DTT)}
+\subsubsection{Distributed Tag Table (DTT)}
 
 The \textit{Distributed Tag Table} (DTT) is the semantic discovery structure of the proposed architecture. Its role is to provide an efficient distributed entry point for locating resources through normalized tags or other application-level descriptors, without requiring the requester to know an exact content hash in advance.
 
 The DTT maps $H(tag)$ to signed, expiring entries containing a resource identifier, resource kind, and publisher VN. Immutable identifiers proceed directly to DDT holder resolution; mutable identifiers first resolve through the DPT. Applications may combine tag results by intersection, union, ranking, or partial matching, while the DTT remains independent of content storage and provider discovery.
 
-\paragraph{Distributed Data Table (DDT)}
+\subsubsection{Distributed Data Table (DDT)}
 
 The \textit{Distributed Data Table} (DDT) is the distributed availability structure responsible for content-addressed object resolution in the proposed architecture. Its role is not to store the content object itself, but to maintain distributed references to virtual nodes that currently advertise possession of a given object.
 
 The DDT maps $H(content)$ to metadata and signed, expiring VN holder advertisements. The hash covers the exact object bytes; title, type, tags, and holder metadata are associated record fields unless encoded into the object itself. The DDT locates providers but never stores the content payload.
 
-\paragraph{Distributed Route Table (DRT)}
+\subsubsection{Distributed Route Table (DRT)}
 
 The \textit{Distributed Route Table} (DRT) is the distributed routing-assistance structure of the proposed architecture. Its role is to help requesters reach a target virtual node after that node has already been identified through other resolution stages.
 
 The DRT maps $H(pk_{vn})$ to expiring physical entry points. Each route entry carries the PN identifier, PN and VN authorization signatures, measured RTT, and expiration metadata. Entries are soft-state hints refreshed by maintenance; they initiate communication without exposing the complete physical path.
 
-\paragraph{Distributed Physical Nodes Table (DPNT)}
+\subsubsection{Distributed Physical Nodes Table (DPNT)}
 
 The \textit{Distributed Physical Nodes Table} (DPNT) is an auxiliary distributed support structure responsible for maintaining recoverable operational information about physical nodes. Its purpose is not to replace direct peer discovery, bootstrap procedures, or local neighbor views, but rather to extend them by preserving validated physical-node descriptors in a distributed form.
 
@@ -659,7 +827,7 @@ The DPNT maps $H(pk_{pn})$ to a signed physical descriptor containing the public
 
 
 
-\subsection{Layered Architecture}
+\section{Layered Architecture}
 
 Figure~\ref{fig:layered-architecture} summarizes how the proposed modules are organized across the physical, overlay, service, and application levels. The figure is presented after this brief introduction so that the layered view can be interpreted in relation to the modular design rationale described above.
 
@@ -667,86 +835,86 @@ Figure~\ref{fig:layered-architecture} summarizes how the proposed modules are or
 
 Although the proposed system is defined as a modular architecture, its internal organization is described through a layered structure. Modularity refers to the separation of the system into distinct components that may evolve or be replaced independently, while layering provides a clearer structural view of how these components interact across different levels of abstraction. In this work, the layered organization is adopted to separate physical connectivity concerns, overlay coordination mechanisms, reusable service abstractions, and application-level functionalities.
 
-\subsubsection{Physical and Classical Network Layer}
+\subsection{Physical and Classical Network Layer}
 
 This layer is responsible for the underlying classical network communication between
-physical nodes [5], [8]. It encompasses transport protocols such as TCP and UDP, as
+physical nodes \cite{li2022unreachable}, \cite{augustine2022byzantine}. It encompasses transport protocols such as TCP and UDP, as
 well as the mechanisms required to establish connectivity between devices, including
-NAT traversal and relay-assisted communication [5]. In addition, this layer is also
+NAT traversal and relay-assisted communication \cite{li2022unreachable}. In addition, this layer is also
 responsible for physical peer discovery, since the initial knowledge of reachable
 physical participants is obtained through bootstrap procedures, direct peer exchange,
 and other classical communication mechanisms that operate independently of overlay
-identities [5], [8], [10].
+identities \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
 Its primary role is to provide a basic communication substrate between physical
 devices, without direct awareness of overlay-level logical identities, identifier-based
-routing, or application semantics [8]. When the available transport mechanism is based
+routing, or application semantics \cite{augustine2022byzantine}. When the available transport mechanism is based
 on UDP Hole Punching, this layer may also incorporate complementary reliability
 functions, such as delivery assurance and packet ordering, in order to provide a more
 stable communication channel despite the unordered and unreliable nature of UDP
-itself [5].
+itself \cite{li2022unreachable}.
 
-\subsubsection{Overlay Network Layer}
+\subsection{Overlay Network Layer}
 
 The overlay network layer is built on top of the classical communication layer and
-provides decentralized interaction through logical identifiers [1], [2], [3], [8], [9]. Its main
+provides decentralized interaction through logical identifiers \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. Its main
 responsibility is to organize routing, lookup, and communication at the logical level,
 allowing nodes to interact through virtual identities rather than direct dependence on
-physical addressing [1], [2], [3], [8], [9].
+physical addressing \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}.
 
 Unlike the classical layer, which is responsible for physical connectivity and physical
 peer discovery, the overlay layer operates over the communication substrate already
 established and focuses on identifier-based forwarding, logical resolution, and
-coordination among distributed entities [5], [8], [10]. This abstraction enables a consistent
+coordination among distributed entities \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. This abstraction enables a consistent
 interaction model across the network while decoupling logical communication from
-the specific details of the underlying transport mechanisms [1], [2], [3], [8], [9].
+the specific details of the underlying transport mechanisms \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}.
 
-\subsubsection{Service Layer}
+\subsection{Service Layer}
 
-The service layer provides reusable functionalities on top of the overlay, such as distributed storage, messaging primitives, and data retrieval mechanisms [8], [10].
+The service layer provides reusable functionalities on top of the overlay, such as distributed storage, messaging primitives, and data retrieval mechanisms \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-This layer exposes higher-level abstractions that simplify the development of applications, allowing them to use network capabilities without handling routing or communication details directly [8].
+This layer exposes higher-level abstractions that simplify the development of applications, allowing them to use network capabilities without handling routing or communication details directly \cite{augustine2022byzantine}.
 
-\subsubsection{Application Layer}
+\subsection{Application Layer}
 
-The application layer represents end-user systems built on top of the network, such as decentralized social platforms or communication tools [8].
+The application layer represents end-user systems built on top of the network, such as decentralized social platforms or communication tools \cite{augustine2022byzantine}.
 
-Applications interact with the service layer to perform operations such as sending messages or storing data, without needing to manage lower-level networking or security mechanisms [8].
+Applications interact with the service layer to perform operations such as sending messages or storing data, without needing to manage lower-level networking or security mechanisms \cite{augustine2022byzantine}.
 
 
-\subsection{System Components}
-\subsubsection{Peer Management}
+\section{System Components}
+\subsection{Peer Management}
 
-The Peer Management component is responsible for maintaining the local representation of entities participating in the overlay network [8], [9], [10]. In the proposed architecture, participation is modeled through a strict separation between \textit{physical nodes} and \textit{virtual nodes}, so that logical identities in the overlay are decoupled from the underlying hosts that execute them [5], [9].
+The Peer Management component is responsible for maintaining the local representation of entities participating in the overlay network \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. In the proposed architecture, participation is modeled through a strict separation between \textit{physical nodes} and \textit{virtual nodes}, so that logical identities in the overlay are decoupled from the underlying hosts that execute them \cite{li2022unreachable}, \cite{mirzaei2018pk}.
 
-A physical node may host multiple virtual nodes simultaneously, establishing a $1:N$ relationship between execution environment and logical identities. However, each virtual node is associated with only one physical host at a given time. This design allows a physical device to act as an execution substrate for multiple overlay identities, while preventing the network from learning explicit ownership relations between them [9], [10].
+A physical node may host multiple virtual nodes simultaneously, establishing a $1:N$ relationship between execution environment and logical identities. However, each virtual node is associated with only one physical host at a given time. This design allows a physical device to act as an execution substrate for multiple overlay identities, while preventing the network from learning explicit ownership relations between them \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-The \textit{physical node public key} ($pk_{physical\_node}$) is not used as the main logical identity in the overlay. Instead, its role is limited to network access and reachability support [5], [9]. In particular, physical node identifiers may appear in routing-related structures only as entry points through which a given virtual node may be reached [5]. For example, the overlay may maintain associations of the form
+The \textit{physical node public key} ($pk_{physical\_node}$) is not used as the main logical identity in the overlay. Instead, its role is limited to network access and reachability support \cite{li2022unreachable}, \cite{mirzaei2018pk}. In particular, physical node identifiers may appear in routing-related structures only as entry points through which a given virtual node may be reached \cite{li2022unreachable}. For example, the overlay may maintain associations of the form
 \[
 H(pk_{virtual\_node}) \rightarrow \{pk_{physical\_node}^{(1)}, pk_{physical\_node}^{(2)}, \dots\},
 \]
 where the listed physical nodes represent candidate entry points rather than explicit
-ownership relations [5], [9]. In particular, such entry points do not necessarily correspond
+ownership relations \cite{li2022unreachable}, \cite{mirzaei2018pk}. In particular, such entry points do not necessarily correspond
 to the physical host currently responsible for the virtual node, but may instead denote
 third-party physical nodes that have agreed to act as reachable ingress points toward it.
 
-The \textit{virtual node public key} ($pk_{virtual\_node}$) represents the primary logical identity of an entity in the overlay [9]. To reduce storage and communication overhead, the network references virtual nodes through a derived identifier, denoted here as $H(pk_{virtual\_node})$, where $H(\cdot)$ is a cryptographic hash function [1], [2], [3], [8], [9]. The complete public key does not need to be broadly exposed at the overlay level and may remain known only to parties that actually require it for cryptographic interaction [9], [10].
+The \textit{virtual node public key} ($pk_{virtual\_node}$) represents the primary logical identity of an entity in the overlay \cite{mirzaei2018pk}. To reduce storage and communication overhead, the network references virtual nodes through a derived identifier, denoted here as $H(pk_{virtual\_node})$, where $H(\cdot)$ is a cryptographic hash function \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. The complete public key does not need to be broadly exposed at the overlay level and may remain known only to parties that actually require it for cryptographic interaction \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-VNs may be persistent or expiring and may migrate between hosts without publishing a permanent PN association [5], [9], [10]. Peer Management maintains controlled local identities plus limited remote metadata: identifiers, candidate entry points, transports, reachability, capabilities, freshness, and validation state. Physical peers are learned through bootstrap, exchange, observation, and DPNT fallback, then periodically validated and pruned [5], [8], [10].
+VNs may be persistent or expiring and may migrate between hosts without publishing a permanent PN association \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. Peer Management maintains controlled local identities plus limited remote metadata: identifiers, candidate entry points, transports, reachability, capabilities, freshness, and validation state. Physical peers are learned through bootstrap, exchange, observation, and DPNT fallback, then periodically validated and pruned \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Connection Management}
+\subsection{Connection Management}
 
 Connection management begins only after a physical peer has been discovered and a reachable transport endpoint has been selected. It then establishes the authenticated communication context used by higher-level protocols, while transport selection and cryptographic session establishment remain separate responsibilities.
 
 \thesisconnectiontikz
 
-Connection Management provides a common PN transport interface so overlay protocols remain independent of TCP, UDP, relay, or future connectivity mechanisms [5], [8], [9]. Endpoint metadata belongs only to PNs:
+Connection Management provides a common PN transport interface so overlay protocols remain independent of TCP, UDP, relay, or future connectivity mechanisms \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. Endpoint metadata belongs only to PNs:
 \[
 H(pk_{physical\_node}) \rightarrow \{endpoint_1, endpoint_2, \dots\},
 \]
-where each endpoint may represent a candidate communication method such as IPv4, IPv6, direct transport ports, relay endpoints, or parameters relevant to NAT traversal and hole punching [5].
+where each endpoint may represent a candidate communication method such as IPv4, IPv6, direct transport ports, relay endpoints, or parameters relevant to NAT traversal and hole punching \cite{li2022unreachable}.
 
-Multiple candidates may coexist with reachability and validation state. Selection prefers lower-dependency methods while retaining fallback connectivity [5]:
+Multiple candidates may coexist with reachability and validation state. Selection prefers lower-dependency methods while retaining fallback connectivity \cite{li2022unreachable}:
 \begin{enumerate}
     \item direct connection;
     \item hole punching or assisted NAT traversal;
@@ -754,17 +922,17 @@ Multiple candidates may coexist with reachability and validation state. Selectio
     \item continuous relay forwarding.
 \end{enumerate}
 
-Selection considers advertised support, reachability, and observed conditions. Maintenance performs keepalives, endpoint validation, failure detection, and retries; another candidate is reconsidered when the active method fails. A relay may assist direct establishment or remain as the forwarding path when direct reachability is unavailable [5], [8].
+Selection considers advertised support, reachability, and observed conditions. Maintenance performs keepalives, endpoint validation, failure detection, and retries; another candidate is reconsidered when the active method fails. A relay may assist direct establishment or remain as the forwarding path when direct reachability is unavailable \cite{li2022unreachable}, \cite{augustine2022byzantine}.
 
 
 
-\subsubsection{Routing Mechanism}
+\subsection{Routing Mechanism}
 
-The Routing Mechanism is responsible for enabling message delivery across the overlay without requiring global knowledge of the network topology [1], [2], [3], [8], [9]. In the proposed architecture, routing is identity-oriented and privacy-oriented: messages are routed toward virtual identities, while intermediate physical nodes should not learn the complete origin-destination relation of a communication [6], [9], [10].
+The Routing Mechanism is responsible for enabling message delivery across the overlay without requiring global knowledge of the network topology \cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. In the proposed architecture, routing is identity-oriented and privacy-oriented: messages are routed toward virtual identities, while intermediate physical nodes should not learn the complete origin-destination relation of a communication \cite{tosic2022spatial}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-Two operational phases must be distinguished. The first phase is \textit{route construction and publication}, in which a virtual node obtains one or more inbound route entries and publishes the corresponding reachability information in the Distributed Routing Table (DRT). The second phase is \textit{route resolution and execution}, in which another peer queries the DRT, selects one of the available entry points, and sends traffic through the already established route state. This distinction avoids treating the DRT as a table of complete end-to-end paths. The DRT stores candidate entry points and authorization metadata, while the actual forwarding state remains local to the physical nodes participating in each route [5], [8], [9].
+Two operational phases must be distinguished. The first phase is \textit{route construction and publication}, in which a virtual node obtains one or more inbound route entries and publishes the corresponding reachability information in the Distributed Routing Table (DRT). The second phase is \textit{route resolution and execution}, in which another peer queries the DRT, selects one of the available entry points, and sends traffic through the already established route state. This distinction avoids treating the DRT as a table of complete end-to-end paths. The DRT stores candidate entry points and authorization metadata, while the actual forwarding state remains local to the physical nodes participating in each route \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}.
 
-Routing resolution begins with a lookup in the DRT. More specifically, the DRT maps the identifier of a virtual node, represented as $H(pk_{virtual\_node})$, to a set of candidate physical entry points capable of receiving traffic toward that virtual destination [5], [8], [9]. Thus, the DRT does not store full hop sequences, nor does it prescribe the algorithm used to construct them. It only exposes the distributed information needed for a requester to start communication toward a reachable virtual identity [5], [8], [9].
+Routing resolution begins with a lookup in the DRT. More specifically, the DRT maps the identifier of a virtual node, represented as $H(pk_{virtual\_node})$, to a set of candidate physical entry points capable of receiving traffic toward that virtual destination \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}. Thus, the DRT does not store full hop sequences, nor does it prescribe the algorithm used to construct them. It only exposes the distributed information needed for a requester to start communication toward a reachable virtual identity \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}.
 
 \thesisdrttikz
 
@@ -772,22 +940,22 @@ Formally, the DRT may contain records of the form
 \[
 H(pk_{virtual\_node}) \rightarrow \{H(pk_{physical\_node}^{(1)}), H(pk_{physical\_node}^{(2)}), \dots\},
 \]
-where the listed physical nodes are entry points authorized to receive traffic destined to the corresponding virtual identity [5], [9]. This preserves the indirect relation between virtual and physical entities, since the network never exposes an explicit and permanent binding between them [9], [10].
+where the listed physical nodes are entry points authorized to receive traffic destined to the corresponding virtual identity \cite{li2022unreachable}, \cite{mirzaei2018pk}. This preserves the indirect relation between virtual and physical entities, since the network never exposes an explicit and permanent binding between them \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
 \thesisroutestrategyconstructiontikz
 
 \thesishopbyhoptikz
 
-Route construction proceeds hop by hop until a final PN accepts the entry-point role. The protocol defines lifecycle, authorization, validation, publication, and execution; the strategy selects each next hop and its termination rule. Figure~\ref{fig:ttl-route-strategy-example} shows \texttt{random\_walk\_ttl}, where each hop consumes a temporal budget, but other strategies may use hops, latency, bandwidth, reliability, diversity, or preselected onion-like paths [6], [9], [10].
+Route construction proceeds hop by hop until a final PN accepts the entry-point role. The protocol defines lifecycle, authorization, validation, publication, and execution; the strategy selects each next hop and its termination rule. Figure~\ref{fig:ttl-route-strategy-example} shows \texttt{random\_walk\_ttl}, where each hop consumes a temporal budget, but other strategies may use hops, latency, bandwidth, reliability, diversity, or preselected onion-like paths \cite{tosic2022spatial}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-Each intermediate PN remaps the received \textit{path\_id} to local state and knows only adjacent forwarding actions. The final intermediate hop learns the final PN, not the destination VN; the final PN validates authorization and publishes the signed DRT entry [9], [10]. Once active, \texttt{ROUTE\_DATA} forwarding is a local mapping operation independent of the construction strategy.
+Each intermediate PN remaps the received \textit{path\_id} to local state and knows only adjacent forwarding actions. The final intermediate hop learns the final PN, not the destination VN; the final PN validates authorization and publishes the signed DRT entry \cite{mirzaei2018pk}, \cite{qian2016garlic}. Once active, \texttt{ROUTE\_DATA} forwarding is a local mapping operation independent of the construction strategy.
 
-Content discovery first resolves providers through DTT/DPT/DDT and then routes toward a holder VN. TTL and \texttt{seen\_hash} are MVP safeguards, while future strategies may use other termination and deduplication controls. Route failure is detected by timeout and triggers another route or entry point rather than automatic mid-route repair [5], [7], [8], [10].
+Content discovery first resolves providers through DTT/DPT/DDT and then routes toward a holder VN. TTL and \texttt{seen\_hash} are MVP safeguards, while future strategies may use other termination and deduplication controls. Route failure is detected by timeout and triggers another route or entry point rather than automatic mid-route repair \cite{li2022unreachable}, \cite{mehr2019unstructured}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Route Strategy Abstraction}
+\subsection{Route Strategy Abstraction}
 \label{subsubsec:route-strategy-abstraction}
 
-The route lifecycle is stable, while a replaceable strategy selects hops, termination conditions, and optimization goals for privacy, latency, bandwidth, stability, or diversity [6], [8], [9], [10]:
+The route lifecycle is stable, while a replaceable strategy selects hops, termination conditions, and optimization goals for privacy, latency, bandwidth, stability, or diversity \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}:
 
 \[
 route\_construction = route\_lifecycle + route\_strategy
@@ -824,7 +992,7 @@ Requires minimum capacity for content transfer or streaming. \\
 Prioritizes low observed delay for interactive traffic. \\
 
 \statusproposed & Onion-like routing &
-Preselects hops and layered forwarding information, requiring greater prior peer knowledge [6]. \\
+Preselects hops and layered forwarding information, requiring greater prior peer knowledge \cite{tosic2022spatial}. \\
 
 \statusproposed & Reliability-based routing &
 Uses availability and failure history for long-lived sessions. \\
@@ -860,95 +1028,95 @@ Lower scores represent preferred routes. Applications choose the weights: messag
 
 
 
-\subsubsection{Discovery Module}
+\subsection{Discovery Module}
 
 
 \thesispeerdiscoverytikz
 
 
-Discovery learns physical peers, not virtual identities or routes. Public bootstrap endpoints provide initial contacts; direct observation and peer exchange expand each node's local view; maintenance validates freshness, reachability, transports, relay support, latency, and endpoint alternatives [5], [8], [10]. Indirectly learned descriptors remain untrusted until validation.
+Discovery learns physical peers, not virtual identities or routes. Public bootstrap endpoints provide initial contacts; direct observation and peer exchange expand each node's local view; maintenance validates freshness, reachability, transports, relay support, latency, and endpoint alternatives \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. Indirectly learned descriptors remain untrusted until validation.
 
-The DPNT complements this local process. Validated PN descriptors may be published for later recovery when local endpoint information is missing, but bootstrap and peer exchange remain the primary discovery paths. DPNT data is best-effort soft state, periodically renewed and expired rather than treated as authoritative membership [5], [8], [10].
+The DPNT complements this local process. Validated PN descriptors may be published for later recovery when local endpoint information is missing, but bootstrap and peer exchange remain the primary discovery paths. DPNT data is best-effort soft state, periodically renewed and expired rather than treated as authoritative membership \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
 This separation keeps responsibilities clear: Discovery acquires PN candidates, Peer Management validates and stores them, Connection Management selects a transport, and Routing resolves VNs through the DRT.
 
 
 
 
-\subsubsection{Cryptographic Module}
+\subsection{Cryptographic Module}
 
-The Cryptographic Module protects physical and virtual sessions plus distributed records while preserving the PN/VN identity boundary [5], [9], [10], [13], [14]. Long-term ML-DSA keys authenticate identities, handshakes, and signed records; signed ephemeral ML-KEM material establishes fresh session secrets; AES-256-GCM-SIV protects payloads and selected public metadata through AAD; SHA-512 derives identifiers and content references [13], [14], [26], [27]. The suite is fixed for interoperability in the MVP but remains replaceable at the architectural level.
+The Cryptographic Module protects physical and virtual sessions plus distributed records while preserving the PN/VN identity boundary \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}. Long-term ML-DSA keys authenticate identities, handshakes, and signed records; signed ephemeral ML-KEM material establishes fresh session secrets; AES-256-GCM-SIV protects payloads and selected public metadata through AAD; SHA-512 derives identifiers and content references \cite{bos2017kyber}, \cite{nist2024fips203}, \cite{nist2024fips204}, \cite{rfc8452}. The suite is fixed for interoperability in the MVP but remains replaceable at the architectural level.
 
 Figure~\ref{fig:cryptographic-flow} connects these mechanisms to their operational roles. SHA-512 derives compact physical- and virtual-node identifiers; long-term ML-DSA keys authenticate identities, handshake material, and signed records; ephemeral ML-KEM material establishes a fresh shared secret when a physical or virtual session is created; and AES-256-GCM-SIV protects subsequent session payloads while AAD authenticates selected public envelope fields. Publication proof-of-work is applied before DHT writes and complements signatures by imposing a generation cost without replacing authenticity checks.
 
 \thesiscryptographicflowtikz
 
-The same authenticated handshake runs over direct or relayed transports. Physical sessions protect adjacent peers; virtual sessions protect communicating VNs end to end. Freshness fields, nonces, message identifiers, and duplicate controls provide replay resistance. Relays and storage peers process only the layer required by their role and do not receive virtual-session plaintext [5], [9], [10].
+The same authenticated handshake runs over direct or relayed transports. Physical sessions protect adjacent peers; virtual sessions protect communicating VNs end to end. Freshness fields, nonces, message identifiers, and duplicate controls provide replay resistance. Relays and storage peers process only the layer required by their role and do not receive virtual-session plaintext \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Storage Management}
+\subsection{Storage Management}
 
-Storage Management handles immutable, content-addressed application objects. A content change produces a new hash; DPT pointers represent mutable logical state without changing stored objects [8], [10].
+Storage Management handles immutable, content-addressed application objects. A content change produces a new hash; DPT pointers represent mutable logical state without changing stored objects \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
 
 \thesisddttikz
 
 
-The DDT advertises expiring holder VNs rather than physical hosts or content bytes [8], [9], [10]. Replication is interest-driven: consumers that retain an object may become providers, while uninterested peers incur no storage obligation [7], [8]. Public objects remain readable; protected objects require application-managed keys even though transport is always session-protected [10], [13], [14].
+The DDT advertises expiring holder VNs rather than physical hosts or content bytes \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. Replication is interest-driven: consumers that retain an object may become providers, while uninterested peers incur no storage obligation \cite{mehr2019unstructured}, \cite{augustine2022byzantine}. Public objects remain readable; protected objects require application-managed keys even though transport is always session-protected \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
 \thesisephemeraltikz
 
-Holder records are renewed or expire, keeping discovery aligned with active providers. Retrieved bytes must match their content hash. The network cannot guarantee global deletion after replication; an object disappears only when holders remove it and advertisements expire [8], [10]. Location and access control remain separate: the DDT locates holders, while applications define who can interpret protected content.
+Holder records are renewed or expire, keeping discovery aligned with active providers. Retrieved bytes must match their content hash. The network cannot guarantee global deletion after replication; an object disappears only when holders remove it and advertisements expire \cite{augustine2022byzantine}, \cite{qian2016garlic}. Location and access control remain separate: the DDT locates holders, while applications define who can interpret protected content.
 
-\subsection{Communication Protocols}
+\section{Communication Protocols}
 
-Communication follows four transport-independent stages: discover and validate PNs; establish authenticated physical or virtual sessions; resolve a VN or content provider and obtain a route; exchange protected data [5], [8], [9], [10]. Fixed message semantics, explicit identifiers, bounded validity, signatures, and freshness controls support interoperability under churn and replay resistance. Control messages coordinate the network; data messages carry application payloads. Every participant receives only the metadata required by its local role.
+Communication follows four transport-independent stages: discover and validate PNs; establish authenticated physical or virtual sessions; resolve a VN or content provider and obtain a route; exchange protected data \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. Fixed message semantics, explicit identifiers, bounded validity, signatures, and freshness controls support interoperability under churn and replay resistance. Control messages coordinate the network; data messages carry application payloads. Every participant receives only the metadata required by its local role.
 
-\subsubsection{Peer Discovery Protocol}
+\subsection{Peer Discovery Protocol}
 
-Bootstrap returns public PN endpoints only. After an authenticated physical session is established, one-hop discovery exchanges bounded samples of validated peers and advertised transport, reachability, relay, and entry-point capabilities [5], [8], [10]. Candidates enter the local table only after liveness validation; background maintenance refreshes usable peers and removes repeated failures.
+Bootstrap returns public PN endpoints only. After an authenticated physical session is established, one-hop discovery exchanges bounded samples of validated peers and advertised transport, reachability, relay, and entry-point capabilities \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}. Candidates enter the local table only after liveness validation; background maintenance refreshes usable peers and removes repeated failures.
 
-The DPNT stores renewable descriptors for already validated PNs and is queried only when local information is missing. It complements rather than replaces bootstrap and peer exchange, never carries VN information, and remains best-effort soft state rather than global membership [5], [8], [10].
+The DPNT stores renewable descriptors for already validated PNs and is queried only when local information is missing. It complements rather than replaces bootstrap and peer exchange, never carries VN information, and remains best-effort soft state rather than global membership \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
 
-\subsubsection{Connection Establishment}
+\subsection{Connection Establishment}
 
-Reachability alone is insufficient: a session becomes active only after authenticated establishment of a fresh symmetric key [5], [9], [13], [14]. Transport selection prefers direct methods and falls back to assisted traversal or relay, but does not change handshake semantics.
+Reachability alone is insufficient: a session becomes active only after authenticated establishment of a fresh symmetric key \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}. Transport selection prefers direct methods and falls back to assisted traversal or relay, but does not change handshake semantics.
 
-The responder returns a signed ephemeral ML-KEM public key; the initiator verifies it, encapsulates a secret, signs the response, and sends the ciphertext; the responder decapsulates and confirms with encrypted control traffic. The procedure runs independently for adjacent PNs and communicating VNs, producing hop-by-hop and end-to-end keys. Bounded retries and keepalives prevent stale establishment state; persistent failure expires the session and requires a new attempt [5], [8], [9], [13], [14].
+The responder returns a signed ephemeral ML-KEM public key; the initiator verifies it, encapsulates a secret, signs the response, and sends the ciphertext; the responder decapsulates and confirms with encrypted control traffic. The procedure runs independently for adjacent PNs and communicating VNs, producing hop-by-hop and end-to-end keys. Bounded retries and keepalives prevent stale establishment state; persistent failure expires the session and requires a new attempt \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-\subsubsection{Routing and Lookup}
+\subsection{Routing and Lookup}
 
-DRT lookup maps a destination VN identifier to authorized PN entry points; DDT lookup maps a content hash to holder VNs [5], [8], [9], [10]. Content retrieval therefore resolves a holder in the DDT and then resolves that VN in the DRT. Neither table returns a complete route.
+DRT lookup maps a destination VN identifier to authorized PN entry points; DDT lookup maps a content hash to holder VNs \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. Content retrieval therefore resolves a holder in the DDT and then resolves that VN in the DRT. Neither table returns a complete route.
 
-Construction remaps \textit{path\_id} at every hop, so intermediates retain only incoming/outgoing local mappings and adjacent peers [9], [10]. The MVP's TTL bounds construction, not later reuse. A failed active route is replaced through a new lookup rather than repaired locally. This separates distributed resolution from private local forwarding state and supports messaging and content without flooding.
+Construction remaps \textit{path\_id} at every hop, so intermediates retain only incoming/outgoing local mappings and adjacent peers \cite{mirzaei2018pk}, \cite{qian2016garlic}. The MVP's TTL bounds construction, not later reuse. A failed active route is replaced through a new lookup rather than repaired locally. This separates distributed resolution from private local forwarding state and supports messaging and content without flooding.
 
-\subsubsection{Data Exchange Protocol}
+\subsection{Data Exchange Protocol}
 
-Data Exchange uses an active route and session; it does not discover peers, construct routes, or establish keys. The same encrypted virtual-session channel carries messages and byte-range content responses, while physical hops see only their protected forwarding layer [8], [9], [10], [13], [14].
+Data Exchange uses an active route and session; it does not discover peers, construct routes, or establish keys. The same encrypted virtual-session channel carries messages and byte-range content responses, while physical hops see only their protected forwarding layer \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
 Reliable envelopes add message identifiers, sequence numbers, acknowledgments, duplicate suppression, ordered buffering, and bounded retransmission at physical and virtual session scopes. Routes and sessions may be reused while healthy. Content is accepted only when its recomputed hash matches the requested identifier; timeout, invalid data, or route failure triggers another holder, route, or session. Public content relies on session protection, while protected objects additionally require an application-level content key.
 
-\subsection{Security Model}
+\section{Security Model}
 
-The security model treats a signing public key as a self-defining identity and separates persistent identity material from authenticated ephemeral sessions [9], [13], [14].
+The security model treats a signing public key as a self-defining identity and separates persistent identity material from authenticated ephemeral sessions \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-\subsubsection{Identity and Authentication}
+\subsection{Identity and Authentication}
 
-PN, persistent VN, and optional ephemeral VN identities use independent long-term signing keys [5], [9], [10]. Possession of the private key proves control without a certificate authority. Mutual session authentication binds signed ephemeral KEM material to that identity:
+PN, persistent VN, and optional ephemeral VN identities use independent long-term signing keys \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}. Possession of the private key proves control without a certificate authority. Mutual session authentication binds signed ephemeral KEM material to that identity:
 
 \[
 pk_{sign} \rightarrow Sign(pk_{kex}) \rightarrow Session\ Key
 \]
 
-After signature validation and encrypted confirmation, the session key authenticates traffic within that session. PN and VN identities remain independent so connectivity-level presence is not published as application identity [5], [9], [10].
+After signature validation and encrypted confirmation, the session key authenticates traffic within that session. PN and VN identities remain independent so connectivity-level presence is not published as application identity \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Encryption Mechanisms}
+\subsection{Encryption Mechanisms}
 
-AES-256-GCM-SIV protects post-handshake traffic with confidentiality, integrity, and authentication [9], [13], [14], [27]. Fresh nonces are tracked per key. AAD covers visible fields that must remain stable, such as physical headers, route direction, virtual session identifiers, encryption flags, and control-message types; remapped hop-local \textit{path\_id} values are excluded from end-to-end AAD. Independent physical and virtual layers protect each hop and the final application payload, while optional object encryption protects stored private content.
+AES-256-GCM-SIV protects post-handshake traffic with confidentiality, integrity, and authentication \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}, \cite{rfc8452}. Fresh nonces are tracked per key. AAD covers visible fields that must remain stable, such as physical headers, route direction, virtual session identifiers, encryption flags, and control-message types; remapped hop-local \textit{path\_id} values are excluded from end-to-end AAD. Independent physical and virtual layers protect each hop and the final application payload, while optional object encryption protects stored private content.
 
-\subsubsection{Post-Quantum Cryptography}
+\subsection{Post-Quantum Cryptography}
 
-The model uses post-quantum public-key primitives and classical symmetric encryption: ML-DSA signs identities and control artifacts, ML-KEM establishes secrets, and AES protects bulk traffic [11], [12], [13], [14], [26], [27]. It distinguishes:
+The model uses post-quantum public-key primitives and classical symmetric encryption: ML-DSA signs identities and control artifacts, ML-KEM establishes secrets, and AES protects bulk traffic \cite{shor1997quantum}, \cite{regev2009lwe}, \cite{bos2017kyber}, \cite{nist2024fips203}, \cite{nist2024fips204}, \cite{rfc8452}. It distinguishes:
 
 \begin{itemize}
     \item a persistent signing key pair used as the long-term identity of the node;
@@ -959,13 +1127,13 @@ The model uses post-quantum public-key primitives and classical symmetric encryp
 
 The MVP fixes this suite for compatibility; future versioned suites may replace algorithms without changing the identity/session roles.
 
-\subsubsection{Key Management}
+\subsection{Key Management}
 
-Long-term keys are generated and stored locally and remain stable until intentionally replaced; session KEM pairs and symmetric keys are fresh and independent, including across concurrent sessions [9], [13], [14]. Revocation uses control messages and reannouncement in the MVP. Private content may use separate object keys. Without backup, loss of a signing private key means loss of that identity; recovery phrases and mature distributed revocation remain future work.
+Long-term keys are generated and stored locally and remain stable until intentionally replaced; session KEM pairs and symmetric keys are fresh and independent, including across concurrent sessions \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}. Revocation uses control messages and reannouncement in the MVP. Private content may use separate object keys. Without backup, loss of a signing private key means loss of that identity; recovery phrases and mature distributed revocation remain future work.
 
-\subsubsection{Abuse Control and Sybil Resistance}
+\subsection{Abuse Control and Sybil Resistance}
 
-Open P2P systems cannot eliminate Sybil, Eclipse, flooding, or routing manipulation without authority or resource cost [22]. The architecture therefore combines complementary local mitigations rather than claiming perfect prevention. Optional identity admission may require a nonce satisfying $H(pk_{pn} \parallel nonce) < target$, making bulk identifier generation more expensive [23].
+Open P2P systems cannot eliminate Sybil, Eclipse, flooding, or routing manipulation without authority or resource cost \cite{douceur2002sybil}. The architecture therefore combines complementary local mitigations rather than claiming perfect prevention. Optional identity admission may require a nonce satisfying $H(pk_{pn} \parallel nonce) < target$, making bulk identifier generation more expensive \cite{baumgart2007skademlia}.
 
 \begin{table}[H]
 \centering
@@ -979,8 +1147,8 @@ Origin diversity & Score IP, subnet, IPv6 prefix, AS, endpoint reuse, and behavi
 DHT-set diversity & Prevent one apparent origin from dominating the $K$ responsible peers, accepting slightly farther but more diverse candidates. \\
 Signed records & Treat DHT peers as storage providers, not authorities: DRT, DDT, DPT, and DTT entries require the relevant owner signatures. \\
 Expiration & Renew legitimate soft state instead of granting arbitrary deletion authority to responsible peers. \\
-Redundant lookup & Compare parallel or partially disjoint results to reduce Eclipse-style influence [23], [24]. \\
-Flood control & Apply rate limits, token buckets, bounded queues, and higher cost to writes, advertisements, and repeated lookups [25]. \\
+Redundant lookup & Compare parallel or partially disjoint results to reduce Eclipse-style influence \cite{baumgart2007skademlia}, \cite{castro2002secure}. \\
+Flood control & Apply rate limits, token buckets, bounded queues, and higher cost to writes, advertisements, and repeated lookups \cite{rfc2697}. \\
 Bounded resources & Cap pending requests, bytes, connections, record sizes, namespace writes, and shard updates. \\
 \bottomrule
 \end{tabularx}
@@ -1007,7 +1175,7 @@ not require a global reputation system.
 Together, these controls raise the computational, network, and bandwidth cost of
 abuse without claiming immunity to Sybil or flooding attacks.
 
-\subsubsection{Publication Proof-of-Work}
+\subsection{Publication Proof-of-Work}
 
 In addition to identity-level controls, DHT writes may require lightweight
 proof-of-work so that publication remains inexpensive to verify but costly to flood.
@@ -1064,16 +1232,16 @@ The proof-of-work rule used in the implementation should be interpreted as a ref
 
 
 
-\subsection{Distributed Storage}
+\section{Distributed Storage}
 
 The storage model combines content-addressed immutable objects with distributed
 indexes for discovery. Peers are not forced to retain arbitrary third-party data:
 ordinary content is stored and served by nodes that retrieved it and chose to keep
-it, while critical DHT metadata is actively replicated [8], [10]. Content may be
+it, while critical DHT metadata is actively replicated \cite{augustine2022byzantine}, \cite{qian2016garlic}. Content may be
 advertised through ephemeral virtual nodes, separating provider availability from a
-long-term physical identity [9], [10].
+long-term physical identity \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Data Distribution Strategy}
+\subsection{Data Distribution Strategy}
 
 Every object is an opaque byte sequence identified by its exact hash. The DDT stores
 descriptors and expiring holder advertisements rather than the object bytes:
@@ -1087,9 +1255,9 @@ A publisher stores the object locally and may use a dedicated ephemeral virtual 
 to advertise and serve it. Placement is opportunistic: DHT proximity determines who
 replicates the index record, not who must retain the content. Transfers support byte
 ranges, and private objects may retain an application-level encryption layer so that
-holders can serve bytes without reading their plaintext [8], [10], [13], [14].
+holders can serve bytes without reading their plaintext \cite{augustine2022byzantine}, \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-\subsubsection{Replication Mechanisms}
+\subsection{Replication Mechanisms}
 
 \begin{table}[H]
 \centering
@@ -1110,27 +1278,27 @@ Discovery and routing records are re-replicated as responsibility changes. \\
 
 Replicas of the same content hash are equivalent; there is no primary copy. The MVP
 trusts holder advertisements and verifies the downloaded bytes by hash. Proofs of
-Retrievability remain a possible extension [8], [10].
+Retrievability remain a possible extension \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Data Consistency}
+\subsection{Data Consistency}
 
 Content is immutable: an update creates new bytes, a new hash, and a new DDT entry.
 Consequently, consistency is established by hash validation rather than mutable
 replica coordination. Applications represent evolution through signed pointers,
 manifests, or causal links to new objects. Holder metadata may be temporarily stale;
 requesters try alternative providers until an advertisement expires or all candidates
-fail [8], [10].
+fail \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Data Lifecycle and Expiration}
+\subsection{Data Lifecycle and Expiration}
 
 Object bytes have no protocol-level expiration and remain available while at least one
 peer retains them. DDT advertisements and other soft state do expire and must be
 renewed, preventing obsolete providers from remaining indefinitely. Each peer controls
 its local retention policy, so removing one copy is not global deletion and the network
 cannot guarantee erasure after dissemination. The model therefore offers decentralized
-persistence, not absolute permanence [8], [10].
+persistence, not absolute permanence \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Content Discovery and Resolution Model}
+\subsection{Content Discovery and Resolution Model}
 
 Content discovery separates semantic search, mutable identity, and availability:
 
@@ -1149,27 +1317,27 @@ DTT \rightarrow DPT \rightarrow DDT
 \]
 
 This separation keeps content immutable while supporting semantic discovery and
-mutable application state [8], [10].
+mutable application state \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
 
 
-\subsection{Resilience and Fault Tolerance}
+\section{Resilience and Fault Tolerance}
 
 Failure and churn are normal operating conditions. The architecture protects critical
 discovery metadata more strongly than ordinary content: DHT records are replicated
 and repaired, routes and sessions have alternatives, while content availability still
-depends on voluntary holders [6], [8], [10].
+depends on voluntary holders \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Node Churn Handling}
+\subsection{Node Churn Handling}
 
 A physical-node failure also makes its hosted virtual nodes unavailable, but their
 distributed references disappear only when advertisements expire. Timeouts, failed
 keepalives, broken paths, and missing renewals indicate unavailability without proving
 permanent departure. This ambiguity limits direct correlation between physical-node
 activity and virtual-node visibility. Sessions may move to another published route if
-one becomes available before their liveness window expires [5], [8], [9], [10].
+one becomes available before their liveness window expires \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Redundancy Strategies}
+\subsection{Redundancy Strategies}
 
 \begin{table}[H]
 \centering
@@ -1192,36 +1360,36 @@ durability remains demand-driven. \\
 \end{table}
 
 Redundancy is intentionally local and bounded: it improves availability without
-requiring global consensus or unlimited replication [6], [8], [10].
+requiring global consensus or unlimited replication \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Failure Recovery}
+\subsection{Failure Recovery}
 
 Recovery uses existing protocol state rather than a centralized coordinator. Failed
 physical sessions are re-established through another advertised transport; failed
 virtual delivery retries another DRT route; stale DHT replicas are replaced when
 responsibility is recomputed; and content lookup tries another holder. Persistent
 identities and local state allow a returning peer to resume participation, while
-expired advertisements must be republished [5], [8], [10].
+expired advertisements must be republished \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{qian2016garlic}.
 
-\subsubsection{Network Rebalancing}
+\subsection{Network Rebalancing}
 
 Physical nodes periodically recompute the $K$ peers closest to each DHT key. A node
 that enters the responsible set receives a validated replica; one that leaves it may
 drop the record after successful handoff. Large aggregate records may be divided into
 independently verifiable shards and later compacted as load decreases. Rebalancing is
-incremental, preserving service while ownership follows the evolving keyspace [1],
-[2], [3], [8].
+incremental, preserving service while ownership follows the evolving keyspace \cite{stoica2001chord},
+\cite{maymounkov2002kademlia}, \cite{rowstron2001pastry}, \cite{augustine2022byzantine}.
 
 
 
 
 
-\subsection{Operational Workflows}
+\section{Operational Workflows}
 
 The following workflows summarize how peers join, disappear, resolve content, and
-exchange messages through the layered architecture [5], [8], [9], [10].
+exchange messages through the layered architecture \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Node Join Procedure}
+\subsection{Node Join Procedure}
 
 \begin{enumerate}
     \item Generate or restore the physical and virtual signing identities.
@@ -1236,18 +1404,18 @@ exchange messages through the layered architecture [5], [8], [9], [10].
 
 A stateful rejoin reuses identities and cached knowledge but renews expired presence.
 A node may remain physical-only, although overlay communication requires at least one
-virtual identity with published routes [5], [8], [9].
+virtual identity with published routes \cite{li2022unreachable}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}.
 
-\subsubsection{Node Departure Procedure}
+\subsection{Node Departure Procedure}
 
 Departure requires no global leave transaction. Once a peer stops responding, physical
 sessions fail, its virtual routes become unusable, and unrenewed advertisements expire.
 Replicated DHT metadata is repaired as responsibility changes; content survives only
 if another holder remains. A returning node may reuse its persistent identity and
 republish its soft state. This passive model tolerates abrupt failures and avoids
-precise global tracking of online intervals [8], [9], [10].
+precise global tracking of online intervals \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
-\subsubsection{Data Lookup Process}
+\subsection{Data Lookup Process}
 
 A requester follows one of two initial paths: a known hash queries the DDT directly,
 while semantic lookup uses the DTT and, for mutable resources, resolves the signed DPT
@@ -1264,9 +1432,9 @@ while semantic lookup uses the DTT and, for mutable resources, resolves the sign
 \end{enumerate}
 
 Private content follows the same lookup but remains application-encrypted. Cached DTT,
-DPT, DDT, and DRT results may reduce repeated network queries [8], [10], [13], [14].
+DPT, DDT, and DRT results may reduce repeated network queries \cite{augustine2022byzantine}, \cite{qian2016garlic}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
-\subsubsection{Message Routing Process}
+\subsection{Message Routing Process}
 
 Application data is carried inside a protected virtual envelope, which is itself
 forwarded through physical route-data envelopes:
@@ -1278,14 +1446,14 @@ entry point, and forwards by \texttt{path\_id}. Each physical hop resolves only 
 local previous/next mapping; it does not receive the complete path. Hop sessions
 protect physical links, while the independent virtual session protects the end-to-end
 payload. Authenticated associated data binds public routing metadata that must not be
-modified [5], [9], [13], [14].
+modified \cite{li2022unreachable}, \cite{mirzaei2018pk}, \cite{bos2017kyber}, \cite{nist2024fips203}.
 
 Reliable session payloads add identifiers, sequence numbers, acknowledgments,
 duplicate suppression, ordered delivery, and bounded retransmission. A broken path
 causes selection of another published route rather than reversal or continuation of
 the partial path. Replies independently resolve a route toward the original sender,
 reducing path symmetry and preserving the architecture's anonymity-oriented routing
-properties [6], [8], [9], [10].
+properties \cite{tosic2022spatial}, \cite{augustine2022byzantine}, \cite{mirzaei2018pk}, \cite{qian2016garlic}.
 
 
 
@@ -1301,11 +1469,11 @@ properties [6], [8], [9], [10].
 % ============================================================
 % Chapter: Implementation
 % ============================================================
-\section{Implementation}
+\chapter{Implementation}
 
 This chapter presents the \textit{AnonNetCore Python MVP}, an experimental implementation that validates physical/virtual identity separation, DHT-based discovery, route construction, end-to-end virtual sessions, content exchange, and external application integration. The source is available at \url{https://github.com/andersonsimioni/AnonNetCore_py}, with an institutional mirror at \url{https://codigos.ufsc.br/anderson.simioni/anonnetcore_py}. The prototype targets functional integration and observability in controlled environments; it is not presented as a production-ready or Internet-scale network.
 
-\subsection{Implementation Methodology}
+\section{Implementation Methodology}
 \label{sec:implementation-methodology}
 
 The work followed an applied, exploratory, and incremental methodology: physical communication and discovery were implemented first, followed by sessions, distributed tables, routes, virtual protocols, content transfer, the local API, and the social PoC. Each stage was validated through observable traces and integrated smoke tests before the next layer was added.
@@ -1316,14 +1484,14 @@ Validation combines real core instances, Docker clusters, DHT publication/query,
 
 The controlled MVP uses Python, SQLite, TCP, experimental fragmented UDP, relay-assisted forwarding, SHA-512 identifiers, ML-KEM/ML-DSA, AES-256-GCM-SIV with AAD, DHT publication proof-of-work, and lightweight reliable-session delivery. Complete NAT traversal, QUIC, full Kademlia routing tables, mature anti-abuse mechanisms, and formal security auditing remain future work; earlier planned choices such as Kyber-1024 and SHA3-512 were superseded by the implemented suite.
 
-\subsection{Implementation Scope}
+\section{Implementation Scope}
 \label{sec:implementation-scope}
 
 The validated scope covers physical nodes over TCP, experimental UDP, and relay transport; bootstrap and physical information validation; authenticated physical sessions with keepalive and reliable acknowledgments; replicated multi-namespace DHT records with XOR responsibility and publication proof-of-work; automatic DRT route publication; reliable end-to-end virtual sessions and messages; byte-range content transfer; local HTTP/WebSocket access; and the social PoC with profiles, posts, feeds, and direct messages.
 
 The implementation does not claim complete protection against coordinated malicious peers, large-scale Sybil attacks, global traffic correlation, or Internet-scale churn. These aspects require additional hardening and broader experimentation.
 
-\subsection{Technology Stack}
+\section{Technology Stack}
 \label{sec:technology-stack}
 
 The MVP was implemented in Python to prioritize development speed, testability, and observability. The final architecture, however, remains independent of the language and can be reimplemented in a lower-level language such as C++ or Rust in future versions.
@@ -1353,7 +1521,7 @@ Application PoC & Local HTML/JavaScript social interface using the local API. \\
 \end{tabularx}
 \end{table}
 
-\subsection{Implemented Architecture}
+\section{Implemented Architecture}
 \label{sec:implemented-architecture}
 
 The implemented system follows the layered model proposed in this work. The physical layer represents real processes and network connections. The virtual layer represents logical identities hosted by physical nodes. Distributed tables provide discovery, routing, and content location. A local API exposes the core functionality to external applications. Finally, the social PoC validates that an application can use the network layer without depending on internal modules.
@@ -1366,12 +1534,13 @@ Figure~\ref{fig:implementation-architecture} shows the implemented architecture.
 
 \begin{figure}[H]
 \centering
+\resizebox{0.98\textwidth}{!}{%
 \begin{tikzpicture}[
     layer/.style={
         rectangle,
         draw,
         rounded corners,
-        minimum width=0.86\textwidth,
+        minimum width=0.82\textwidth,
         minimum height=1.05cm,
         align=center,
         font=\small
@@ -1410,14 +1579,14 @@ Figure~\ref{fig:implementation-architecture} shows the implemented architecture.
 \draw[arrow] (virtual) -- (dht);
 \draw[arrow] (dht) -- (physical);
 
-\end{tikzpicture}
+\end{tikzpicture}}
 \caption{Implemented layered architecture of the AnonNetCore Python MVP.}
 \label{fig:implementation-architecture}
 \end{figure}
 
 The layers are not independent applications. They are internal abstractions inside the core. The social PoC is the only external component and communicates with the core through the local API. This separation is important because it demonstrates that the network layer can support decentralized applications without exposing internal protocol modules directly.
 
-\subsubsection{Physical Layer}
+\subsection{Physical Layer}
 \label{subsec:physical-layer-implementation}
 
 The physical layer is responsible for communication between real processes. Each running core instance represents one physical node. A physical node opens a TCP listener, receives frames, decodes protocol envelopes, processes physical message types, maintains peer information, and participates in DHT and routing workflows.
@@ -1447,7 +1616,7 @@ The MVP no longer uses TCP as the only transport. TCP remains the primary valida
 
 Encrypted physical payloads use AES-256-GCM-SIV with a 96-bit nonce and a 128-bit authentication tag. The implementation generates a fresh nonce for each encryption operation and rejects nonce reuse for the same key within the running process. Associated authenticated data (AAD) binds the encrypted payload to the public physical envelope header, excluding only the \codebreak{payload\_\allowbreak{}encrypted} marker. This prevents visible routing and session metadata that must remain outside the ciphertext from being altered without detection.
 
-\subsubsection{Relay-Assisted Physical Transport}
+\subsection{Relay-Assisted Physical Transport}
 \label{subsec:relay-assisted-physical-transport}
 
 The implemented relay mechanism is modeled as a physical transport adapter named \codebreak{relay\_\allowbreak{}tcp}. It does not replace the physical session protocol and does not create an application-level shortcut. Instead, it encapsulates an ordinary physical packet inside a relay envelope and transports it through a public physical node that already has active physical sessions with the participants.
@@ -1484,7 +1653,7 @@ where \(A\) is the sender, \(R\) is the relay-capable public physical node, and 
 
 This design keeps relay behavior inside the physical transport layer and preserves the same protocol flow used by direct communication. It also makes the relay mechanism observable through the same peer discovery, session, DPNT, and route-building logic used by the rest of the core.
 
-\subsubsection{Virtual Layer}
+\subsection{Virtual Layer}
 \label{subsec:virtual-layer-implementation}
 
 The virtual layer represents logical identities hosted by physical nodes. A single physical node may host multiple virtual nodes. This design separates the network addressable process from the application-level identity.
@@ -1499,7 +1668,7 @@ In the social PoC, one virtual node corresponds to one social profile.
 
 Virtual nodes are responsible for publishing route entries, establishing virtual sessions, sending virtual messages, signing DHT records, and advertising content. Virtual sessions are end-to-end sessions between virtual identities and are transported through physical routes using \codebreak{ROUTE\_\allowbreak{}DATA}.
 
-\subsubsection{DHT and Distributed Tables}
+\subsection{DHT and Distributed Tables}
 \label{subsec:dht-implementation}
 
 The implementation uses a generic local table named \codebreak{dht\_\allowbreak{}record}. Each distributed record has a logical namespace, a logical key, a physical DHT key, and a canonical JSON payload. The DHT key is computed as:
@@ -1567,7 +1736,7 @@ Table~\ref{tab:dht-namespaces-implementation} summarizes the implemented namespa
 
 The implemented DHT supports publication, query, merge, deduplication, and maintenance routines. When a record with an existing key is received, the system attempts to merge it according to the namespace semantics. For instance, DRT records aggregate route entries, DDT records aggregate holders, and DPT records prefer the most recent valid pointer signed by the owning virtual node.
 
-\subsection{Bootstrap and Peer Discovery}
+\section{Bootstrap and Peer Discovery}
 \label{sec:bootstrap-peer-discovery}
 
 The bootstrap mechanism provides the first known endpoints of the network. In the current MVP, bootstrap endpoints are configured through \codebreak{CoreConfig.bootstrap\_\allowbreak{}public\_\allowbreak{}endpoints}. The default development setup uses two bootstrap ports:
@@ -1672,12 +1841,12 @@ Figure~\ref{fig:implementation-flow} summarizes the main implemented flows, incl
 \label{fig:implementation-flow}
 \end{figure}
 
-\subsection{Route Construction and Route Execution}
+\section{Route Construction and Route Execution}
 \label{sec:route-construction-execution}
 
 Routes allow virtual nodes to be reached through physical nodes without exposing the full route to every participant. The route construction process is performed by physical nodes, although it is requested on behalf of a virtual node.
 
-\subsubsection{Route Strategy Abstraction}
+\subsection{Route Strategy Abstraction}
 \label{subsec:route-strategy-abstraction}
 
 The implementation follows the strategy abstraction defined in Section~\ref{subsubsec:route-strategy-abstraction}: the protocol controls construction, validation, DRT publication, failure propagation, and later execution, while the strategy selects physical hops and defines its termination and optimization rules. Consequently, new selection policies do not require changes to the route message lifecycle.
@@ -1778,7 +1947,7 @@ This strategy is useful for the MVP because it is simple, dynamic, and capable o
 
 The MVP implements only \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}; the additional policies and cost dimensions are already summarized in Table~\ref{tab:route-strategy-abstraction}. They remain architectural extension points rather than implemented alternatives. This distinction keeps the common route lifecycle reusable without presenting future strategies as experimental results.
 
-\subsubsection{Hop-by-Hop Route Construction and Execution}
+\subsection{Hop-by-Hop Route Construction and Execution}
 \label{subsec:hop-by-hop-route-construction-execution}
 
 The MVP implements the route strategy \codebreak{random\_\allowbreak{}walk\_\allowbreak{}ttl}. Hop-by-hop construction means that the initiator does not install a complete globally visible path. Instead, each physical hop receives a route creation request, applies the active strategy to decide whether and where to forward it, creates a local \texttt{path\_id} mapping, and forwards only the information required by the next hop. The strategy is responsible for selecting the next hop and deciding when the route should stop; the execution layer is responsible only for forwarding later packets through the local mappings created during construction.
@@ -1819,7 +1988,7 @@ The \texttt{virtual\_envelope\_ciphered} field is a boolean flag indicating whet
 
 The route execution handler resolves the local \texttt{path\_id}, decides whether the packet must be forwarded or delivered locally, and re-encapsulates virtual responses when necessary. It does not interpret application-level semantics. Its role is only to move virtual envelopes through physical routes.
 
-\subsection{Virtual Sessions and Virtual Messages}
+\section{Virtual Sessions and Virtual Messages}
 \label{sec:virtual-sessions-messages}
 
 Virtual sessions are end-to-end sessions between virtual nodes. They are established over routes previously published in the DRT. The initiator first resolves the remote virtual node in the DRT, obtains a physical entry point, resolves that physical node in the DPNT, and then sends a virtual session initialization envelope through \codebreak{ROUTE\_\allowbreak{}DATA}.
@@ -1857,7 +2026,7 @@ In the social PoC, direct messages use the application message type:
     \codemath{social.direct\_\allowbreak{}message}
 \end{equation}
 
-\subsection{Reliable Session Payloads}
+\section{Reliable Session Payloads}
 \label{sec:reliable-session-payloads}
 
 The current MVP implements a lightweight reliability layer on top of active physical and virtual sessions. This mechanism is not a replacement for TCP reliability and does not attempt to solve all route-level failures. Its purpose is narrower: to provide ordered delivery, duplicate suppression, acknowledgments, and bounded retransmission for protected session payloads in a way that can also support less reliable transports in future iterations.
@@ -1865,7 +2034,7 @@ The current MVP implements a lightweight reliability layer on top of active phys
 Reliable transmission is implemented with two envelope families:
 
 \begin{itemize}
-    \item \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA} and \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} for hop-by-hop physical sessions;
+    \item \raggedright \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA} and \codebreak{PHYSICAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} for hop-by-hop physical sessions;\par
     \item \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}DATA} and \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}RELIABLE\_\allowbreak{}ACK} for end-to-end virtual sessions.
 \end{itemize}
 
@@ -1890,7 +2059,7 @@ For virtual reliable payloads, an acknowledgment may also carry synchronous inne
 
 The reliable state is runtime-only. It is not persisted as durable storage, because it represents live session delivery state and depends on active session keys, active routes, and currently reachable peers. If a session is lost, higher layers must establish a new session or retry the application-level operation.
 
-\subsection{Protocol Message Types}
+\section{Protocol Message Types}
 \label{sec:protocol-message-types}
 
 Table~\ref{tab:protocol-message-types} summarizes the main implemented protocol families and message types.
@@ -1964,7 +2133,7 @@ Retrieves content metadata and byte ranges from virtual content holders. \\
 \end{longtable}
 }
 
-\subsection{Local Persistence Model}
+\section{Local Persistence Model}
 \label{sec:local-persistence-model}
 
 Local persistence is implemented with SQLite through SQLAlchemy. Persistent state includes identities, endpoints, DHT records, route metadata, content metadata, and operational logs. Runtime-only state such as active sockets, handshake state, cryptographic session secrets, temporary buffers, and reliable-session delivery windows remains in memory.
@@ -1998,7 +2167,7 @@ Table~\ref{tab:persistence-summary} summarizes the main persistence entities.
 
 This model supports the core requirement of the architecture: distributed references use compact hash-based identifiers, while complete public keys remain available when signatures or identity reconstruction are required.
 
-\subsection{Local API}
+\section{Local API}
 \label{sec:local-api-implementation}
 
 The local API exposes core functionality to external applications. The API is local by default and is intended to be consumed by desktop applications, local HTML interfaces, scripts, and integration tests.
@@ -2053,7 +2222,7 @@ Figure~\ref{fig:poc-core-overlay-integration} provides a didactic view of this b
 \label{fig:poc-core-overlay-integration}
 \end{figure}
 
-\subsection{Social Proof of Concept}
+\section{Social Proof of Concept}
 \label{sec:social-poc-implementation}
 
 A social proof of concept was implemented to validate the architecture from the perspective of an external application. The PoC is a local HTML/JavaScript interface that communicates with the core through the local API.
@@ -2084,7 +2253,7 @@ Since the DPT is signed by the owner virtual node, other peers can verify that t
 
 Direct messages use virtual sessions. The application requests a session with a friend virtual node, the core resolves the friend's DRT entry, resolves the entry point in the DPNT, establishes the virtual session through \codebreak{ROUTE\_\allowbreak{}DATA}, and sends the message using \codebreak{VIRTUAL\_\allowbreak{}SESSION\_\allowbreak{}DATA} with the application type \codebreak{social.direct\_\allowbreak{}message}.
 
-\subsection{Experimental Execution}
+\section{Experimental Execution}
 \label{sec:experimental-execution}
 
 The implementation includes three main execution scripts: one to run a local core, one to run the social PoC with cluster and Debug Console support, and one to run the official integration smokes. The following commands are representative examples:
@@ -2099,7 +2268,7 @@ The implementation includes three main execution scripts: one to run a local cor
 
 The experimental environment validates execution with multiple local or containerized nodes. The Debug Console and the \texttt{/debug/state} endpoint were used to inspect peers, sessions, DHT records, route state, runtime status, and potential operational inconsistencies.
 
-\subsection{Validation and Test Results}
+\section{Validation and Test Results}
 \label{sec:validation-test-results}
 
 The MVP was validated through smoke tests and the social PoC. The tests are flow-oriented: instead of only testing isolated functions, they instantiate real cores and exercise protocol interactions across the implemented layers.
@@ -2209,7 +2378,7 @@ Together, the results cover the complete prototype path: cluster bootstrap and p
 \label{fig:smokes-passing}
 \end{figure}
 
-\subsection{Comparison with Related Systems and Concepts}
+\section{Comparison with Related Systems and Concepts}
 \label{sec:implementation-comparison}
 
 The implementation is not intended to reproduce an existing system directly. Instead, it combines concepts from structured DHTs, peer-to-peer overlays, anonymous routing, and post-quantum cryptography into a prototype tailored to the proposed architecture.
@@ -2236,27 +2405,27 @@ Table~\ref{tab:comparison-related-work} summarizes the main comparisons.
 \endfoot
 \bottomrule
 \endlastfoot
-Kademlia / DHTs~[2] &
+Kademlia / DHTs~\cite{maymounkov2002kademlia} &
 The MVP uses hash-based keys, XOR distance, and responsibility by proximity. &
 The implementation does not yet implement a complete Kademlia routing table, iterative lookup procedure, bucket management, or mature churn handling. \\
 
-Peer-to-peer overlay networks~[1], [2], [3] &
+Peer-to-peer overlay networks~\cite{stoica2001chord}, \cite{maymounkov2002kademlia}, \cite{rowstron2001pastry} &
 The architecture separates logical overlay behavior from physical network connections and allows nodes to exchange resources without a central application server. &
 The prototype currently runs in controlled local or Docker environments and still requires future work for Internet-scale churn, NAT traversal, and large-scale peer discovery. \\
 
-Tor / onion routing~[20] &
+Tor / onion routing~\cite{dingledine2004tor} &
 The route layer also separates intermediate forwarding from final virtual semantics, and intermediate hops do not need to know the complete route. &
 The MVP does not implement Tor's complete onion routing design, directory authority model, circuit construction protocol, relay ecosystem, or mature resistance against global traffic correlation. \\
 
-I2P / garlic routing~[21] &
+I2P / garlic routing~\cite{alothman2018i2p} &
 The architecture shares the goal of hiding communication relationships through indirect overlay routing and separation between network-level and application-level identities. &
 The MVP does not implement I2P's garlic routing model, tunnel management, network database, lease sets, or mature anonymity mechanisms, focusing instead on validating virtual identities, DHT-based discovery, and route construction in a simplified prototype. \\
 
-Content-addressed systems~[19] &
+Content-addressed systems~\cite{benet2014ipfs} &
 Content is addressed by hash and announced through distributed references. &
 The MVP separates pointer resolution, holder discovery, and virtual content transfer through DPT, DDT, and virtual sessions rather than reproducing IPFS directly. \\
 
-Post-quantum cryptography~[13], [14], [26] &
+Post-quantum cryptography~\cite{bos2017kyber}, \cite{nist2024fips203}, \cite{nist2024fips204} &
 The implementation uses post-quantum KEM and signature algorithms when available, combined with symmetric encryption for session payloads. &
 The prototype has not undergone formal cryptographic audit, side-channel analysis, or production hardening of key storage and cryptographic lifecycle management. \\
 \end{longtable}
@@ -2264,7 +2433,7 @@ The prototype has not undergone formal cryptographic audit, side-channel analysi
 
 The main contribution of the implementation is the integration of these ideas into a layered architecture in which physical nodes, virtual identities, DHT records, route entries, sessions, and application objects are explicitly separated.
 
-\subsection{Known Limitations and Future Work}
+\section{Known Limitations and Future Work}
 \label{sec:implementation-limitations-future-work}
 
 The MVP validates the core architecture, but several components require further development before the system can be considered robust in public networks. Table~\ref{tab:limitations-future-work} summarizes the main limitations and future work.
@@ -2311,7 +2480,7 @@ Application PoC & The social PoC stores profile photos as data URLs and download
 
 These limitations do not invalidate the MVP. Instead, they define the boundary between an experimental prototype and a production-grade decentralized network.
 
-\subsection{Chapter Summary}
+\section{Chapter Summary}
 \label{sec:implementation-summary}
 
 This chapter presented the implementation of the proposed architecture as a functional experimental MVP. The prototype implements a physical layer, virtual layer, TCP transport, experimental UDP transport, relay-assisted physical forwarding, DHT namespaces, route construction, route execution, reliable physical and virtual session payloads, content transfer, local HTTP/WebSocket API, and a social proof of concept.
@@ -2336,7 +2505,7 @@ At the same time, the implementation remains intentionally limited. It is a rese
 
 
 
-\section{Conclusion}
+\chapter{Conclusion}
 \label{sec:conclusion}
 
 This work presented the design, implementation, and experimental validation of a decentralized peer-to-peer overlay network architecture focused on secure communication, data persistence, and support for decentralized applications. The proposed architecture was motivated by the limitations of centralized communication models, the increasing relevance of privacy-preserving systems, and the need to investigate network designs that combine peer-to-peer communication, distributed discovery, content-addressed storage, routing abstraction, and post-quantum cryptographic mechanisms.
@@ -2368,7 +2537,10 @@ In conclusion, this work showed that it is feasible to design and implement a mo
 
 
 
-\section*{Declaration of Artificial Intelligence Use}
+\postextual
+
+\chapter*{Declaration of Artificial Intelligence Use}
+\addcontentsline{toc}{chapter}{Declaration of Artificial Intelligence Use}
 
 Artificial Intelligence tools were used as auxiliary support during the development
 of this work, exclusively to assist with the revision, organization, standardization,
@@ -2390,131 +2562,7 @@ remains the full responsibility of the author.
 
 
 
-\section*{References}
-\begingroup
-\setlength{\leftskip}{0.5cm}
-\setlength{\parindent}{-0.5cm}
-\setlength{\parskip}{6pt}
-
-[1] STOICA, Ion; MORRIS, Robert; KARGER, David; KAASHOEK, M. Frans; BALAKRISHNAN, Hari (2001). 
-\textit{Chord: A Scalable Peer-to-Peer Lookup Protocol for Internet Applications}. 
-In: \textit{Proceedings of the ACM SIGCOMM 2001 Conference}. 
-New York: ACM, 2001. p. 149--160.
-
-[2] MAYMOUNKOV, Petar; MAZIERES, David (2002). 
-\textit{Kademlia: A Peer-to-Peer Information System Based on the XOR Metric}. 
-In: \textit{Proceedings of the 1st International Workshop on Peer-to-Peer Systems (IPTPS)}. 
-Berlin: Springer, 2002. p. 53--65.
-
-[3] ROWSTRON, Antony; DRUSCHEL, Peter (2001). 
-\textit{Pastry: Scalable, Distributed Object Location and Routing for Large-Scale Peer-to-Peer Systems}. 
-In: \textit{Proceedings of the IFIP/ACM International Conference on Distributed Systems Platforms (Middleware 2001)}. 
-Heidelberg: Springer, 2001. p. 329--350.
-
-[4] ZHAO, Ben Y.; KUBIATOWICZ, John; JOSEPH, Anthony D. (2001). 
-\textit{Tapestry: An Infrastructure for Fault-Tolerant Wide-Area Location and Routing}. 
-Technical Report UCB/CSD-01-1141, University of California, Berkeley, 2001.
-
-[5] LI, Gengxian; WANG, Chundong; WANG, Huaibin (2022).
-\textit{Unreachable Peers Communication Scheme in Decentralized Networks Based on Peer-to-Peer Overlay Approaches}.
-\textit{Future Internet}, v. 14, n. 10, Article 290, 2022.
-
-[6] TO\v{s}I\'{c}, Aleksandar; VI\v{c}I\'{c}, Jernej (2022).
-\textit{Spatial Path Selection and Network Topology Optimisation in P2P Anonymous Routing Protocols}.
-\textit{Journal of Web Engineering}, v. 21, p. 97--118.
-
-[7] MEHR-UN-NISA; ASHRAF, Fasiha; NASEER, Ateeqa; IQBAL, Shaukat (2019).
-\textit{Comparative Analysis of Unstructured P2P File Sharing Networks}.
-In: \textit{Proceedings of the 2019 3rd International Conference on Information System and Data Mining (ICISDM 2019)}.
-New York: ACM, 2019. p. 148--153.
-
-[8] AUGUSTINE, John; CHATTERJEE, Soumyottam; PANDURANGAN, Gopal (2022).
-\textit{A Fully-Distributed Scalable Peer-to-Peer Protocol for Byzantine-Resilient Distributed Hash Tables}.
-In: \textit{Proceedings of the 34th ACM Symposium on Parallelism in Algorithms and Architectures (SPAA 2022)}.
-New York: ACM, 2022. p. 87--98.
-
-[9] MIRZAEI, Reza; FARAHANI, Reza; YAZDANI, Naser (2018).
-\textit{Public-Key Based Routing in Internet for Anonymous Data Communication}.
-In: \textit{2018 9th International Symposium on Telecommunications (IST 2018)}.
-Piscataway: IEEE, 2018. p. 58--64.
-
-[10] QIAN, Chen; SHI, Junjie; YU, Zihao; YU, Ye; ZHONG, Sheng (2016).
-\textit{Garlic Cast: Lightweight and Decentralized Anonymous Content Sharing}.
-In: \textit{2016 IEEE 22nd International Conference on Parallel and Distributed Systems (ICPADS 2016)}.
-Piscataway: IEEE, 2016. p. 216--223.
-
-[11] SHOR, Peter W. (1997). Polynomial-Time Algorithms for Prime Factorization and Discrete Logarithms on a Quantum Computer. \textit{SIAM Journal on Computing}, v. 26, n. 5, p. 1484--1509.
-
-[12] REGEV, Oded (2009). On Lattices, Learning with Errors, Random Linear Codes, and Cryptography. \textit{Journal of the ACM}, v. 56, n. 6, Article 34, p. 1--40.
-
-[13] BOS, Joppe; DUCAS, Léo; KILTZ, Eike; LEPOINT, Tancrède; LYUBASHEVSKY, Vadim; SCHANCK, John M.; SCHWABE, Peter; SEILER, Gregor; STEHLÉ, Damien (2017).
-\textit{CRYSTALS--Kyber: A CCA-Secure Module-Lattice-Based Key-Encapsulation Mechanism}.
-\textit{Cryptology ePrint Archive}, Paper 2017/634.
-
-[14] NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY (NIST) (2024). \textit{FIPS 203: Module-Lattice-Based Key-Encapsulation Mechanism Standard}. Gaithersburg: NIST, 2024.
-
-[15] PETIT-HUGUENIN, Marc; SALGUEIRO, Gonzalo; ROSENBERG, Jonathan; WING, Dan; MAHY, Rohan; MATTHEWS, Philip (2020).
-\textit{Session Traversal Utilities for NAT (STUN)}.
-RFC 8489. RFC Editor, February 2020.
-
-[16] REDDY, Tirumaleswar; JOHNSTON, Alan; MATTHEWS, Philip; ROSENBERG, Jonathan (2020).
-\textit{Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)}.
-RFC 8656. RFC Editor, February 2020.
-
-[17] KER\"ANEN, Ari; HOLMBERG, Christer; ROSENBERG, Jonathan (2018).
-\textit{Interactive Connectivity Establishment (ICE): A Protocol for Network Address Translator (NAT) Traversal}.
-RFC 8445. RFC Editor, July 2018.
-
-[18] IYENGAR, Jana; THOMSON, Martin (2021).
-\textit{QUIC: A UDP-Based Multiplexed and Secure Transport}.
-RFC 9000. RFC Editor, May 2021.
-
-[19] BENET, Juan (2014).
-\textit{IPFS -- Content Addressed, Versioned, P2P File System}.
-arXiv preprint arXiv:1407.3561, 2014.
-
-[20] DINGLEDINE, Roger; MATHEWSON, Nick; SYVERSON, Paul (2004).
-\textit{Tor: The Second-Generation Onion Router}.
-In: \textit{Proceedings of the 13th USENIX Security Symposium}.
-Berkeley: USENIX Association, 2004. p. 303--320.
-
-[21] ALOTHMAN, Osama; ZHOU, Suyang; GONG, Xiao; LI, Zhihao; YU, Xiao; YU, GuanHua; JOHNSON, Rob; PAN, Jianping (2018).
-\textit{An Empirical Study of the I2P Anonymity Network and its Censorship Resistance}.
-In: \textit{Proceedings of the Internet Measurement Conference (IMC 2018)}.
-New York: ACM, 2018. p. 379--390.
-
-[22] DOUCEUR, John R. (2002).
-\textit{The Sybil Attack}.
-In: DRUSCHEL, Peter; KAASHOEK, M. Frans; ROWSTRON, Antony (eds.).
-\textit{Peer-to-Peer Systems: First International Workshop, IPTPS 2002}.
-Lecture Notes in Computer Science, v. 2429.
-Berlin: Springer, 2002. p. 251--260.
-DOI: 10.1007/3-540-45748-8\_24.
-
-[23] BAUMGART, Ingmar; MIES, Sebastian (2007).
-\textit{S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing}.
-In: \textit{2007 International Conference on Parallel and Distributed Systems (ICPADS 2007)}.
-Piscataway: IEEE, 2007. p. 1--8.
-DOI: 10.1109/ICPADS.2007.4447808.
-
-[24] CASTRO, Miguel; DRUSCHEL, Peter; GANESH, Ayalvadi J.; ROWSTRON, Antony; WALLACH, Dan S. (2002).
-\textit{Secure Routing for Structured Peer-to-Peer Overlay Networks}.
-In: \textit{Proceedings of the 5th Symposium on Operating Systems Design and Implementation (OSDI 2002)}.
-Berkeley: USENIX Association, 2002.
-
-[25] HEINANEN, Juha; GUERIN, Roch (1999).
-\textit{A Single Rate Three Color Marker}.
-RFC 2697. RFC Editor, September 1999.
-
-[26] NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY (NIST) (2024).
-\textit{FIPS 204: Module-Lattice-Based Digital Signature Standard}. Gaithersburg: NIST, 2024.
-
-
-[27] GUERON, Shay; LANGLEY, Adam; LINDELL, Yehuda (2019).
-\textit{AES-GCM-SIV: Nonce Misuse-Resistant Authenticated Encryption}.
-RFC 8452. RFC Editor, April 2019.
-DOI: 10.17487/RFC8452.
-
-\endgroup
+\renewcommand{\bibname}{References}
+\bibliography{main}
 
 \end{document}
